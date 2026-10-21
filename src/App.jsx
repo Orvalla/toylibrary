@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import { LoginPage, SignupPage } from './pages/AuthPages'
 import DashboardPage from './pages/DashboardPage'
 import CatalogPage from './pages/CatalogPage'
+import DevicesPage from './pages/DevicesPage'
 import SettingsPage from './pages/SettingsPage'
 import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/PasswordPages'
 import PublicListPage from './pages/PublicListPage'
@@ -37,6 +38,14 @@ export default function App() {
           element={
             <Protected>
               <CatalogPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/devices"
+          element={
+            <Protected>
+              <DevicesPage />
             </Protected>
           }
         />
