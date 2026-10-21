@@ -6,6 +6,7 @@ export default function HomePage() {
 
   return (
     <main className="page narrow">
+      <img src="/logo.svg" alt="Toy Library logo" className="hero-logo" />
       <h1>Never gift the same Tonie twice.</h1>
       <p className="lede">
         Toniebox figures, LeapPad books, storybook projector cartridges — kids'

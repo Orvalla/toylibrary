@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Toy Library — Brand Sheet</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #2e2a55; --ink-faint: #6e6a94; --coral: #ff5a5f; --coral-deep: #de3b41;
+        --teal: #0ca6a6; --soft: #f4f1ff; --line: #e3def7; --sun: #ffd93c; --good: #1fa866;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font-family: 'Nunito', system-ui, sans-serif; font-weight: 600; color: var(--ink);
+        background-color: #fbfaff; background-image: radial-gradient(#efeafb 1.2px, transparent 1.3px);
+        background-size: 22px 22px;
+      }
+      main { max-width: 1020px; margin: 0 auto; padding: 44px 28px 60px; }
+      h1, h2, h3, .wordmark { font-family: 'Fredoka', 'Nunito', sans-serif; letter-spacing: 0.01em; }
+      h2 { font-size: 26px; margin: 44px 0 6px; }
+      .sub { color: var(--ink-faint); margin: 0 0 14px; }
+      .lockup { display: flex; align-items: center; gap: 20px; }
+      .lockup img { width: 96px; height: 96px; }
+      .wordmark { font-size: 52px; font-weight: 600; line-height: 1; }
+      .tagline { font-size: 20px; color: var(--coral-deep); font-weight: 800; margin-top: 6px; }
+      .row { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+      .card { background: #fff; border: 2px solid var(--line); border-radius: 18px; padding: 20px; }
+      .mark-big { width: 190px; height: 190px; }
+      .sizes { display: flex; align-items: flex-end; gap: 16px; margin-top: 14px; }
+      .sizes figure { margin: 0; text-align: center; color: var(--ink-faint); font-size: 12.5px; }
+      .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+      .sw { border-radius: 14px; padding: 12px; min-height: 96px; display: flex; flex-direction: column; justify-content: flex-end; border: 2px solid var(--line); }
+      .sw b { font-size: 15px; } .sw span { font-size: 13px; opacity: 0.85; }
+      .type-sample-display { font-family: 'Fredoka', sans-serif; font-size: 34px; font-weight: 600; margin: 4px 0; }
+      .type-sample-body { font-size: 17px; margin: 4px 0; }
+      ul.voice { margin: 6px 0; padding-left: 20px; line-height: 1.65; }
+      .footer { color: var(--ink-faint); margin-top: 44px; font-size: 14px; }
+      code { font-family: ui-monospace, monospace; font-size: 0.92em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="lockup">
+        <img src="logo.svg" alt="Toy Library logo" />
+        <div>
+          <div class="wordmark">Toy Library</div>
+          <div class="tagline">No more duplicate gifts.</div>
+        </div>
+      </div>
+
+      <h2>The mark</h2>
+      <p class="sub">
+        An open storybook — everything in the library is a story, whatever the
+        platform — wearing a teal check badge: the “already have it” ✓ that is
+        the whole point of the product. Coral for warmth and gift-wrap energy,
+        teal for the check, deep indigo for the words.
+      </p>
+      <div class="row">
+        <div class="card">
+          <img class="mark-big" src="logo.svg" alt="Toy Library mark, large" />
+          <div class="sizes">
+            <figure><img src="logo.svg" width="48" height="48" alt="" /><figcaption>48px</figcaption></figure>
+            <figure><img src="logo.svg" width="32" height="32" alt="" /><figcaption>32px</figcaption></figure>
+            <figure><img src="logo.svg" width="16" height="16" alt="" /><figcaption>16px favicon</figcaption></figure>
+          </div>
+        </div>
+        <div class="card" style="flex: 1 1 300px">
+          <h3 style="margin-top: 0">Using it</h3>
+          <ul class="voice">
+            <li>Pair the mark with the wordmark in Fredoka 600, ink indigo — never recolor the book or the check.</li>
+            <li>Give it breathing room: at least the width of the check badge on every side.</li>
+            <li>Minimum size 16px — the book and check stay legible all the way down to the favicon.</li>
+            <li>On busy photos, sit it on the lavender wash or white, not directly on the image.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2>Color</h2>
+      <p class="sub">The playful palette — no brown, anywhere. Platform tiles each get a candy gradient in between.</p>
+      <div class="swatches">
+        <div class="sw" style="background: #ff5a5f; color: #fff"><b>Coral</b><span>#FF5A5F · primary, buttons</span></div>
+        <div class="sw" style="background: #de3b41; color: #fff"><b>Coral Deep</b><span>#DE3B41 · pressed, links</span></div>
+        <div class="sw" style="background: #0ca6a6; color: #fff"><b>Teal</b><span>#0CA6A6 · the check, kids</span></div>
+        <div class="sw" style="background: #2e2a55; color: #fff"><b>Indigo Ink</b><span>#2E2A55 · text</span></div>
+        <div class="sw" style="background: #f4f1ff"><b>Lavender Wash</b><span>#F4F1FF · surfaces</span></div>
+        <div class="sw" style="background: #ffd93c"><b>Sunny</b><span>#FFD93C · birthdays, notices</span></div>
+        <div class="sw" style="background: #1fa866; color: #fff"><b>Leaf</b><span>#1FA866 · owned, all-clear</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #ffe29a, #ff9f43)"><b>Tonies</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #ffc2c2, #ff5a5f)"><b>Yoto</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #cdf463, #34c759)"><b>LeapFrog</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #a8d8ff, #4e8cff); color: #fff"><b>Projector</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #ffc7e3, #ff6fb5)"><b>VTech</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #ffe066, #ffb703)"><b>Books</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #99f2e3, #17bebb)"><b>Storypod</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #c7d2fe, #6366f1); color: #fff"><b>Osmo</b><span>tile gradient</span></div>
+        <div class="sw" style="background: linear-gradient(135deg, #e9d5ff, #a855f7); color: #fff"><b>Lunii</b><span>tile gradient</span></div>
+      </div>
+
+      <h2>Type</h2>
+      <div class="card">
+        <p class="type-sample-display">Fredoka — headlines, wordmark, buttons</p>
+        <p class="type-sample-body">
+          Nunito — everything else. Friendly and round, but grown-up enough for
+          the parents who actually run the lists. “Never gift the same Tonie twice.”
+        </p>
+      </div>
+
+      <h2>Voice</h2>
+      <div class="card">
+        <ul class="voice">
+          <li>Warm, plain, a little playful — written parent to parent.</li>
+          <li>We say <b>gift-givers</b>, never “users”; <b>already have it</b>, never “owned inventory”.</li>
+          <li>The enemy is the duplicate gift, never the grandparent who bought it.</li>
+          <li>Short sentences. One idea each. Exclamation marks are rationed — the checkmark does the celebrating.</li>
+        </ul>
+      </div>
+
+      <p class="footer">
+        Toy Library · toylibrary.store · The mark lives at <code>/logo.svg</code>;
+        this sheet at <code>/brand.html</code>. Type via Google Fonts (Fredoka, Nunito).
+      </p>
+    </main>
+  </body>
+</html>

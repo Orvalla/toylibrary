@@ -8,7 +8,8 @@ export default function Header() {
   return (
     <header className="header">
       <Link to="/" className="logo">
-        📚 Toy Library
+        <img src="/logo.svg" alt="" className="logo-mark" />
+        Toy Library
       </Link>
       <nav>
         {user ? (
