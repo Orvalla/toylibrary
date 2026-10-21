@@ -44,4 +44,26 @@ describe('amazonUrlFor', () => {
     expect(amazonUrlFor(item, undefined)).not.toContain('tag=')
     expect(amazonUrlFor(item, null)).not.toContain('tag=')
   })
+
+  it('goes straight to the product page when the item has an ASIN', () => {
+    const item = { platform: 'tonies', title: 'Blippi', asin: 'B0CXYZ1234' }
+    expect(amazonUrlFor(item, 'toylibrary0e-20')).toBe(
+      'https://www.amazon.com/dp/B0CXYZ1234?tag=toylibrary0e-20'
+    )
+    expect(amazonUrlFor(item, '')).toBe('https://www.amazon.com/dp/B0CXYZ1234')
+  })
+
+  it('ignores malformed ASINs and falls back to search', () => {
+    for (const asin of ['B0CXYZ123', 'b0cxyz1234!', 'not-an-asin', 42, null]) {
+      expect(amazonUrlFor({ platform: 'yoto', title: 'Cards', asin }, '')).toBe(
+        'https://www.amazon.com/s?k=Cards%20Yoto'
+      )
+    }
+  })
+
+  it('accepts a lowercase ASIN by normalising it', () => {
+    expect(amazonUrlFor({ platform: 'books', title: 'X', asin: 'b0cxyz1234' }, '')).toBe(
+      'https://www.amazon.com/dp/B0CXYZ1234'
+    )
+  })
 })

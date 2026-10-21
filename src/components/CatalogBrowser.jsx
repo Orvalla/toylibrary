@@ -77,6 +77,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       details: entry.details,
       notes: '',
       image_url: entry.image_url ?? '',
+      asin: entry.asin ?? null,
       child_id: childSel || null,
     })
     if (error) {
