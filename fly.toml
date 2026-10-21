@@ -4,7 +4,7 @@
 #
 
 app = 'toylibrary'
-primary_region = 'ams'
+primary_region = 'sjc'
 
 [build]
 
