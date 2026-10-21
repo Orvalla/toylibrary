@@ -19,5 +19,6 @@ jobs:
           flyctl deploy --remote-only
           --build-arg VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
           --build-arg VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          --build-arg VITE_AMAZON_TAG=${{ secrets.VITE_AMAZON_TAG }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

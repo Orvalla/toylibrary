@@ -54,3 +54,10 @@ values
    'https://cdn.shopify.com/s/files/1/0790/8701/0004/files/osmo_base_ipad_2018_2bfb39fb-ed83-4ddd-b343-40d496997ad5.jpg?v=1764108255',
    'https://www.playosmo.com/products/osmo-new-base-for-ipad', 'device', 1)
 on conflict (platform, title) do nothing;
+
+-- The 0004 hand seed already contained the LeapPad Academy tablet as
+-- a content row, so the seed above skips it on conflict — file it as
+-- the device it is instead.
+update public.catalog_items
+set item_type = 'device'
+where platform = 'leapfrog' and title = 'LeapPad Academy';
