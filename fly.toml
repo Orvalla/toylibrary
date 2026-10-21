@@ -1,21 +1,20 @@
-app = "toy-library"
-primary_region = "sea" # Seattle — change to your nearest Fly region
+# fly.toml app configuration file generated for toylibrary on 2026-10-21T19:21:52Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'toylibrary'
+primary_region = 'ams'
 
 [build]
-  # Pass your Supabase project's public values at deploy time:
-  #   fly deploy \
-  #     --build-arg VITE_SUPABASE_URL=https://YOUR-REF.supabase.co \
-  #     --build-arg VITE_SUPABASE_ANON_KEY=your-anon-key
-  # (Or set them here as [build.args]. They are public values — RLS in
-  # Supabase is what protects the data, not secrecy of these keys.)
 
 [http_service]
-  internal_port = 80
+  internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
