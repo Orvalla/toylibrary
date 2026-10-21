@@ -42,7 +42,12 @@ a { color: var(--accent-dark); }
   border-bottom: 3px solid var(--line);
   background: var(--soft);
 }
-.header .logo { font-weight: 600; font-size: 23px; text-decoration: none; color: var(--ink); }
+.header .logo {
+  font-weight: 600; font-size: 23px; text-decoration: none; color: var(--ink);
+  display: inline-flex; align-items: center; gap: 9px;
+}
+.logo-mark { width: 31px; height: 31px; }
+.hero-logo { width: 74px; height: 74px; margin-bottom: 6px; }
 .header nav { display: flex; gap: 16px; align-items: center; }
 .header nav a { text-decoration: none; font-weight: 800; }
 
@@ -104,6 +109,10 @@ a { color: var(--accent-dark); }
 }
 .share-url { font-family: ui-monospace, monospace; word-break: break-all; margin: 6px 0; }
 .toggle { font-weight: 800; }
+.slug-field { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.slug-field input { flex: 1 1 160px; }
+.slug-prefix { font-family: ui-monospace, monospace; font-size: 13.5px; color: var(--ink-faint); }
+.field-help { color: var(--ink-faint); font-size: 14px; margin: 0; }
 
 .tabs { display: flex; gap: 8px; margin: 24px 0 6px; flex-wrap: wrap; }
 .tabs button {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { formatOccasionLine } from '../lib/occasions'
+import { normalizeShareSlug, validateShareSlug } from '../lib/slug'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const [occasions, setOccasions] = useState([])
   const [occForms, setOccForms] = useState({}) // child id -> { label, date }
   const [message, setMessage] = useState('')
+  const [slugInput, setSlugInput] = useState('')
   const [confirmRegen, setConfirmRegen] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -32,6 +34,7 @@ export default function SettingsPage() {
       setProfile(data)
       setDisplayName(data?.display_name ?? '')
       setChildName(data?.child_name ?? '')
+      setSlugInput(data?.share_slug ?? '')
       setKids(childRows ?? [])
       setOccasions(occRows ?? [])
       setLoading(false)
@@ -152,7 +155,43 @@ export default function SettingsPage() {
     }
     setConfirmRegen(false)
     setProfile((p) => ({ ...p, share_slug: data }))
+    setSlugInput(data)
     setMessage('New share link created. The old one no longer works.')
+  }
+
+  // Pick a memorable slug (the-millers instead of fam-015f2077).
+  // The input is normalized as it's saved; the server (migration
+  // 0012) re-validates and reports a taken slug as 'slug_taken'.
+  async function saveSlug(e) {
+    e.preventDefault()
+    setMessage('')
+    const slug = normalizeShareSlug(slugInput)
+    setSlugInput(slug)
+    const problem = validateShareSlug(slug)
+    if (problem) {
+      setMessage(problem)
+      return
+    }
+    if (slug === profile.share_slug) {
+      setMessage('That is already your link.')
+      return
+    }
+    const { data, error } = await supabase.rpc('set_share_slug', { p_slug: slug })
+    if (error) {
+      setMessage(
+        error.message.includes('slug_taken')
+          ? 'That link is already taken — try another.'
+          : error.message.includes('reserved_slug')
+            ? 'That one is reserved — try another.'
+            : error.message.includes('invalid_slug')
+              ? 'That link is not allowed — use letters, numbers and single hyphens.'
+              : error.message
+      )
+      return
+    }
+    setProfile((p) => ({ ...p, share_slug: data }))
+    setSlugInput(data)
+    setMessage('Your share link has been updated. The old one no longer works.')
   }
 
   if (loading) return <main className="page narrow"><p>Loading…</p></main>
@@ -294,6 +333,30 @@ export default function SettingsPage() {
       <section className="card">
         <h3>Share link</h3>
         <p className="share-url">{shareUrl}</p>
+        <form onSubmit={saveSlug} className="form">
+          <label>
+            Make it memorable
+            <span className="slug-field">
+              <span className="slug-prefix">{window.location.origin}/s/</span>
+              <input
+                value={slugInput}
+                onChange={(e) => setSlugInput(e.target.value)}
+                placeholder="the-millers"
+                maxLength={40}
+              />
+            </span>
+          </label>
+          <p className="field-help">
+            Letters, numbers and hyphens — 3 to 30 characters. Pick
+            something easy to say out loud, like your family name.
+            Changing it breaks the old link.
+          </p>
+          <p>
+            <button type="submit" className="btn btn-small">
+              Save my link
+            </button>
+          </p>
+        </form>
         <p>
           If this link has spread further than you'd like, regenerate it —
           the old link stops working right away and you'll get a fresh one
