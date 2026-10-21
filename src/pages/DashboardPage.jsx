@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
+import AmazonLink from '../components/AmazonLink'
 import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
 import { childNameFor } from '../lib/children'
 import { formatOccasionLine, nearestOccasion } from '../lib/occasions'
@@ -431,6 +432,7 @@ export default function DashboardPage() {
                       <button className="linklike danger" onClick={() => removeItem(item)}>
                         Remove
                       </button>
+                      <AmazonLink item={item} />
                     </span>
                   </div>
                 </ItemTile>

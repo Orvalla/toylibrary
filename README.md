@@ -42,6 +42,24 @@ server code, and all access control still lives in the database:
   fallback. A **browsable catalog** (`catalog_items`, seeded with the
   well-known Tonies / Yoto / LeapFrog / projector / book titles) lets parents
   tap-to-add; titles already owned show a green ✓ checkmark.
+- **Devices have their own page** (`/devices`): catalog rows are either
+  content or the player itself (`catalog_items.item_type`, migration
+  0010 seeds a Toniebox, Yoto Player/Mini, LeapPads, the Storypod
+  player, the Lunii Storyteller, both projectors and the Osmo base).
+  The page reuses the catalog browser — same tiles, search and
+  add-to-my-list flow — narrowed to devices, so "we already own the
+  player" is trackable too. On the catalog page, **category chips**
+  (Figures · Books · Cards · Games · Devices · Audio & more) filter
+  alongside platform and search; the category is derived from the row
+  (`src/lib/categories.js`), no extra data to maintain.
+- **"Buy on Amazon" affiliate links** sit under every item — catalog
+  and device tiles, dashboard lists, and the share page's wishlist.
+  Each is an Amazon search URL for the title plus the platform's brand
+  word (`src/lib/amazon.js`), carrying the Associates tag from the
+  `VITE_AMAZON_TAG` build-time env var when one is set. Production
+  sets `VITE_AMAZON_TAG=toylibrary0e-20` via the deploy workflow's
+  build args (repo secret); without it the links still work, just
+  unattributed.
 - **Parents grow the catalog themselves** ("Grow the catalog" on the
   catalog page). Two ways in: search the connected stores (Tonies,
   Yoto, Storypod, Osmo, Moonlite, Little Tikes) and tap a result, or
