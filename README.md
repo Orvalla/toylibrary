@@ -45,8 +45,8 @@ server code, and all access control still lives in the database:
 - **Parents grow the catalog themselves** ("Grow the catalog" on the
   catalog page). Two ways in: search the connected stores (Tonies,
   Yoto, Storypod, Osmo, Moonlite, Little Tikes) and tap a result, or
-  paste a link to any product page and it's added automatically after
-  a server-side fetch. Both go through the `ingest-catalog` Edge
+  paste a link — a product page adds that product, and a whole
+  collection page adds everything in it at once. Both go through the `ingest-catalog` Edge
   Function: it checks the caller's sign-in, fetches/extracts the
   product, and writes with the service role — clients still have no
   direct write access to `catalog_items`. Every addition is logged
@@ -145,7 +145,7 @@ The seed creates a demo family so you can click through immediately:
 ### Tests & CI
 
 ```bash
-npm test                     # Vitest + Testing Library (88 tests)
+npm test                     # Vitest + Testing Library (104 tests)
 ```
 
 GitHub Actions: `.github/workflows/ci.yml` runs the tests and a
@@ -217,11 +217,23 @@ product? Grow the catalog"** section (signed-in parents only):
   Osmo, Moonlite, and Little Tikes' Dream Machine line) via their
   public search suggestions. Tap **Add to catalog** on a result and
   it's in — for every family, immediately.
-- **Paste a link** — paste any product-page URL. The function fetches
-  it server-side: Shopify product links are read via their
+- **Paste a link** — paste a product-page URL and the function
+  fetches it server-side: Shopify product links are read via their
   `/products/<handle>.json` JSON; other pages are parsed for JSON-LD
   product data, falling back to Open Graph tags. Stores known to the
   ingestor map to their platform; anything else lands as `other`.
+- **Paste a collection link** — a `/collections/<name>` link on a
+  connected store bulk-adds the whole collection: the function walks
+  the collection's `products.json` pages (250 at a time, up to 20
+  pages), keeps only the products that store's own ingestor rules
+  keep (so Tonies bundles, Yoto players and digital cards, Osmo
+  starter kits and the like are skipped, and titles are tidied the
+  ingestor's way so they dedupe against what's already stocked),
+  inserts what's new, and reports the tally — added / already in
+  the catalog / skipped. A collection-shaped link on any other
+  store is read from the page's JSON-LD product list instead, and
+  one that can't be read at all gets a plain "couldn't read that
+  collection" message rather than a bogus single add.
 
 Safety, briefly: the function validates the caller's JWT before
 doing anything (401 otherwise) and writes with the service role, so

@@ -83,9 +83,14 @@ export default function CatalogPage() {
   }
 
   // A product added via "Grow the catalog" joins the grid at once,
-  // without waiting for a refetch round-trip.
+  // without waiting for a refetch round-trip. A bulk collection
+  // import calls this with no item — too many rows to append, so
+  // the grid simply refetches.
   function handleCatalogAdded(item) {
-    if (!item) return
+    if (!item) {
+      load()
+      return
+    }
     setCatalog((prev) => (prev.some((c) => c.id === item.id) ? prev : [...prev, item]))
     setMessage(`“${item.title}” is now in the catalog.`)
   }

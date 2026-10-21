@@ -10,8 +10,11 @@ import { platformLabel } from '../lib/platforms'
 //  * Search stores — asks the known Shopify stores (Tonies, Yoto,
 //    Storypod, Osmo, Moonlite, Little Tikes) for matches via the
 //    ingest-catalog Edge Function, then one tap adds a result.
-//  * Paste a link — the function fetches the product page
-//    server-side, extracts the product, and adds it.
+//  * Paste a link — the function fetches the page server-side and
+//    adds what it points at: a product page adds that product; a
+//    collection page (e.g. a Tonies collection) adds everything in
+//    it at once, minus the store's bundles/players/extras, and the
+//    outcome below reports the tally.
 //
 // All writes happen in the function (service role, caller JWT
 // checked); this component only invokes it and renders the outcome.
@@ -25,7 +28,10 @@ export default function GrowCatalog({ onAdded }) {
   const [searching, setSearching] = useState(false)
   const [addStates, setAddStates] = useState({}) // candidate key -> adding|added|exists
 
-  // Link tab state. `outcome` is the function's { status, item }.
+  // Link tab state. `outcome` is the function's response: either
+  // { status: 'added'|'exists', item } for a product link, or
+  // { status: 'collection', platform, total_found, added,
+  //   already_present, skipped_filtered } for a collection link.
   const [url, setUrl] = useState('')
   const [addingLink, setAddingLink] = useState(false)
   const [outcome, setOutcome] = useState(null)
@@ -89,6 +95,9 @@ export default function GrowCatalog({ onAdded }) {
       const data = await invoke({ mode: 'url', url })
       setOutcome(data)
       if (data.status === 'added') onAdded?.(data.item)
+      // A bulk import adds too many rows to hand up one by one —
+      // the parent refetches the grid instead.
+      if (data.status === 'collection' && data.added > 0) onAdded?.()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -172,10 +181,10 @@ export default function GrowCatalog({ onAdded }) {
         <>
           <form className="form inline-form" onSubmit={addFromLink}>
             <input
-              placeholder="https://… link to one product page"
+              placeholder="https://… product or collection link"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              aria-label="Product page link"
+              aria-label="Product or collection link"
               inputMode="url"
             />
             <button className="btn" type="submit" disabled={addingLink || !url.trim()}>
@@ -183,11 +192,20 @@ export default function GrowCatalog({ onAdded }) {
             </button>
           </form>
           <p className="notes">
-            Works best with a link straight to a single product — we'll read its title
-            and photo from the page.
+            Paste a product link — or a whole collection link (like a Tonies
+            collection page) to add everything in it at once.
           </p>
 
-          {outcome && (
+          {outcome && outcome.status === 'collection' && (
+            <p className="notice">
+              Added {outcome.added} new {platformLabel(outcome.platform)} ·{' '}
+              {outcome.already_present} already in the catalog
+              {outcome.skipped_filtered > 0 &&
+                ` · ${outcome.skipped_filtered} skipped (bundles & accessories)`}
+            </p>
+          )}
+
+          {outcome && outcome.status !== 'collection' && (
             <>
               <p className="notice">
                 {outcome.status === 'added'

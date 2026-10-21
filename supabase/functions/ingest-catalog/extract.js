@@ -184,18 +184,27 @@ function jsonLdDetails(product) {
   return cleanText(brandName || category || '')
 }
 
-export function extractFromJsonLd(html) {
-  if (!html) return null
+// Every Product described by a page's JSON-LD, in document order —
+// a single product page yields one; a collection page's ItemList
+// yields the whole list (the bulk-import fallback for stores
+// without a Shopify feed).
+export function extractAllFromJsonLd(html) {
+  if (!html) return []
+  const out = []
   for (const doc of jsonLdBlocks(html)) {
     for (const product of productNodes(doc)) {
       const title = cleanText(product.name)
       if (!title) continue
       const image = Array.isArray(product.image) ? product.image[0] : product.image
       const imageUrl = typeof image === 'string' ? fixImageUrl(image) : null
-      return { title, image_url: imageUrl, details: jsonLdDetails(product) }
+      out.push({ title, image_url: imageUrl, details: jsonLdDetails(product) })
     }
   }
-  return null
+  return out
+}
+
+export function extractFromJsonLd(html) {
+  return extractAllFromJsonLd(html)[0] ?? null
 }
 
 function metaContent(html, property) {
@@ -300,4 +309,180 @@ export function normalizeSuggestResult(store, product) {
 // platform + normalised title (the app's own duplicate rule, in spirit).
 export function candidateKey(candidate) {
   return `${candidate.platform}|${cleanText(candidate.title).toLowerCase()}`
+}
+
+// ------------------------------------------------------- Shopify paths
+
+// What kind of Shopify page a pasted link points at. Product wins
+// over collection: /collections/<h>/products/<p> is a product page
+// that happens to be scoped to a collection. Locale prefixes
+// (/en-us/…) and trailing segments don't matter — the scan looks for
+// the keyword segments anywhere in the path.
+export function parseShopifyPath(rawUrl) {
+  let url
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    return { kind: 'other' }
+  }
+  const segments = url.pathname.split('/').filter((s) => s !== '')
+  const handleAfter = (keyword) => {
+    const i = segments.indexOf(keyword)
+    if (i === -1 || i === segments.length - 1) return null
+    const raw = segments[i + 1]
+    try {
+      return decodeURIComponent(raw)
+    } catch {
+      return raw
+    }
+  }
+  const product = handleAfter('products')
+  if (product) return { kind: 'product', handle: product }
+  const collection = handleAfter('collections')
+  if (collection) return { kind: 'collection', handle: collection }
+  return { kind: 'other' }
+}
+
+// One page of a collection's product feed — the same public JSON
+// the ingestor walks for whole stores.
+export function collectionPageUrl(origin, handle, page) {
+  return `${origin}/collections/${encodeURIComponent(handle)}/products.json?limit=250&page=${page}`
+}
+
+// ------------------------------------------------- store content rules
+//
+// The keep/drop rules the offline ingestor applies per store
+// (ingestor/lib/sources.mjs), ported so a bulk collection import
+// stocks the same catalog a feed run would: content only, never
+// players, bundles that duplicate singles, or accessories. The
+// ingestor's config is declarative; this is the same data in the
+// shape the checks below need.
+
+function productTags(p) {
+  if (Array.isArray(p?.tags)) return p.tags.map((t) => String(t).trim())
+  if (typeof p?.tags === 'string')
+    return p.tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+  return []
+}
+
+const STORE_FILTERS = {
+  tonies: {
+    // Content figures only — Toniebox players, bundles/sets,
+    // accessories and Tonieplay games never reach the allow-list.
+    includeTypes: ['Tonie', 'Creative Tonie', 'Clever Tonie', 'My First Tonie', 'Audiobook'],
+    excludeTitle: /\b\d+\s*pack\b|\bbundle\b/i,
+  },
+  yoto: {
+    includeTypes: ['single-card', 'bundle', 'soft-bundle'],
+    excludeTitle: /\(Digital\)\s*$/i,
+    excludeTags: ['flag:Digital Card'],
+  },
+  storypod: {
+    excludeTypes: ['Sleeves', 'Plush'],
+    excludeTitle: /charging cable|subscription buy out|\beddi\b/i,
+  },
+  osmo: {
+    includeTitle:
+      /^(Detective Agency|Genius Numbers|Genius Words|Genius Tangram|Little Genius Costume Pieces|Little Genius Sticks & Rings|Math Wizard and the|Monster|Pizza Co)/i,
+    excludeTitle: /starter kit|\bbase\b|reflector|\bcase\b|bundle|series|mystery gift/i,
+  },
+}
+
+// The projector platform is fed by two stores with different rules,
+// told apart the same way their feeds present: Moonlite marks its
+// stories with the 'Single Story' type; Little Tikes' Dream Machine
+// line is recognised by title (its product types are generic).
+function passesProjectorFilter(title, type) {
+  if (type === 'Single Story') return !/\bpack\b|\bset\b/i.test(title)
+  if (!/^Story Dream Machine/i.test(title)) return false
+  return !/^Story Dream Pals\b|\bPlush\b|Starter Pack|Special Edition Pack|\bCase\b|^Build Your Own\b/i.test(
+    title,
+  )
+}
+
+// Would the ingestor keep this product for this platform? Platforms
+// without a rule set here (leapfrog, lunii, other, …) keep
+// everything with a title — they have no Shopify feed rules to
+// mirror.
+export function passesStoreFilter(platform, product) {
+  if (!product || typeof product !== 'object') return false
+  const title = cleanText(product.title)
+  if (!title) return false
+  const type = cleanText(product.product_type)
+  if (platform === 'projector') return passesProjectorFilter(title, type)
+  const rules = STORE_FILTERS[platform]
+  if (!rules) return true
+  if (rules.includeTypes && !rules.includeTypes.includes(type)) return false
+  if (rules.excludeTypes?.includes(type)) return false
+  if (rules.includeTitle && !rules.includeTitle.test(title)) return false
+  if (rules.excludeTitle?.test(title)) return false
+  if (rules.excludeTags && productTags(product).some((t) => rules.excludeTags.includes(t)))
+    return false
+  return true
+}
+
+// The ingestor also tidies titles per store (the format/line name
+// moves into details). Bulk-added rows must match that convention
+// or the (platform, title) dedupe would treat "… Tonie" and "…"
+// as different products and stock both.
+function applyCollectionTitleRules(platform, row) {
+  if (platform === 'tonies' && row.title.endsWith(' Tonie')) {
+    row.title = row.title.slice(0, -' Tonie'.length).trim()
+  }
+  if (platform === 'projector' && row.title.startsWith('Story Dream Machine ')) {
+    row.title = row.title.slice('Story Dream Machine '.length).trim()
+    row.details = /collection|colección|\bpack\b/i.test(row.title)
+      ? 'Dream Machine story collection'
+      : 'Dream Machine story cartridge'
+  }
+  if (platform === 'storypod' && !row.details && /^recordable token$/i.test(row.title)) {
+    row.details = 'Token'
+  }
+  if (platform === 'osmo' && !row.details) {
+    row.details = 'Osmo game'
+  }
+  return row
+}
+
+// Plan a bulk import: filter a collection's products by the store's
+// rules, normalise the survivors, and split them against the titles
+// already in the catalog. Pure — the function does the fetching and
+// inserting, this decides what goes where, and the tallies always
+// reconcile: toAdd + alreadyPresent + skippedFiltered = products in.
+//
+// existingTitles is the catalog's current titles for the platform
+// (compared case-insensitively, like the app's duplicate rule).
+// A repeat inside the feed itself counts as alreadyPresent — by the
+// time the import finishes, it is.
+export function planCollectionImport(products, existingTitles, platform, origin = '') {
+  const existing = new Set()
+  for (const t of existingTitles ?? []) existing.add(cleanText(t).toLowerCase())
+  const seen = new Set()
+  const toAdd = []
+  let alreadyPresent = 0
+  let skippedFiltered = 0
+  for (const product of products ?? []) {
+    if (!passesStoreFilter(platform, product)) {
+      skippedFiltered++
+      continue
+    }
+    const normalised = normalizeShopifyProduct(product, platform)
+    if (!normalised) {
+      skippedFiltered++
+      continue
+    }
+    const row = applyCollectionTitleRules(platform, { ...normalised })
+    const key = row.title.toLowerCase()
+    if (existing.has(key) || seen.has(key)) {
+      alreadyPresent++
+      continue
+    }
+    seen.add(key)
+    if (origin && product.handle) row.source_url = `${origin}/products/${product.handle}`
+    toAdd.push(row)
+  }
+  return { toAdd, alreadyPresent, skippedFiltered }
 }

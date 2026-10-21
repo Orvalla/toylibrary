@@ -7,9 +7,12 @@
 //                                   matching products; returns
 //                                   candidates, inserts nothing.
 //   { mode: 'add', candidate }    — add one search candidate.
-//   { mode: 'url', url }          — fetch a pasted product link
-//                                   server-side, extract the product,
-//                                   add it.
+//   { mode: 'url', url }          — fetch a pasted link server-side
+//                                   and add what it points at: one
+//                                   product page → that product; a
+//                                   collection page → everything in
+//                                   it, filtered by the store's own
+//                                   content rules (see extract.js).
 //
 // Every mode requires a signed-in user: the caller's JWT is validated
 // first, and writes happen with the service role (catalog_items has
@@ -26,11 +29,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   candidateKey,
   cleanText,
+  collectionPageUrl,
+  extractAllFromJsonLd,
   extractFromJsonLd,
   extractFromOpenGraph,
   isSafeFetchUrl,
   normalizeShopifyProduct,
   normalizeSuggestResult,
+  parseShopifyPath,
+  planCollectionImport,
   platformForUrl,
 } from './extract.js'
 
@@ -43,6 +50,12 @@ const FETCH_TIMEOUT_MS = 8000
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 const MAX_REDIRECTS = 3
 const TITLE_CAP = 300
+// Collection imports walk the store's products.json at 250/page;
+// a page of full product records (descriptions and all) is much
+// bigger than a product page, so it gets a bigger cap.
+const COLLECTION_MAX_PAGES = 20
+const COLLECTION_PAGE_SIZE = 250
+const COLLECTION_PAGE_BYTES = 8 * 1024 * 1024
 
 // Platform keys the database CHECK allows (0007). Add-mode candidates
 // must name one of these.
@@ -96,7 +109,10 @@ class HttpError extends Error {
 // Fetch a URL's text with the safety rails applied: every redirect
 // hop is re-validated, the body is capped, and upstream failures
 // become plain 502s. Returns the final URL after redirects.
-async function fetchTextCapped(startUrl: string): Promise<{ text: string; finalUrl: string }> {
+async function fetchTextCapped(
+  startUrl: string,
+  maxBytes: number = MAX_BODY_BYTES,
+): Promise<{ text: string; finalUrl: string }> {
   let current = startUrl
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     let res: Response
@@ -134,7 +150,7 @@ async function fetchTextCapped(startUrl: string): Promise<{ text: string; finalU
       const { done, value } = await reader.read()
       if (done) break
       text += decoder.decode(value, { stream: true })
-      if (text.length > MAX_BODY_BYTES) {
+      if (text.length > maxBytes) {
         await reader.cancel()
         throw new HttpError(502, 'That page is too large to read.')
       }
@@ -200,6 +216,157 @@ async function upsertCatalogItem(
   return { status: 'added', item: inserted }
 }
 
+// ------------------------------------------- collection bulk imports
+//
+// A pasted collection link adds everything in it at once. The plan
+// (which products, which are new) is pure — planCollectionImport in
+// extract.js, unit-tested; this section only fetches and inserts.
+//
+// Insert counting: the batch upsert runs with ignoreDuplicates, so
+// its returned rows are exactly the rows that were inserted (the
+// same PostgREST behaviour upsertCatalogItem relies on for one).
+// `added` counts those; already_present is whatever was found but
+// not inserted, so the three tallies always sum to total_found.
+async function insertPlannedCollection(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  products: unknown[],
+  platform: string,
+  origin: string,
+  sourceUrl: string,
+): Promise<Record<string, unknown>> {
+  // What's already catalogued for this platform? Titles only, paged
+  // (PostgREST caps a response at 1,000 rows; Yoto has ~1,600).
+  const existingTitles: string[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin
+      .from('catalog_items')
+      .select('title')
+      .eq('platform', platform)
+      .order('title')
+      .range(from, from + 999)
+    if (error) throw new HttpError(500, 'Something went wrong saving those — try again.')
+    existingTitles.push(...(data ?? []).map((r: any) => r.title))
+    if (!data || data.length < 1000) break
+  }
+
+  const plan = planCollectionImport(products, existingTitles, platform, origin)
+
+  const inserted: Record<string, unknown>[] = []
+  for (let i = 0; i < plan.toAdd.length; i += 100) {
+    const batch = plan.toAdd.slice(i, i + 100).map((row: any) => ({
+      platform,
+      title: row.title.slice(0, TITLE_CAP),
+      details: row.details ?? '',
+      image_url: row.image_url ?? '',
+      source_url: row.source_url ?? sourceUrl,
+      added_by: userId,
+    }))
+    const { data, error } = await admin
+      .from('catalog_items')
+      .upsert(batch, { onConflict: 'platform,title', ignoreDuplicates: true })
+      .select()
+    if (error) throw new HttpError(500, 'Something went wrong saving those — try again.')
+    inserted.push(...((data ?? []) as Record<string, unknown>[]))
+  }
+
+  // One additions-log row per genuinely added product, attributed
+  // to the collection link the parent pasted.
+  for (let i = 0; i < inserted.length; i += 500) {
+    await admin.from('catalog_additions').insert(
+      inserted.slice(i, i + 500).map((r: any) => ({
+        user_id: userId,
+        platform: r.platform,
+        title: r.title,
+        source_url: sourceUrl,
+      })),
+    )
+  }
+
+  const added = inserted.length
+  return {
+    status: 'collection',
+    platform,
+    total_found: products.length,
+    added,
+    already_present: products.length - plan.skippedFiltered - added,
+    skipped_filtered: plan.skippedFiltered,
+  }
+}
+
+// Walk a Shopify collection's products.json pages. Returns the
+// import tally, or null when page 1 couldn't be read as a Shopify
+// collection feed at all (the caller decides what that means for
+// this store). A failure on a later page just ends the walk —
+// what was gathered still imports.
+async function importCollection(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  sourceUrl: string,
+  platform: string,
+  origin: string,
+  handle: string,
+): Promise<Record<string, unknown> | null> {
+  const products: unknown[] = []
+  for (let page = 1; page <= COLLECTION_MAX_PAGES; page++) {
+    let pageProducts: unknown[] | null = null
+    try {
+      const { text } = await fetchTextCapped(
+        collectionPageUrl(origin, handle, page),
+        COLLECTION_PAGE_BYTES,
+      )
+      const parsedJson = JSON.parse(text)
+      if (Array.isArray(parsedJson?.products)) pageProducts = parsedJson.products
+    } catch {
+      pageProducts = null
+    }
+    if (pageProducts === null) {
+      if (page === 1) return null
+      break
+    }
+    products.push(...pageProducts)
+    if (pageProducts.length < COLLECTION_PAGE_SIZE) break
+  }
+  if (products.length === 0) {
+    throw new HttpError(
+      422,
+      "Couldn't read that collection — check the link, or try a single product page.",
+    )
+  }
+  return insertPlannedCollection(admin, userId, products, platform, origin, sourceUrl)
+}
+
+// Collection-shaped link on a store with no products.json feed:
+// read the page's JSON-LD and bulk-add every Product it lists (some
+// non-Shopify stores describe a collection as an ItemList).
+async function importItemListCollection(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  sourceUrl: string,
+  platform: string,
+  origin: string,
+): Promise<Record<string, unknown>> {
+  const { text: html } = await fetchTextCapped(sourceUrl)
+  const items = extractAllFromJsonLd(html)
+  if (items.length === 0) {
+    throw new HttpError(
+      422,
+      "Couldn't read that collection — check the link, or try a single product page.",
+    )
+  }
+  // planCollectionImport speaks Shopify product shape; the JSON-LD
+  // details (brand / category) ride in product_type, which the
+  // normaliser passes through as the details text.
+  const products = items.map((item) => ({
+    title: item.title,
+    product_type: item.details,
+    tags: [],
+    handle: null,
+    images: item.image_url ? [{ src: item.image_url }] : [],
+  }))
+  return insertPlannedCollection(admin, userId, products, platform, origin, sourceUrl)
+}
+
 // ------------------------------------------------------------ mode: url
 async function handleUrl(admin: ReturnType<typeof createClient>, userId: string, body: any) {
   const url = typeof body.url === 'string' ? body.url.trim() : ''
@@ -208,12 +375,29 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
   }
   const platform = platformForUrl(url)
   const parsed = new URL(url)
+  const path = parseShopifyPath(url)
+
+  // A collection link bulk-adds everything in it. On a connected
+  // store a collection we can't read is a plain 422 — falling
+  // through to the single-product scrape would risk adding the
+  // collection page itself as a "product". Anywhere else, the
+  // page's JSON-LD ItemList gets the same bulk treatment.
+  if (path.kind === 'collection') {
+    const result = await importCollection(admin, userId, url, platform, parsed.origin, path.handle)
+    if (result) return json(result)
+    if (platform !== 'other') {
+      throw new HttpError(
+        422,
+        "Couldn't read that collection — check the link, or try a single product page.",
+      )
+    }
+    return json(await importItemListCollection(admin, userId, url, platform, parsed.origin))
+  }
 
   // Shopify product pages expose clean JSON at /products/<handle>.json
   // — prefer it over scraping the HTML whenever the link has that shape.
-  const handleMatch = parsed.pathname.match(/\/products\/([^/?#]+)/)
-  if (handleMatch) {
-    const jsonUrl = `${parsed.origin}/products/${handleMatch[1]}.json`
+  if (path.kind === 'product') {
+    const jsonUrl = `${parsed.origin}/products/${path.handle}.json`
     if (isSafeFetchUrl(jsonUrl)) {
       try {
         const { text } = await fetchTextCapped(jsonUrl)

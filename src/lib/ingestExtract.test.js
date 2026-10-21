@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   candidateKey,
+  collectionPageUrl,
+  extractAllFromJsonLd,
   extractFromJsonLd,
   extractFromOpenGraph,
   isSafeFetchUrl,
   normalizeShopifyProduct,
   normalizeSuggestResult,
+  parseShopifyPath,
+  passesStoreFilter,
+  planCollectionImport,
   platformForUrl,
 } from '../../supabase/functions/ingest-catalog/extract.js'
 
@@ -264,5 +269,275 @@ describe('candidateKey', () => {
     expect(candidateKey({ platform: 'tonies', title: 'Bluey' })).not.toBe(
       candidateKey({ platform: 'yoto', title: 'Bluey' })
     )
+  })
+})
+
+describe('extractAllFromJsonLd', () => {
+  it('returns every Product in an ItemList, in order', () => {
+    const html = `
+      <script type="application/ld+json">
+      {"@type":"ItemList","itemListElement":[
+        {"@type":"Product","name":"First Toy","image":"https://cdn.example.com/1.jpg","brand":"Acme"},
+        {"@type":"Product","name":"Second Toy","image":"https://cdn.example.com/2.jpg"}
+      ]}
+      </script>`
+    expect(extractAllFromJsonLd(html)).toEqual([
+      { title: 'First Toy', image_url: 'https://cdn.example.com/1.jpg', details: 'Acme' },
+      { title: 'Second Toy', image_url: 'https://cdn.example.com/2.jpg', details: '' },
+    ])
+  })
+
+  it('returns a single product page as a one-item list, and [] for none', () => {
+    const html = `<script type="application/ld+json">{"@type":"Product","name":"Solo"}</script>`
+    expect(extractAllFromJsonLd(html)).toHaveLength(1)
+    expect(extractAllFromJsonLd('<html><body>nothing</body></html>')).toEqual([])
+    expect(extractAllFromJsonLd('')).toEqual([])
+  })
+})
+
+describe('parseShopifyPath', () => {
+  it('recognises product pages, including collection-scoped and locale ones', () => {
+    expect(parseShopifyPath('https://us.tonies.com/products/bluey')).toEqual({
+      kind: 'product',
+      handle: 'bluey',
+    })
+    expect(parseShopifyPath('https://us.tonies.com/collections/all-tonies/products/bluey')).toEqual(
+      { kind: 'product', handle: 'bluey' }
+    )
+    expect(parseShopifyPath('https://us.tonies.com/en-us/products/bluey?variant=1')).toEqual({
+      kind: 'product',
+      handle: 'bluey',
+    })
+  })
+
+  it('recognises collection pages, tolerating trailing slash and query', () => {
+    expect(parseShopifyPath('https://us.tonies.com/collections/all-tonies')).toEqual({
+      kind: 'collection',
+      handle: 'all-tonies',
+    })
+    expect(parseShopifyPath('https://us.tonies.com/collections/all-tonies/')).toEqual({
+      kind: 'collection',
+      handle: 'all-tonies',
+    })
+    expect(parseShopifyPath('https://us.tonies.com/collections/all-tonies?sort_by=title')).toEqual(
+      { kind: 'collection', handle: 'all-tonies' }
+    )
+  })
+
+  it('returns other for everything else', () => {
+    expect(parseShopifyPath('https://us.tonies.com/collections/')).toEqual({ kind: 'other' })
+    expect(parseShopifyPath('https://us.tonies.com/products/')).toEqual({ kind: 'other' })
+    expect(parseShopifyPath('https://example.com/pages/about')).toEqual({ kind: 'other' })
+    expect(parseShopifyPath('not a url')).toEqual({ kind: 'other' })
+  })
+})
+
+describe('collectionPageUrl', () => {
+  it('builds the paged products.json URL the ingestor walks', () => {
+    expect(collectionPageUrl('https://us.tonies.com', 'all-tonies', 2)).toBe(
+      'https://us.tonies.com/collections/all-tonies/products.json?limit=250&page=2'
+    )
+  })
+})
+
+// Fixtures below mirror ingestor/lib/ingestor.test.mjs — the same
+// products, judged by the ported rules, must get the same verdicts
+// the ingestor gives them.
+describe('passesStoreFilter', () => {
+  const base = { images: [{ src: 'https://cdn.shopify.com/x.jpg' }], handle: 'x', tags: [] }
+
+  it('tonies: content types in, hardware / packs / bundles out', () => {
+    expect(
+      passesStoreFilter('tonies', {
+        ...base,
+        product_type: 'Tonie',
+        title: 'Disney Sofia the First: Royal Magic Tonie',
+      })
+    ).toBe(true)
+    expect(passesStoreFilter('tonies', { ...base, product_type: 'Audiobook', title: 'Goosebumps' })).toBe(true)
+    expect(passesStoreFilter('tonies', { ...base, product_type: 'Toniebox', title: 'Toniebox 2' })).toBe(false)
+    expect(passesStoreFilter('tonies', { ...base, product_type: 'Bundle', title: 'Starter Set' })).toBe(false)
+    expect(
+      passesStoreFilter('tonies', {
+        ...base,
+        product_type: 'Audiobook',
+        title: 'Goosebumps Book Tonies - 4 Pack',
+      })
+    ).toBe(false)
+    expect(passesStoreFilter('tonies', { ...base, product_type: 'Tonie', title: 'Tonies Bundle' })).toBe(false)
+  })
+
+  it('yoto: cards and packs in, players / digital out', () => {
+    expect(passesStoreFilter('yoto', { ...base, product_type: 'single-card', title: 'The Gruffalo' })).toBe(true)
+    expect(passesStoreFilter('yoto', { ...base, product_type: 'bundle', title: 'Daniel & Friends Pack' })).toBe(true)
+    expect(passesStoreFilter('yoto', { ...base, product_type: 'soft-bundle', title: 'Pixar Collection' })).toBe(true)
+    expect(passesStoreFilter('yoto', { ...base, product_type: 'content-bundle', title: 'Yoto Mini + Bundle' })).toBe(false)
+    expect(passesStoreFilter('yoto', { ...base, product_type: 'player-unit', title: 'Yoto Player' })).toBe(false)
+    expect(
+      passesStoreFilter('yoto', {
+        ...base,
+        product_type: 'single-card',
+        title: 'The Legend of Sleepy Hollow (Digital)',
+        tags: ['flag:Digital Card'],
+      })
+    ).toBe(false)
+    expect(
+      passesStoreFilter('yoto', { ...base, product_type: 'single-card', title: 'Voyager en musique (Digital)' })
+    ).toBe(false)
+    // Tags also arrive as one comma-joined string on some payloads.
+    expect(
+      passesStoreFilter('yoto', {
+        ...base,
+        product_type: 'single-card',
+        title: 'A Card',
+        tags: 'media:physical, flag:Digital Card',
+      })
+    ).toBe(false)
+  })
+
+  it('storypod: content line in, sleeves / plush / device listings out', () => {
+    expect(passesStoreFilter('storypod', { ...base, product_type: 'Crafties', title: 'Riley Raccoon' })).toBe(true)
+    expect(passesStoreFilter('storypod', { ...base, product_type: '', title: 'Recordable Token' })).toBe(true)
+    expect(passesStoreFilter('storypod', { ...base, product_type: 'Sleeves', title: 'Teal Sleeve' })).toBe(false)
+    expect(passesStoreFilter('storypod', { ...base, product_type: 'Plush', title: 'Snuggly Sounds Fox' })).toBe(false)
+    expect(passesStoreFilter('storypod', { ...base, product_type: '', title: 'The Eddi System' })).toBe(false)
+    expect(passesStoreFilter('storypod', { ...base, product_type: '', title: 'Storypod Charging Cable' })).toBe(false)
+  })
+
+  it('osmo: standalone games in, kits / hardware / bundles out', () => {
+    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Detective Agency' })).toBe(true)
+    expect(passesStoreFilter('osmo', { ...base, product_type: 'game', title: 'Little Genius Costume Pieces' })).toBe(true)
+    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Math Wizard and the Magical Workshop' })).toBe(true)
+    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Genius Starter Kit - iPad' })).toBe(false)
+    expect(passesStoreFilter('osmo', { ...base, product_type: 'game', title: 'Pretend Play Bundle' })).toBe(false)
+    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Math Wizard Series' })).toBe(false)
+    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Osmo Large Carrying Case' })).toBe(false)
+  })
+
+  it('projector: Moonlite reels and the Dream Machine line, told apart', () => {
+    expect(
+      passesStoreFilter('projector', { ...base, product_type: 'Single Story', title: 'The Very Hungry Caterpillar' })
+    ).toBe(true)
+    expect(passesStoreFilter('projector', { ...base, product_type: 'Single Story', title: 'Story Reel 3 Pack' })).toBe(false)
+    expect(passesStoreFilter('projector', { ...base, product_type: 'Starter Pack', title: 'Starter Pack' })).toBe(false)
+    expect(
+      passesStoreFilter('projector', {
+        ...base,
+        product_type: 'preschool toys',
+        title: 'Story Dream Machine™ Random House The Berenstain Bears™ - 3 Pack Collection',
+      })
+    ).toBe(true)
+    expect(
+      passesStoreFilter('projector', {
+        ...base,
+        product_type: 'preschool toys',
+        title: 'Story Dream Machine™ Dr. Seuss Starter Pack',
+      })
+    ).toBe(false)
+    expect(
+      passesStoreFilter('projector', { ...base, product_type: 'preschool toys', title: 'Story Dream Pals™ Grinch' })
+    ).toBe(false)
+    expect(passesStoreFilter('projector', { ...base, product_type: 'Kids Beds', title: 'Read & Dream Nap Nook' })).toBe(false)
+  })
+
+  it('platforms without store rules keep anything titled; junk never passes', () => {
+    expect(passesStoreFilter('other', { title: 'Literally Anything' })).toBe(true)
+    expect(passesStoreFilter('leapfrog', { title: 'LeapStart Book' })).toBe(true)
+    expect(passesStoreFilter('tonies', null)).toBe(false)
+    expect(passesStoreFilter('tonies', { product_type: 'Tonie' })).toBe(false)
+  })
+})
+
+describe('planCollectionImport', () => {
+  const img = [{ src: 'https://cdn.shopify.com/x.jpg' }]
+
+  it('splits a Tonies page into add / present / filtered, tallies reconciling', () => {
+    const products = [
+      { title: 'Disney Frozen: Elsa Tonie', product_type: 'Tonie', handle: 'elsa', images: img, tags: [] },
+      { title: 'Bluey Tonie', product_type: 'Tonie', handle: 'bluey', images: img, tags: [] },
+      { title: 'Toniebox 2', product_type: 'Toniebox', handle: 'tb2', images: img, tags: [] },
+      { title: 'Disney Frozen: Elsa Tonie', product_type: 'Tonie', handle: 'elsa', images: img, tags: [] },
+    ]
+    // 'bluey' is already catalogued (case-insensitively), and the
+    // ingestor-stocked title for #1 is the suffix-stripped 'Disney
+    // Frozen: Elsa' — the plan must normalise to match it.
+    const plan = planCollectionImport(products, ['bluey'], 'tonies', 'https://us.tonies.com')
+    expect(plan.skippedFiltered).toBe(1)
+    expect(plan.alreadyPresent).toBe(2) // Bluey + the in-feed repeat of Elsa
+    expect(plan.toAdd).toEqual([
+      {
+        platform: 'tonies',
+        title: 'Disney Frozen: Elsa',
+        details: 'Tonie figure',
+        image_url: 'https://cdn.shopify.com/x.jpg',
+        source_url: 'https://us.tonies.com/products/elsa',
+      },
+    ])
+    expect(plan.toAdd.length + plan.alreadyPresent + plan.skippedFiltered).toBe(products.length)
+  })
+
+  it('strips the Dream Machine line name into details, collections vs cartridges', () => {
+    const products = [
+      {
+        title: 'Story Dream Machine™ Dr. Seuss Cat in The Hat Collection',
+        product_type: 'preschool toys',
+        handle: 'cat-hat',
+        images: img,
+        tags: [],
+      },
+      {
+        title: 'Story Dream Machine™ Harper Collins Digger the Dinosaur',
+        product_type: 'preschool toys',
+        handle: 'digger',
+        images: img,
+        tags: [],
+      },
+    ]
+    const plan = planCollectionImport(products, [], 'projector', 'https://www.littletikes.com')
+    expect(plan.toAdd).toEqual([
+      {
+        platform: 'projector',
+        title: 'Dr. Seuss Cat in The Hat Collection',
+        details: 'Dream Machine story collection',
+        image_url: 'https://cdn.shopify.com/x.jpg',
+        source_url: 'https://www.littletikes.com/products/cat-hat',
+      },
+      {
+        platform: 'projector',
+        title: 'Harper Collins Digger the Dinosaur',
+        details: 'Dream Machine story cartridge',
+        image_url: 'https://cdn.shopify.com/x.jpg',
+        source_url: 'https://www.littletikes.com/products/digger',
+      },
+    ])
+    expect(plan.alreadyPresent).toBe(0)
+    expect(plan.skippedFiltered).toBe(0)
+  })
+
+  it('rescues the Storypod Recordable Token details, and matches ingestor titles as present', () => {
+    const products = [
+      { title: 'Recordable Token', product_type: '', handle: 'rt', images: [], tags: [] },
+      { title: 'The Gruffalo', product_type: 'Tokens', handle: 'gruffalo', images: img, tags: [] },
+    ]
+    const plan = planCollectionImport(products, ['The Gruffalo'], 'storypod', 'https://storypod.com')
+    expect(plan.toAdd).toEqual([
+      {
+        platform: 'storypod',
+        title: 'Recordable Token',
+        details: 'Token',
+        image_url: null,
+        source_url: 'https://storypod.com/products/rt',
+      },
+    ])
+    expect(plan.alreadyPresent).toBe(1)
+  })
+
+  it('handles empty inputs', () => {
+    expect(planCollectionImport([], [], 'tonies')).toEqual({
+      toAdd: [],
+      alreadyPresent: 0,
+      skippedFiltered: 0,
+    })
+    expect(planCollectionImport(null, null, 'tonies').toAdd).toEqual([])
   })
 })
