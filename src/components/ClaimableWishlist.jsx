@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import ItemTile from './ItemTile'
+import AmazonLink from './AmazonLink'
 import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
 import { formatISODate } from '../lib/occasions'
 
@@ -123,6 +124,7 @@ function WishlistTile({ slug, item, onChanged }) {
           </button>
         )}
         {note && <div className="notes">{note}</div>}
+        <AmazonLink item={item} />
       </div>
     </ItemTile>
   )
