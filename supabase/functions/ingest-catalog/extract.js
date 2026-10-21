@@ -232,6 +232,14 @@ export function extractFromOpenGraph(html) {
   }
 }
 
+// The page's declared Open Graph type ('product', 'website', …),
+// lowercased — one of the signals that separates a product page
+// from a listing page wearing its category name as og:title.
+export function extractOgType(html) {
+  if (!html) return ''
+  return cleanText(metaContent(html, 'og:type')).toLowerCase()
+}
+
 // ------------------------------------------------- Shopify normalisation
 
 // Human-readable details for the product_types the known stores use,
@@ -485,4 +493,85 @@ export function planCollectionImport(products, existingTitles, platform, origin 
     toAdd.push(row)
   }
   return { toAdd, alreadyPresent, skippedFiltered }
+}
+
+// ---------------------------------------------------- listing pages
+//
+// Not every listing page lives at /collections/<handle>: Lunii and
+// LeapFrog category pages (and plenty of "all products" pages) have
+// other shapes, and a parent pasting one expects the products on it
+// — never the page itself added as a single "product" (the bug this
+// section exists to fix). Two pure helpers give the function a
+// generic way in: find the product links on the page, and plan an
+// import from already-normalised rows.
+
+// Product-page links found in a page's HTML: absolute, same-origin,
+// de-duplicated, query/hash dropped (tracking params would splinter
+// source_urls). A link counts when its path has a product shape — a
+// /products/<handle> segment (every Shopify store, plus Lunii) or
+// LeapFrog's Magento shape /store/p/<slug>.
+export function extractProductLinks(html, pageUrl, limit = 48) {
+  if (!html || !pageUrl) return []
+  let base
+  try {
+    base = new URL(pageUrl)
+  } catch {
+    return []
+  }
+  const out = []
+  const seen = new Set()
+  const re = /<a\s[^>]*href=["']([^"'#]+)["']/gi
+  let m
+  while ((m = re.exec(html)) && out.length < limit) {
+    let u
+    try {
+      u = new URL(decodeEntities(m[1]), base)
+    } catch {
+      continue
+    }
+    if (u.origin !== base.origin) continue
+    const segments = u.pathname.split('/').filter((s) => s !== '')
+    const hasProductSegment = segments.some((s, i) => s === 'products' && i < segments.length - 1)
+    const hasLeapfrogShape = u.pathname.includes('/store/p/')
+    if (!hasProductSegment && !hasLeapfrogShape) continue
+    u.search = ''
+    u.hash = ''
+    if (seen.has(u.href)) continue
+    seen.add(u.href)
+    out.push(u.href)
+  }
+  return out
+}
+
+// Plan a bulk import from already-normalised rows ({title, details,
+// image_url, source_url} — the shape page extraction produces), with
+// the same title tidying and duplicate rules planCollectionImport
+// applies to Shopify feeds. skippedFiltered is always 0: extraction
+// has no store feed rules to filter by, so every titled row either
+// adds or was already present.
+export function planRowImport(rows, existingTitles, platform) {
+  const existing = new Set()
+  for (const t of existingTitles ?? []) existing.add(cleanText(t).toLowerCase())
+  const seen = new Set()
+  const toAdd = []
+  let alreadyPresent = 0
+  for (const raw of rows ?? []) {
+    const title = cleanText(raw?.title)
+    if (!title) continue
+    const row = applyCollectionTitleRules(platform, {
+      title,
+      details: cleanText(raw.details ?? ''),
+      image_url: fixImageUrl(raw.image_url) ?? '',
+      source_url: typeof raw.source_url === 'string' ? raw.source_url : '',
+    })
+    const key = row.title.toLowerCase()
+    if (!key) continue
+    if (existing.has(key) || seen.has(key)) {
+      alreadyPresent++
+      continue
+    }
+    seen.add(key)
+    toAdd.push(row)
+  }
+  return { toAdd, alreadyPresent, skippedFiltered: 0 }
 }

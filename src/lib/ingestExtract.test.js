@@ -5,12 +5,15 @@ import {
   extractAllFromJsonLd,
   extractFromJsonLd,
   extractFromOpenGraph,
+  extractOgType,
+  extractProductLinks,
   isSafeFetchUrl,
   normalizeShopifyProduct,
   normalizeSuggestResult,
   parseShopifyPath,
   passesStoreFilter,
   planCollectionImport,
+  planRowImport,
   platformForUrl,
 } from '../../supabase/functions/ingest-catalog/extract.js'
 
@@ -539,5 +542,86 @@ describe('planCollectionImport', () => {
       skippedFiltered: 0,
     })
     expect(planCollectionImport(null, null, 'tonies').toAdd).toEqual([])
+  })
+})
+
+describe('extractOgType', () => {
+  it('reads og:type case-insensitively in either attribute order', () => {
+    expect(extractOgType('<meta property="og:type" content="Product">')).toBe('product')
+    expect(extractOgType('<meta content="website" property="og:type">')).toBe('website')
+  })
+
+  it('returns empty string when absent', () => {
+    expect(extractOgType('<meta property="og:title" content="X">')).toBe('')
+    expect(extractOgType('')).toBe('')
+    expect(extractOgType(null)).toBe('')
+  })
+})
+
+describe('extractProductLinks', () => {
+  const page = 'https://lunii.com/en-us/stories'
+  const html = `
+    <a href="/en-us/products/the-gruffalo">Gruffalo</a>
+    <a href="https://lunii.com/en-us/products/elmer?utm_source=nav">Elmer</a>
+    <a href="/en-us/products/the-gruffalo">Gruffalo again</a>
+    <a href="/en-us/stories">Stories</a>
+    <a href="https://us.tonies.com/products/bluey">Other store</a>
+    <a href="/en-us/products/">Index, no handle</a>`
+
+  it('finds same-origin product links, de-duplicated, tracking params dropped', () => {
+    expect(extractProductLinks(html, page)).toEqual([
+      'https://lunii.com/en-us/products/the-gruffalo',
+      'https://lunii.com/en-us/products/elmer',
+    ])
+  })
+
+  it('recognises LeapFrog Magento product paths', () => {
+    const lf = `<a href="/en-us/store/p/leappad-ultimate/_/A-prod123">LeapPad</a>`
+    expect(extractProductLinks(lf, 'https://store.leapfrog.com/en-us/store/c/toys')).toEqual([
+      'https://store.leapfrog.com/en-us/store/p/leappad-ultimate/_/A-prod123',
+    ])
+  })
+
+  it('honours the limit and tolerates junk', () => {
+    expect(extractProductLinks(html, page, 1)).toHaveLength(1)
+    expect(extractProductLinks('', page)).toEqual([])
+    expect(extractProductLinks(html, 'not a url')).toEqual([])
+    expect(extractProductLinks(null, null)).toEqual([])
+  })
+})
+
+describe('planRowImport', () => {
+  it('splits new rows from ones already catalogued (case-insensitive)', () => {
+    const rows = [
+      { title: 'The Gruffalo', details: 'Story', image_url: 'https://x/g.jpg', source_url: 'https://s/g' },
+      { title: 'elmer', details: '', image_url: '', source_url: 'https://s/e' },
+    ]
+    const plan = planRowImport(rows, ['Elmer'], 'lunii')
+    expect(plan.toAdd).toEqual([
+      { title: 'The Gruffalo', details: 'Story', image_url: 'https://x/g.jpg', source_url: 'https://s/g' },
+    ])
+    expect(plan.alreadyPresent).toBe(1)
+    expect(plan.skippedFiltered).toBe(0)
+  })
+
+  it('applies the same title tidying as collection imports', () => {
+    const plan = planRowImport([{ title: 'Bluey Tonie', source_url: 'https://s/b' }], [], 'tonies')
+    expect(plan.toAdd[0].title).toBe('Bluey')
+  })
+
+  it('skips untitled rows and in-list repeats', () => {
+    const rows = [
+      { title: '  ', source_url: 'https://s/x' },
+      { title: 'Alpha', source_url: 'https://s/a' },
+      { title: 'ALPHA', source_url: 'https://s/a2' },
+    ]
+    const plan = planRowImport(rows, [], 'other')
+    expect(plan.toAdd).toHaveLength(1)
+    expect(plan.alreadyPresent).toBe(1)
+  })
+
+  it('handles empty inputs', () => {
+    expect(planRowImport([], [], 'tonies')).toEqual({ toAdd: [], alreadyPresent: 0, skippedFiltered: 0 })
+    expect(planRowImport(null, null, 'tonies').toAdd).toEqual([])
   })
 })

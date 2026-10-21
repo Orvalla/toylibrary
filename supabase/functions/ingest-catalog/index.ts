@@ -12,7 +12,12 @@
 //                                   product page → that product; a
 //                                   collection page → everything in
 //                                   it, filtered by the store's own
-//                                   content rules (see extract.js).
+//                                   content rules (see extract.js);
+//                                   any other listing page (JSON-LD
+//                                   ItemList, or a page of product
+//                                   links) → everything listed on
+//                                   it. A listing is never added as
+//                                   a single "product" itself.
 //
 // Every mode requires a signed-in user: the caller's JWT is validated
 // first, and writes happen with the service role (catalog_items has
@@ -33,11 +38,14 @@ import {
   extractAllFromJsonLd,
   extractFromJsonLd,
   extractFromOpenGraph,
+  extractOgType,
+  extractProductLinks,
   isSafeFetchUrl,
   normalizeShopifyProduct,
   normalizeSuggestResult,
   parseShopifyPath,
   planCollectionImport,
+  planRowImport,
   platformForUrl,
 } from './extract.js'
 
@@ -227,17 +235,13 @@ async function upsertCatalogItem(
 // same PostgREST behaviour upsertCatalogItem relies on for one).
 // `added` counts those; already_present is whatever was found but
 // not inserted, so the three tallies always sum to total_found.
-async function insertPlannedCollection(
+// What's already catalogued for this platform? Titles only, paged
+// (PostgREST caps a response at 1,000 rows; Yoto has ~1,600).
+async function loadExistingTitles(
   admin: ReturnType<typeof createClient>,
-  userId: string,
-  products: unknown[],
   platform: string,
-  origin: string,
-  sourceUrl: string,
-): Promise<Record<string, unknown>> {
-  // What's already catalogued for this platform? Titles only, paged
-  // (PostgREST caps a response at 1,000 rows; Yoto has ~1,600).
-  const existingTitles: string[] = []
+): Promise<string[]> {
+  const titles: string[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin
       .from('catalog_items')
@@ -246,15 +250,25 @@ async function insertPlannedCollection(
       .order('title')
       .range(from, from + 999)
     if (error) throw new HttpError(500, 'Something went wrong saving those — try again.')
-    existingTitles.push(...(data ?? []).map((r: any) => r.title))
+    titles.push(...(data ?? []).map((r: any) => r.title))
     if (!data || data.length < 1000) break
   }
+  return titles
+}
 
-  const plan = planCollectionImport(products, existingTitles, platform, origin)
-
+// Insert planned rows (ignoreDuplicates makes the returned rows
+// exactly the rows that landed) and log one additions row per
+// genuinely added product, attributed to the link the parent pasted.
+async function insertCatalogRows(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  rows: any[],
+  platform: string,
+  sourceUrl: string,
+): Promise<number> {
   const inserted: Record<string, unknown>[] = []
-  for (let i = 0; i < plan.toAdd.length; i += 100) {
-    const batch = plan.toAdd.slice(i, i + 100).map((row: any) => ({
+  for (let i = 0; i < rows.length; i += 100) {
+    const batch = rows.slice(i, i + 100).map((row: any) => ({
       platform,
       title: row.title.slice(0, TITLE_CAP),
       details: row.details ?? '',
@@ -269,9 +283,6 @@ async function insertPlannedCollection(
     if (error) throw new HttpError(500, 'Something went wrong saving those — try again.')
     inserted.push(...((data ?? []) as Record<string, unknown>[]))
   }
-
-  // One additions-log row per genuinely added product, attributed
-  // to the collection link the parent pasted.
   for (let i = 0; i < inserted.length; i += 500) {
     await admin.from('catalog_additions').insert(
       inserted.slice(i, i + 500).map((r: any) => ({
@@ -282,8 +293,20 @@ async function insertPlannedCollection(
       })),
     )
   }
+  return inserted.length
+}
 
-  const added = inserted.length
+async function insertPlannedCollection(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  products: unknown[],
+  platform: string,
+  origin: string,
+  sourceUrl: string,
+): Promise<Record<string, unknown>> {
+  const existingTitles = await loadExistingTitles(admin, platform)
+  const plan = planCollectionImport(products, existingTitles, platform, origin)
+  const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
   return {
     status: 'collection',
     platform,
@@ -291,6 +314,31 @@ async function insertPlannedCollection(
     added,
     already_present: products.length - plan.skippedFiltered - added,
     skipped_filtered: plan.skippedFiltered,
+  }
+}
+
+// The same tally for imports planned from extracted page rows
+// (listing-page crawls): total_found counts the product links the
+// crawl attempted, skipped_filtered the ones that yielded nothing.
+async function insertPlannedRows(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  rows: any[],
+  platform: string,
+  sourceUrl: string,
+  totalFound: number,
+  skipped: number,
+): Promise<Record<string, unknown>> {
+  const existingTitles = await loadExistingTitles(admin, platform)
+  const plan = planRowImport(rows, existingTitles, platform)
+  const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
+  return {
+    status: 'collection',
+    platform,
+    total_found: totalFound,
+    added,
+    already_present: totalFound - skipped - added,
+    skipped_filtered: skipped,
   }
 }
 
@@ -345,9 +393,13 @@ async function importItemListCollection(
   sourceUrl: string,
   platform: string,
   origin: string,
+  knownItems?: any[],
 ): Promise<Record<string, unknown>> {
-  const { text: html } = await fetchTextCapped(sourceUrl)
-  const items = extractAllFromJsonLd(html)
+  let items = knownItems
+  if (!items) {
+    const { text: html } = await fetchTextCapped(sourceUrl)
+    items = extractAllFromJsonLd(html)
+  }
   if (items.length === 0) {
     throw new HttpError(
       422,
@@ -365,6 +417,84 @@ async function importItemListCollection(
     images: item.image_url ? [{ src: item.image_url }] : [],
   }))
   return insertPlannedCollection(admin, userId, products, platform, origin, sourceUrl)
+}
+
+// ------------------------------------------------ listing-page crawls
+//
+// A listing page whose shape isn't /collections/<handle> (Lunii and
+// LeapFrog category pages, "all products" pages, a store homepage):
+// follow the product links on it and add what they point at. The
+// crawl is capped and batched so a huge category can't run the
+// function off a cliff.
+
+const LISTING_CRAWL_CAP = 40
+const LISTING_CRAWL_BATCH = 6
+// Fewer product links than this and the page is treated as a
+// (possibly odd) single page, not a listing.
+const LISTING_MIN_LINKS = 3
+
+// One product page → one normalised row, Shopify .json first, page
+// extraction second. Null when the page yields nothing product-like.
+async function fetchProductRow(link: string, platform: string): Promise<any | null> {
+  const path = parseShopifyPath(link)
+  if (path.kind === 'product') {
+    const parsed = new URL(link)
+    const jsonUrl = `${parsed.origin}/products/${path.handle}.json`
+    if (isSafeFetchUrl(jsonUrl)) {
+      try {
+        const { text } = await fetchTextCapped(jsonUrl)
+        const row = normalizeShopifyProduct(JSON.parse(text), platform)
+        if (row?.title) return { ...row, source_url: link }
+      } catch {
+        // Not a Shopify product after all — scrape the page below.
+      }
+    }
+  }
+  const { text: html } = await fetchTextCapped(link)
+  const extracted = extractFromJsonLd(html) ?? extractFromOpenGraph(html)
+  if (!extracted?.title) return null
+  return {
+    title: extracted.title,
+    details: extracted.details ?? '',
+    image_url: extracted.image_url ?? '',
+    source_url: link,
+  }
+}
+
+async function importListingByLinks(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  pageUrl: string,
+  platform: string,
+  links: string[],
+): Promise<Record<string, unknown> | null> {
+  const capped = links.filter((l) => isSafeFetchUrl(l)).slice(0, LISTING_CRAWL_CAP)
+  const rows: any[] = []
+  for (let i = 0; i < capped.length; i += LISTING_CRAWL_BATCH) {
+    const batch = await Promise.all(
+      capped.slice(i, i + LISTING_CRAWL_BATCH).map(async (link) => {
+        try {
+          return await fetchProductRow(link, platform)
+        } catch {
+          return null
+        }
+      }),
+    )
+    rows.push(...batch.filter(Boolean))
+  }
+  // One readable product does not make a listing import — the
+  // caller falls back to its listing error rather than stocking a
+  // half-read page.
+  if (rows.length < 2) return null
+  return insertPlannedRows(
+    admin,
+    userId,
+    rows,
+    platform,
+    pageUrl,
+    capped.length,
+    capped.length - rows.length,
+  )
 }
 
 // ------------------------------------------------------------ mode: url
@@ -420,8 +550,52 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
     }
   }
 
-  const { text: html } = await fetchTextCapped(url)
-  const extracted = extractFromJsonLd(html) ?? extractFromOpenGraph(html)
+  const { text: html, finalUrl } = await fetchTextCapped(url)
+
+  // Listing pages in JSON-LD clothing: two or more Products in the
+  // page's structured data means the page IS a list, whatever its
+  // URL shape — bulk-add them instead of adding the page itself.
+  const ldItems = extractAllFromJsonLd(html)
+  if (ldItems.length >= 2) {
+    return json(
+      await importItemListCollection(admin, userId, url, platform, parsed.origin, ldItems),
+    )
+  }
+
+  // Exactly one structured Product describes the page itself —
+  // trust it as a single product page. With none, a page full of
+  // product links is a listing: crawl it, and if the crawl can't
+  // read the products, say so rather than adding the page itself
+  // as a "product" (the reported bug).
+  let extracted: any = ldItems[0] ?? null
+  if (!extracted) {
+    const links = extractProductLinks(html, finalUrl || url)
+    if (links.length >= LISTING_MIN_LINKS) {
+      const crawled = await importListingByLinks(admin, userId, url, platform, links)
+      if (crawled) return json(crawled)
+      throw new HttpError(
+        422,
+        "That looks like a listing page, but we couldn't read the products on it. Try a link that goes straight to one product.",
+      )
+    }
+    const og = extractFromOpenGraph(html)
+    // An og:title alone isn't proof of a product: category pages
+    // carry their listing name there. Trust it as a single product
+    // only when the URL itself has a product shape, the page
+    // declares og:type=product, or the host isn't a known store
+    // (generic one-product pages elsewhere keep working as before).
+    if (
+      og?.title &&
+      (path.kind === 'product' || extractOgType(html) === 'product' || platform === 'other')
+    ) {
+      extracted = og
+    } else if (og?.title) {
+      throw new HttpError(
+        422,
+        "That link looks like a listing page rather than one product. Try a link that goes straight to one product, or the store's collection page.",
+      )
+    }
+  }
   if (!extracted?.title) {
     throw new HttpError(
       422,
