@@ -18,7 +18,7 @@ import { formatISODate } from '../lib/occasions'
 
 const tokenKey = (itemId) => `claim:${itemId}`
 
-function WishlistTile({ slug, item, onChanged }) {
+function WishlistTile({ slug, item, onChanged, inCart, onToggleCart }) {
   const [mine, setMine] = useState(false)
   const [claiming, setClaiming] = useState(false)
   const [name, setName] = useState('')
@@ -126,13 +126,18 @@ function WishlistTile({ slug, item, onChanged }) {
           </button>
         )}
         {note && <div className="notes">{note}</div>}
+        {(!item.claimed || mine) && onToggleCart && (
+          <button className="linklike" onClick={() => onToggleCart(item)}>
+            {inCart ? '🛒 In your cart — tap to remove' : '🛒 Add to cart'}
+          </button>
+        )}
         <AmazonLink item={item} />
       </div>
     </ItemTile>
   )
 }
 
-export default function ClaimableWishlist({ slug, items, onChanged }) {
+export default function ClaimableWishlist({ slug, items, onChanged, cartIds, onToggleCart }) {
   if (!items.length) return <p className="empty">No wishlist yet — ask the parents!</p>
 
   const byPlatform = items.reduce((acc, item) => {
@@ -152,7 +157,14 @@ export default function ClaimableWishlist({ slug, items, onChanged }) {
           </h3>
           <div className="tile-grid">
             {byPlatform[platform].map((item) => (
-              <WishlistTile key={item.id} slug={slug} item={item} onChanged={onChanged} />
+              <WishlistTile
+                key={item.id}
+                slug={slug}
+                item={item}
+                onChanged={onChanged}
+                inCart={cartIds?.has(item.id) ?? false}
+                onToggleCart={onToggleCart}
+              />
             ))}
           </div>
         </section>

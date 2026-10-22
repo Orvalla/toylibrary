@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import ItemTiles from '../components/ItemTiles'
 import ClaimableWishlist from '../components/ClaimableWishlist'
+import GiftCart from '../components/GiftCart'
+import { addToCart, cartHas, loadCart, removeFromCart, saveCart } from '../lib/cart'
 import { groupByChild } from '../lib/children'
 import { formatISODate, formatOccasionLine, occasionTitle, occasionWhen } from '../lib/occasions'
 
@@ -13,6 +15,19 @@ export default function PublicListPage() {
   const { slug } = useParams()
   const [data, setData] = useState(undefined) // undefined = loading, null = unavailable
   const [query, setQuery] = useState('')
+  // The gift cart: a per-slug list in this browser's localStorage.
+  // Collecting items here changes nothing on the family's lists —
+  // claiming is still what holds an item against other gift-givers.
+  const [cart, setCart] = useState(() => loadCart(slug))
+  const [cartOpen, setCartOpen] = useState(false)
+
+  useEffect(() => {
+    saveCart(slug, cart)
+  }, [slug, cart])
+
+  const cartIds = useMemo(() => new Set(cart.map((e) => e.id)), [cart])
+  const toggleCart = (item) =>
+    setCart((prev) => (cartHas(prev, item.id) ? removeFromCart(prev, item.id) : addToCart(prev, item)))
 
   const load = useCallback(() => {
     supabase.rpc('get_shared_list', { p_slug: slug }).then(({ data, error }) => {
@@ -77,6 +92,23 @@ export default function PublicListPage() {
         </p>
       )}
 
+      <p>
+        <button className="btn btn-small" onClick={() => setCartOpen(true)}>
+          🛒 Your gift cart ({cart.length})
+        </button>{' '}
+        <span className="details">
+          Collecting gifts for a few kids or occasions? Add wishlist items to the cart and buy
+          them together on Amazon.
+        </span>
+      </p>
+      {cartOpen && (
+        <GiftCart
+          entries={cart}
+          onRemove={(id) => setCart((prev) => removeFromCart(prev, id))}
+          onClose={() => setCartOpen(false)}
+        />
+      )}
+
       <section className="check-box">
         <h2>🔍 Check before you buy</h2>
         <input
@@ -125,14 +157,14 @@ export default function PublicListPage() {
             <div key={s.childId ?? 'family'}>
               <h3>{sectionTitle(s)}</h3>
               {occasionBadge(s.childId)}
-              <ClaimableWishlist slug={slug} items={s.items} onChanged={load} />
+              <ClaimableWishlist slug={slug} items={s.items} onChanged={load} cartIds={cartIds} onToggleCart={toggleCart} />
             </div>
           ))
         ) : (
-          <ClaimableWishlist slug={slug} items={[]} onChanged={load} />
+          <ClaimableWishlist slug={slug} items={[]} onChanged={load} cartIds={cartIds} onToggleCart={toggleCart} />
         )
       ) : (
-        <ClaimableWishlist slug={slug} items={data.wishlist} onChanged={load} />
+        <ClaimableWishlist slug={slug} items={data.wishlist} onChanged={load} cartIds={cartIds} onToggleCart={toggleCart} />
       )}
     </main>
   )
