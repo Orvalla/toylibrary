@@ -139,12 +139,12 @@ a { color: var(--accent-dark); }
   font-weight: 700; font-size: 15px; cursor: pointer;
   display: inline-flex; align-items: center; gap: 6px; min-height: 42px;
 }
-.chip.on { background: var(--coral); border-color: var(--coral); color: #fff; box-shadow: 0 2px 0 var(--accent-dark); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 2px 0 var(--accent-dark); }
 .chip.small { padding: 6px 12px; font-size: 13px; min-height: 34px; }
 .chip:disabled { opacity: 0.5; cursor: default; }
 .wizard-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
 .wstep { font-size: 13px; font-weight: 700; color: var(--ink-faint); background: var(--soft); border-radius: 999px; padding: 6px 12px; min-height: 34px; display: inline-flex; align-items: center; }
-.wstep.on { background: var(--coral); color: #fff; }
+.wstep.on { background: var(--accent); color: #fff; }
 .wstep.done { background: #d8f3e3; color: #146c43; }
 .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin: 12px 0; }
 .device-pick {
@@ -168,7 +168,17 @@ a { color: var(--accent-dark); }
 .child-row-main { display: flex; gap: 8px; align-items: center; }
 .child-row-main input { flex: 1; }
 .child-profile { display: flex; gap: 12px; flex-wrap: wrap; }
-.child-profile label { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; font-weight: 700; color: var(--ink-soft); }
+.child-profile label { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; font-weight: 700; color: var(--ink-soft); flex: 1 1 150px; }
+/* The generic .child-row input rule sets flex: 1 1 140px, which inside
+   these column-flex labels stretches the birthday field vertically —
+   pin the profile fields to the standard control height instead, and
+   give the gender select the same styling as the inputs. */
+.child-profile input, .child-profile select {
+  flex: none; width: 100%; min-height: 42px;
+  padding: 8px 10px; border: 2px solid var(--input-line); border-radius: 12px;
+  font: inherit; background: #fff; color: var(--ink);
+}
+.child-profile select:focus { border-color: var(--accent); outline: 3px solid rgba(255, 90, 95, 0.25); }
 .recs-card { margin: 18px 0; }
 .bundle-note {
   background: #fff3c4; border: 1.5px solid #ffd93c; border-radius: 12px;
@@ -365,7 +375,7 @@ h2 .plat-badge img, h3 .plat-badge img { max-width: 24px; max-height: 24px; }
 .welcome-card .lede { margin: 0 0 6px; }
 .wizard-dots { display: flex; align-items: center; gap: 8px; margin: 16px 0 20px; flex-wrap: wrap; }
 .wdot { width: 11px; height: 11px; border-radius: 50%; background: var(--line); transition: transform 0.15s ease, background 0.15s ease; }
-.wdot.on { background: var(--coral); transform: scale(1.3); }
+.wdot.on { background: var(--accent); transform: scale(1.3); }
 .wdot.done { background: var(--teal); }
 .wizard-dots-label { font-size: 13.5px; font-weight: 800; color: var(--ink-faint); margin-left: 6px; }
 .welcome-step h3 { font-size: 21px; }
