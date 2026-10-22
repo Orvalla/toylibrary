@@ -19,6 +19,12 @@ const BRAND_BY_PLATFORM = {
   lunii: 'Lunii',
   osmo: 'Osmo',
   projector: 'Moonlite Little Tikes',
+  melissaanddoug: 'Melissa & Doug',
+  littlepeople: 'Fisher-Price Little People',
+  brio: 'BRIO',
+  fatbrain: 'Fat Brain Toys',
+  lakeshore: 'Lakeshore Learning',
+  learningresources: 'Learning Resources',
   books: '',
   other: '',
 }

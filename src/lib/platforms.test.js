@@ -5,7 +5,8 @@ describe('platforms', () => {
   it('has a label and emoji for every platform key the database allows', () => {
     // Must stay in sync with the CHECK constraints in the migrations
     // (0001_init.sql as widened by 0006_yoto_platform.sql,
-    // 0007_new_platforms.sql and 0021_new_toy_platforms.sql).
+    // 0007_new_platforms.sql, 0021_new_toy_platforms.sql and
+    // 0022_more_toy_brands.sql).
     const dbKeys = [
       'tonies',
       'leapfrog',
@@ -21,6 +22,12 @@ describe('platforms', () => {
       'magnatiles',
       'smartgames',
       'lovevery',
+      'melissaanddoug',
+      'littlepeople',
+      'brio',
+      'fatbrain',
+      'lakeshore',
+      'learningresources',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {

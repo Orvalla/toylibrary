@@ -271,6 +271,12 @@ a { color: var(--accent-dark); }
 .tile-magnatiles .tile-art { background: linear-gradient(135deg, #bae6fd, #0284c7); }
 .tile-smartgames .tile-art { background: linear-gradient(135deg, #c4b5fd, #6d28d9); }
 .tile-lovevery .tile-art { background: linear-gradient(135deg, #fecdd3, #be123c); }
+.tile-melissaanddoug .tile-art { background: linear-gradient(135deg, #fde68a, #b45309); }
+.tile-littlepeople .tile-art { background: linear-gradient(135deg, #fbcfe8, #db2777); }
+.tile-brio .tile-art { background: linear-gradient(135deg, #bbf7d0, #15803d); }
+.tile-fatbrain .tile-art { background: linear-gradient(135deg, #a5f3fc, #0369a1); }
+.tile-lakeshore .tile-art { background: linear-gradient(135deg, #fed7aa, #c2410c); }
+.tile-learningresources .tile-art { background: linear-gradient(135deg, #ddd6fe, #4338ca); }
 .tile-other .tile-art { background: linear-gradient(135deg, #e2e8f0, #94a3b8); }
 .tile-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
 .tile-body .details { color: var(--ink-soft); font-size: 14px; }

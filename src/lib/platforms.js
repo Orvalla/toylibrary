@@ -15,6 +15,12 @@ export const PLATFORMS = [
   { key: 'magnatiles', label: 'Magna-Tiles', emoji: '🧲' },
   { key: 'smartgames', label: 'SmartGames', emoji: '🧠' },
   { key: 'lovevery', label: 'Lovevery', emoji: '🌱' },
+  { key: 'melissaanddoug', label: 'Melissa & Doug', emoji: '🎭' },
+  { key: 'littlepeople', label: 'Little People', emoji: '🧒' },
+  { key: 'brio', label: 'BRIO', emoji: '🚂' },
+  { key: 'fatbrain', label: 'Fat Brain', emoji: '🌀' },
+  { key: 'lakeshore', label: 'Lakeshore', emoji: '🎒' },
+  { key: 'learningresources', label: 'Learning Resources', emoji: '🔬' },
   { key: 'books', label: 'Books', emoji: '📚' },
   { key: 'other', label: 'Other', emoji: '🎁' },
 ]
@@ -23,11 +29,35 @@ export const PLATFORMS = [
 // books and projector stories play anywhere, and the physical
 // toy platforms (migration 0021) are self-contained. Gift
 // suggestions (lib/recommend.js) always allow these.
-export const ALWAYS_PLAYABLE = ['books', 'projector', 'haba', 'magnatiles', 'smartgames', 'lovevery']
+export const ALWAYS_PLAYABLE = [
+  'books',
+  'projector',
+  'haba',
+  'magnatiles',
+  'smartgames',
+  'lovevery',
+  'melissaanddoug',
+  'littlepeople',
+  'brio',
+  'fatbrain',
+  'lakeshore',
+  'learningresources',
+]
 
 // Physical-toy platforms: filed under the Toys category unless
 // their details say otherwise (lib/categories.js).
-export const TOY_PLATFORMS = ['haba', 'magnatiles', 'smartgames', 'lovevery']
+export const TOY_PLATFORMS = [
+  'haba',
+  'magnatiles',
+  'smartgames',
+  'lovevery',
+  'melissaanddoug',
+  'littlepeople',
+  'brio',
+  'fatbrain',
+  'lakeshore',
+  'learningresources',
+]
 
 export const platformLabel = (key) =>
   PLATFORMS.find((p) => p.key === key)?.label ?? key
