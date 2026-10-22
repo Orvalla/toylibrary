@@ -12,12 +12,22 @@
 // environment; without it the function answers
 // { configured: false, items: [] } so the UI can say photo
 // scanning isn't switched on instead of failing.
+//
+// Each user is limited to 10 scans per rolling 24 hours
+// (photo_scans, migration 0015): the count is checked before
+// the vision call and the scan is recorded after a successful
+// one, so a provider hiccup never eats a user's scan. When the
+// limit is hit the answer is { configured: true, limited: true,
+// items: [] } and the UI explains the wait.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? ''
+const SCAN_LIMIT = 10
+const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000
 const MODEL = Deno.env.get('VISION_MODEL') ?? 'gpt-4o-mini'
 // The client downscales to ≤1024px JPEG (~a few hundred KB); this
 // cap is headroom, not an invitation.
@@ -99,6 +109,23 @@ Deno.serve(async (req: Request) => {
 
     if (!OPENAI_API_KEY) return json({ configured: false, items: [] })
 
+    // The daily limit. Counting goes through the service role:
+    // photo_scans has RLS on and no client policies by design.
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const windowStart = new Date(Date.now() - SCAN_WINDOW_MS).toISOString()
+    const { count: usedToday, error: countError } = await admin
+      .from('photo_scans')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', windowStart)
+    if (countError) {
+      console.error('photo_scans count failed', countError)
+      return json({ error: 'Could not check your scan count — try again.' }, 500)
+    }
+    if ((usedToday ?? 0) >= SCAN_LIMIT) {
+      return json({ configured: true, limited: true, limit: SCAN_LIMIT, items: [] })
+    }
+
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -141,7 +168,17 @@ Deno.serve(async (req: Request) => {
         platform: PLATFORM_KEYS.includes(i.platform) ? i.platform : 'other',
         confidence: Math.min(1, Math.max(0, Number(i.confidence) || 0)),
       }))
-    return json({ configured: true, items })
+    // Record the scan only now that it succeeded. A failed
+    // insert shouldn't swallow a good result — log and move on.
+    const { error: insertError } = await admin
+      .from('photo_scans')
+      .insert({ user_id: user.id })
+    if (insertError) console.error('photo_scans insert failed', insertError)
+    return json({
+      configured: true,
+      items,
+      scansLeft: Math.max(0, SCAN_LIMIT - (usedToday ?? 0) - 1),
+    })
   } catch (err) {
     console.error('identify-items failed', err)
     return json({ error: 'Something went wrong reading that photo.' }, 500)

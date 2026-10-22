@@ -20,6 +20,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
   const [rows, setRows] = useState([])
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
+  const [scansLeft, setScansLeft] = useState(null)
 
   // The scan target follows the add form's child (which follows
   // the filter pills), same as typing an item by hand.
@@ -69,6 +70,15 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
       setPhase('idle')
       return
     }
+    if (data.limited) {
+      setScansLeft(0)
+      setNote(
+        'That’s all 10 of today’s photo scans used. Scans free up again 24 hours after each one — try again a little later.'
+      )
+      setPhase('idle')
+      return
+    }
+    if (typeof data.scansLeft === 'number') setScansLeft(data.scansLeft)
     const detections = data.items ?? []
     if (!detections.length) {
       setNote('No story toys spotted in that photo. A closer, well-lit shot works best.')
@@ -152,7 +162,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
       <h3>📸 Add from a photo</h3>
       <p className="field-help">
         Photograph a shelf or a pile of Tonies — we’ll spot the story toys in it and add
-        the ones you confirm to the have list.
+        the ones you confirm to the have list. Up to 10 photo scans a day.
       </p>
       <div className="claim-form">
         <label className="file-pick">
@@ -192,6 +202,11 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
           {phase === 'scanning' ? 'Looking…' : '🔍 Spot the toys'}
         </button>
       </div>
+      {scansLeft !== null && phase !== 'review' && (
+        <p className="field-help">
+          {scansLeft} of today’s 10 photo scans left.
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       {note && <p className="notice">{note}</p>}
 

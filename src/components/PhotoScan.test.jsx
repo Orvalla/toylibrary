@@ -68,6 +68,7 @@ describe('PhotoScan', () => {
           { title: 'Bluey', platform: 'tonies', confidence: 0.95 },
           { title: 'Mystery Gadget', platform: 'other', confidence: 0.4 },
         ],
+        scansLeft: 9,
       },
       error: null,
     })
@@ -93,6 +94,22 @@ describe('PhotoScan', () => {
     expect(matched.child_id).toBe('k1')
     const manual = inserted.find((p) => p.title === 'Mystery Gadget')
     expect(manual.image_url).toBe('https://img/shelf.jpg')
+    expect(screen.getByText(/9 of today’s 10 photo scans left/)).toBeInTheDocument()
+  })
+
+  it('explains the daily limit when the scans are used up', async () => {
+    invoke.mockResolvedValue({
+      data: { configured: true, limited: true, limit: 10, items: [] },
+      error: null,
+    })
+    const { container } = render(
+      <AuthProvider>
+        <Harness {...baseProps} />
+      </AuthProvider>
+    )
+    await pickPhotoAndScan(container)
+    expect(await screen.findByText(/all 10 of today’s photo scans used/)).toBeInTheDocument()
+    expect(screen.getByText(/0 of today’s 10 photo scans left/)).toBeInTheDocument()
   })
 
   it('says so plainly when photo scanning is not switched on', async () => {
