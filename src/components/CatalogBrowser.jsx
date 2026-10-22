@@ -220,12 +220,20 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     : catalog
   const categoriesPresent = CATEGORIES.filter((cat) => base.some((c) => categoryOf(c) === cat))
 
-  const q = query.trim().toLowerCase()
+  // Word-wise search: every word in the query must appear in the
+  // title or details, but not necessarily adjacently — a raw
+  // substring match missed "amelia bedelia beat the clock"
+  // against "Amelia Bedelia & Friends Beat the Clock".
+  const qWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const matchesQuery = (c) =>
+    qWords.every(
+      (w) => c.title.toLowerCase().includes(w) || (c.details ?? '').toLowerCase().includes(w)
+    )
   const visible = base.filter(
     (c) =>
       (platform === 'all' || c.platform === platform) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
-      (!q || c.title.toLowerCase().includes(q) || c.details.toLowerCase().includes(q))
+      (!qWords.length || matchesQuery(c))
   )
   const byPlatform = visible.reduce((acc, c) => {
     ;(acc[c.platform] ??= []).push(c)
