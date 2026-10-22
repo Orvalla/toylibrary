@@ -20,6 +20,7 @@ import {
   platformNoun,
 } from '../lib/bundles'
 import { sortBySuggestions } from '../lib/recommend'
+import { PAGE_SIZES, pageNumbers, pageSlice } from '../lib/paging'
 import { AGE_BANDS, inAgeBand } from '../lib/ages'
 
 // Browsable catalog of the well-known titles per platform. Parents tap
@@ -47,6 +48,10 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const [ageBand, setAgeBand] = useState('all')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('popular')
+  // Paging (lib/paging): the catalog is 6,000+ tiles — render a
+  // page at a time, with a Show-N-per-page selector.
+  const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState(48)
   const [message, setMessage] = useState('')
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -96,6 +101,11 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   useEffect(() => {
     setSubBrand('all')
   }, [platform])
+
+  // Any change to what could be visible starts back at page 1.
+  useEffect(() => {
+    setPage(1)
+  }, [platform, category, ageBand, query, sort, childSel, subBrand, perPage, devicesOnly])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Sam having Bluey doesn't
@@ -295,6 +305,73 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   }, {})
   const ordered = PLATFORMS.map((p) => p.key).filter((k) => byPlatform[k])
 
+  // Cut the section-ordered list into pages. A platform section's
+  // header rides with its items and repeats when a section spans
+  // two pages. safePage is the clamped page actually shown.
+  const groupedFlat = ordered.flatMap((pKey) => byPlatform[pKey])
+  const {
+    pageItems,
+    page: safePage,
+    pageCount,
+  } = pageSlice(groupedFlat, page, perPage)
+  const pageByPlatform = pageItems.reduce((acc, c) => {
+    ;(acc[c.platform] ??= []).push(c)
+    return acc
+  }, {})
+  const pageOrdered = PLATFORMS.map((p) => p.key).filter((k) => pageByPlatform[k])
+
+  const pagerBar = () =>
+    sortedVisible.length > PAGE_SIZES[0] ? (
+      <nav className="pager" aria-label="Catalog pages">
+        <span className="details">
+          {sortedVisible.length} items · Page {safePage} of {pageCount}
+        </span>
+        <span className="pager-pages">
+          <button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>
+            ← Prev
+          </button>
+          {pageNumbers(safePage, pageCount).map((n, i) =>
+            n === '…' ? (
+              <span key={`gap-${i}`} className="pager-gap">
+                …
+              </span>
+            ) : (
+              <button
+                type="button"
+                key={n}
+                className={n === safePage ? 'active' : ''}
+                onClick={() => setPage(n)}
+              >
+                {n}
+              </button>
+            )
+          )}
+          <button
+            type="button"
+            disabled={safePage >= pageCount}
+            onClick={() => setPage(safePage + 1)}
+          >
+            Next →
+          </button>
+        </span>
+        <label className="pager-size">
+          Show{' '}
+          <select
+            value={perPage}
+            onChange={(e) => setPerPage(Number(e.target.value))}
+            aria-label="Items per page"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>{' '}
+          per page
+        </label>
+      </nav>
+    ) : null
+
   return (
     <main className="page">
       {devicesOnly ? (
@@ -425,6 +502,8 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       </label>
       {message && <p className="notice">{message}</p>}
 
+      {pagerBar()}
+
       {visible.length === 0 && (
         <p className="empty">
           {devicesOnly
@@ -433,12 +512,12 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         </p>
       )}
 
-      {ordered.map((pKey) => (
+      {pageOrdered.map((pKey) => (
         <section key={pKey} className="platform-group">
           <h3>{platformLabel(pKey)}</h3>
           <PlatformGrid
             platform={pKey}
-            items={byPlatform[pKey]}
+            items={pageByPlatform[pKey]}
             renderItem={(entry) => {
               const owned = haveSet.has(key(childSel || null, entry.platform, entry.title))
               const wished = wishSet.has(key(childSel || null, entry.platform, entry.title))
@@ -508,6 +587,8 @@ export default function CatalogBrowser({ devicesOnly = false }) {
           />
         </section>
       ))}
+
+      {pagerBar()}
 
       {!devicesOnly && <GrowCatalog onAdded={handleCatalogAdded} />}
     </main>

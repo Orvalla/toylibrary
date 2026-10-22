@@ -13,8 +13,9 @@ import { platformLabel } from '../lib/platforms'
 //  * Paste a link — the function fetches the page server-side and
 //    adds what it points at: a product page adds that product; a
 //    collection page (e.g. a Tonies collection) adds everything in
-//    it at once, minus the store's bundles/players/extras, and the
-//    outcome below reports the tally.
+//    it at once — all of it, each with its picture, published
+//    rating and age range where the store provides them — and
+//    the outcome below reports how many were added.
 //
 // All writes happen in the function (service role, caller JWT
 // checked); this component only invokes it and renders the outcome.
@@ -201,7 +202,7 @@ export default function GrowCatalog({ onAdded }) {
               Added {outcome.added} new {platformLabel(outcome.platform)} ·{' '}
               {outcome.already_present} already in the catalog
               {outcome.skipped_filtered > 0 &&
-                ` · ${outcome.skipped_filtered} skipped (bundles & accessories)`}
+                ` · ${outcome.skipped_filtered} couldn't be read`}
             </p>
           )}
 

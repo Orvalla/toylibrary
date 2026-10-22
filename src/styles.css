@@ -244,6 +244,18 @@ a { color: var(--accent-dark); }
 .filter-input { width: 100%; padding: 10px 12px; border: 2px solid var(--input-line); border-radius: 12px; font: inherit; margin: 6px 0 4px; }
 .sort-pick { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; margin: 2px 0 6px; }
 .sort-pick select { padding: 8px 10px; border: 2px solid var(--input-line); border-radius: 12px; font: inherit; background: #fff; }
+.pager { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 14px 0; }
+.pager-pages { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.pager-pages button {
+  font: inherit; font-weight: 700; min-width: 34px; min-height: 34px; padding: 4px 8px;
+  border: 2px solid var(--input-line); border-radius: 10px; background: #fff; color: var(--ink);
+  cursor: pointer;
+}
+.pager-pages button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pager-pages button:disabled { opacity: .45; cursor: default; }
+.pager-gap { color: var(--ink-faint); padding: 0 2px; }
+.pager-size { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.pager-size select { padding: 6px 8px; border: 2px solid var(--input-line); border-radius: 10px; font: inherit; background: #fff; }
 .claimed-badge { font-weight: 800; color: var(--ink-faint); white-space: nowrap; }
 .claimed-badge.mine { color: var(--good); }
 .claim-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
