@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import ItemTile from './ItemTile'
 import AmazonLink from './AmazonLink'
 import BundleNote from './BundleNote'
+import PlatformGrid from './PlatformGrid'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { formatISODate } from '../lib/occasions'
@@ -156,8 +157,10 @@ export default function ClaimableWishlist({ slug, items, onChanged, cartIds, onT
           <h3>
             <PlatformMark platform={platform} /> {platformLabel(platform)}
           </h3>
-          <div className="tile-grid">
-            {byPlatform[platform].map((item) => (
+          <PlatformGrid
+            platform={platform}
+            items={byPlatform[platform]}
+            renderItem={(item) => (
               <WishlistTile
                 key={item.id}
                 slug={slug}
@@ -166,8 +169,8 @@ export default function ClaimableWishlist({ slug, items, onChanged, cartIds, onT
                 inCart={cartIds?.has(item.id) ?? false}
                 onToggleCart={onToggleCart}
               />
-            ))}
-          </div>
+            )}
+          />
         </section>
       ))}
     </div>

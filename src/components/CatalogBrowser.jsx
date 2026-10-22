@@ -7,7 +7,9 @@ import GrowCatalog from './GrowCatalog'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
+import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
 import BundleNote from './BundleNote'
+import PlatformGrid from './PlatformGrid'
 import {
   bundleInfoFor,
   cascadeContentRows,
@@ -39,6 +41,9 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
   )
   const [category, setCategory] = useState('all')
+  // Sub-category inside the projector platform: Moonlite vs Dream
+  // Machine (lib/projector.js). Reset whenever the platform changes.
+  const [subBrand, setSubBrand] = useState('all')
   const [ageBand, setAgeBand] = useState('all')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('popular')
@@ -87,6 +92,10 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    setSubBrand('all')
+  }, [platform])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Alex having Bluey doesn't
@@ -248,9 +257,13 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     qWords.every(
       (w) => c.title.toLowerCase().includes(w) || (c.details ?? '').toLowerCase().includes(w)
     )
+  const projectorRows = base.filter((c) => c.platform === 'projector')
+  const projectorCount = (brandKey) =>
+    projectorRows.filter((c) => projectorBrandOf(c) === brandKey).length
   const visible = base.filter(
     (c) =>
       (platform === 'all' || c.platform === platform) &&
+      (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (!qWords.length || matchesQuery(c))
@@ -338,6 +351,26 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         ))}
       </div>
 
+      {platform === 'projector' && (
+        <div className="tabs" aria-label="Projector type">
+          <button
+            className={subBrand === 'all' ? 'active' : ''}
+            onClick={() => setSubBrand('all')}
+          >
+            All projectors
+          </button>
+          {PROJECTOR_BRANDS.map((b) => (
+            <button
+              key={b.key}
+              className={subBrand === b.key ? 'active' : ''}
+              onClick={() => setSubBrand(b.key)}
+            >
+              {b.emoji} {b.label} ({projectorCount(b.key)})
+            </button>
+          ))}
+        </div>
+      )}
+
       {!devicesOnly && (
         <div className="tabs" aria-label="Category">
           <button
@@ -403,8 +436,10 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       {ordered.map((pKey) => (
         <section key={pKey} className="platform-group">
           <h3>{platformLabel(pKey)}</h3>
-          <div className="tile-grid">
-            {byPlatform[pKey].map((entry) => {
+          <PlatformGrid
+            platform={pKey}
+            items={byPlatform[pKey]}
+            renderItem={(entry) => {
               const owned = haveSet.has(key(childSel || null, entry.platform, entry.title))
               const wished = wishSet.has(key(childSel || null, entry.platform, entry.title))
               return (
@@ -469,8 +504,8 @@ export default function CatalogBrowser({ devicesOnly = false }) {
                   </div>
                 </ItemTile>
               )
-            })}
-          </div>
+            }}
+          />
         </section>
       ))}
 

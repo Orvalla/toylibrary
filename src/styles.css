@@ -218,6 +218,14 @@ a { color: var(--accent-dark); }
 .badge { font-size: 13px; font-weight: 800; background: #efe9ff; border-radius: 999px; padding: 2px 9px; }
 
 .platform-group h3 { margin: 18px 0 4px; }
+/* Sub-group inside a platform section (Moonlite / Dream Machine
+   under Storybook projector). */
+.subgroup-title {
+  font-family: Fredoka, Nunito, sans-serif;
+  font-size: 16px;
+  color: var(--ink);
+  margin: 14px 0 2px;
+}
 
 .occasion-banner {
   background: #fff3c4; border: 2px solid var(--sun); border-radius: 14px;

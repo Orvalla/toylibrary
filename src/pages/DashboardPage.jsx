@@ -9,6 +9,7 @@ import PlatformMark from '../components/PlatformMark'
 import { childNameFor } from '../lib/children'
 import { formatOccasionLine, nearestOccasion } from '../lib/occasions'
 import BundleNote from '../components/BundleNote'
+import PlatformGrid from '../components/PlatformGrid'
 import {
   bundleInfoFor,
   indexCatalog,
@@ -585,8 +586,10 @@ export default function DashboardPage() {
             <h3>
               <PlatformMark platform={platform} /> {platformLabel(platform)}
             </h3>
-            <div className="tile-grid">
-              {byPlatform[platform].map((item) => (
+            <PlatformGrid
+              platform={platform}
+              items={byPlatform[platform]}
+              renderItem={(item) => (
                 <ItemTile key={item.id} item={item}>
                   <BundleNote
                     info={(() => {
@@ -625,8 +628,8 @@ export default function DashboardPage() {
                     <AmazonLink item={item} />
                   </div>
                 </ItemTile>
-              ))}
-            </div>
+              )}
+            />
           </section>
         ))
       )}

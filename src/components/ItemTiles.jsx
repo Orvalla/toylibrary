@@ -1,5 +1,6 @@
 import ItemTile from './ItemTile'
 import BundleNote from './BundleNote'
+import PlatformGrid from './PlatformGrid'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 
@@ -22,13 +23,15 @@ export default function ItemTiles({ items, emptyText }) {
           <h3>
             <PlatformMark platform={platform} /> {platformLabel(platform)}
           </h3>
-          <div className="tile-grid">
-            {byPlatform[platform].map((item) => (
+          <PlatformGrid
+            platform={platform}
+            items={byPlatform[platform]}
+            renderItem={(item) => (
               <ItemTile key={item.id} item={item}>
                 <BundleNote info={item.bundle} name={item.child_name} platform={item.platform} />
               </ItemTile>
-            ))}
-          </div>
+            )}
+          />
         </section>
       ))}
     </div>
