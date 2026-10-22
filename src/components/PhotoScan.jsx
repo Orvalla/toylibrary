@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { platformLabel } from '../lib/platforms'
@@ -6,6 +6,7 @@ import PlatformMark from './PlatformMark'
 import { itemKey } from '../lib/bundles'
 import { bestMatch } from '../lib/photoMatch'
 import { fileToDataUrl } from '../lib/photoImage'
+import { createProductImageFetcher } from '../lib/productImage'
 
 // "Add from a photo": a parent photographs a shelf or a pile of
 // Tonies, the identify-items Edge Function (vision model) lists
@@ -13,7 +14,7 @@ import { fileToDataUrl } from '../lib/photoImage'
 // the catalog, and the parent confirms before anything lands on
 // the have list. Nothing is added without the confirm tap —
 // vision guesses are good, not perfect.
-export default function PhotoScan({ kids, catalogRows, items, initialChildId, uploadPhoto, onAdded }) {
+export default function PhotoScan({ kids, catalogRows, items, initialChildId, onAdded }) {
   const { user } = useAuth()
   const [file, setFile] = useState(null)
   const [targetChild, setTargetChild] = useState(initialChildId ?? '')
@@ -22,6 +23,32 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [scansLeft, setScansLeft] = useState(null)
+
+  // Unmatched detections get the product's real picture fetched
+  // (store photo / book cover — see lib/productImage), never
+  // the parent's own photo: tiles are shown to gift-givers.
+  // Lookups start at scan time so the review list can show the
+  // picture that will be used; in-flight promises are kept so
+  // Add can await any still running.
+  const fetchProductImage = useMemo(
+    () =>
+      createProductImageFetcher({
+        searchStores: async (query) => {
+          const { data } = await supabase.functions.invoke('ingest-catalog', {
+            body: { mode: 'search', query },
+          })
+          return data?.results ?? []
+        },
+        fetchJson: async (url) => {
+          const res = await fetch(url)
+          if (!res.ok) throw new Error('picture lookup failed')
+          return res.json()
+        },
+      }),
+    []
+  )
+  const imageLookups = useRef(new Map())
+  const lookupKey = (d) => `${d.platform}|${String(d.title ?? '').trim().toLowerCase()}`
 
   // The scan target follows the add form's child (which follows
   // the filter pills), same as typing an item by hand.
@@ -86,15 +113,28 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
       setPhase('idle')
       return
     }
-    setRows(
-      detections.map((detection) => {
-        const match = bestMatch(detection, catalogRows)
-        const owned = match
-          ? ownedHaveKeys.has(itemKey(match.entry.platform, match.entry.title))
-          : ownedHaveKeys.has(itemKey(detection.platform, detection.title))
-        return { detection, match, owned, include: !owned }
-      })
-    )
+    const built = detections.map((detection) => {
+      const match = bestMatch(detection, catalogRows)
+      const owned = match
+        ? ownedHaveKeys.has(itemKey(match.entry.platform, match.entry.title))
+        : ownedHaveKeys.has(itemKey(detection.platform, detection.title))
+      return { detection, match, owned, include: !owned, fetchedImage: '' }
+    })
+    setRows(built)
+    // Start the product-picture hunt for unmatched detections
+    // right away; results patch into the review rows as they land.
+    for (const row of built) {
+      if (row.match) continue
+      const p = fetchProductImage(row.detection)
+      imageLookups.current.set(lookupKey(row.detection), p)
+      p.then((url) => {
+        if (url) {
+          setRows((prev) =>
+            prev.map((r) => (r.detection === row.detection ? { ...r, fetchedImage: url } : r))
+          )
+        }
+      }).catch(() => {})
+    }
     setPhase('review')
   }
 
@@ -103,19 +143,17 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
     if (!chosen.length) return
     setPhase('adding')
     setError('')
-    // Unmatched detections keep the parent's own photo as their
-    // picture — upload it once and share the URL.
-    let photoUrl = ''
-    if (chosen.some((r) => !r.match)) {
-      try {
-        photoUrl = await uploadPhoto(file)
-      } catch {
-        photoUrl = ''
-      }
-    }
     const added = []
     let skipped = 0
     for (const r of chosen) {
+      // Unmatched detections use the fetched product picture
+      // (await the scan-time lookup if it's still in flight).
+      // Never the parent's photo — '' falls back to tile art.
+      let fetchedImage = r.fetchedImage ?? ''
+      if (!r.match && !fetchedImage) {
+        const pending = imageLookups.current.get(lookupKey(r.detection))
+        if (pending) fetchedImage = (await pending.catch(() => '')) || ''
+      }
       const payload = r.match
         ? {
             owner_id: user.id,
@@ -135,7 +173,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
             title: r.detection.title,
             details: '',
             notes: 'Added from a photo',
-            image_url: photoUrl,
+            image_url: fetchedImage,
             child_id: targetChild || null,
           }
       const { data, error: insError } = await supabase
@@ -217,7 +255,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
             {rows.map((r, idx) => {
               const title = r.match ? r.match.entry.title : r.detection.title
               const platform = r.match ? r.match.entry.platform : r.detection.platform
-              const img = r.match?.entry.image_url
+              const img = r.match?.entry.image_url || r.fetchedImage
               return (
                 <li key={idx} className="scan-row">
                   <input
@@ -243,7 +281,9 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
                       {platformLabel(platform)}
                       {r.match
                         ? ' · found in the catalog'
-                        : ' · not in the catalog — added with your photo'}
+                        : r.fetchedImage
+                          ? ' · not in the catalog — product picture found'
+                          : ' · not in the catalog'}
                       {r.detection.confidence
                         ? ` · ${Math.round(r.detection.confidence * 100)}% sure`
                         : ''}

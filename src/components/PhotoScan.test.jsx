@@ -43,7 +43,6 @@ const baseProps = {
   catalogRows: CATALOG,
   items: [],
   initialChildId: 'k1',
-  uploadPhoto: async () => 'https://img/shelf.jpg',
   onAdded: vi.fn(),
 }
 
@@ -87,14 +86,49 @@ describe('PhotoScan', () => {
     expect(await screen.findByText(/Added 2 items to Sam/)).toBeInTheDocument()
     expect(onAdded).toHaveBeenCalledOnce()
     expect(onAdded.mock.calls[0][0]).toHaveLength(2)
-    // The matched add carries catalog data; the unmatched one
-    // keeps the parent's photo as its picture.
+    // The matched add carries catalog data. The unmatched one
+    // gets NO picture when the product hunt finds nothing —
+    // its tile falls back to platform art. The parent's own
+    // photo is never used as a tile picture.
     const matched = inserted.find((p) => p.title === 'Bluey')
     expect(matched.image_url).toBe('https://img/bluey.png')
     expect(matched.child_id).toBe('k1')
     const manual = inserted.find((p) => p.title === 'Mystery Gadget')
-    expect(manual.image_url).toBe('https://img/shelf.jpg')
+    expect(manual.image_url).toBe('')
     expect(screen.getByText(/9 of today’s 10 photo scans left/)).toBeInTheDocument()
+  })
+
+  it('fetches the real product picture for an unmatched detection', async () => {
+    inserted.length = 0
+    invoke.mockImplementation((name) =>
+      name === 'ingest-catalog'
+        ? Promise.resolve({
+            data: {
+              results: [
+                { platform: 'tonies', title: 'Paw Patrol — Chase', image_url: 'https://img/chase.png' },
+              ],
+            },
+            error: null,
+          })
+        : Promise.resolve({
+            data: {
+              configured: true,
+              items: [{ title: 'Chase', platform: 'tonies', confidence: 0.9 }],
+              scansLeft: 9,
+            },
+            error: null,
+          })
+    )
+    const { container } = render(
+      <AuthProvider>
+        <Harness {...baseProps} />
+      </AuthProvider>
+    )
+    await pickPhotoAndScan(container)
+    expect(await screen.findByText(/product picture found/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Add 1 to/ }))
+    expect(await screen.findByText(/Added 1 item to Sam/)).toBeInTheDocument()
+    expect(inserted[0].image_url).toBe('https://img/chase.png')
   })
 
   it('explains the daily limit when the scans are used up', async () => {

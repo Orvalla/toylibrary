@@ -119,7 +119,7 @@ export default function DashboardPage() {
   }, [kids, formChildTouched])
 
   // Picking a filter pill also aims the add form at the same child, so
-  // "filter to Alex, add three Tonies" doesn't need the dropdown touched.
+  // "filter to Sam, add three Tonies" doesn't need the dropdown touched.
   function selectChildFilter(value) {
     setChildFilter(value)
     setFormChildTouched(true)
@@ -520,7 +520,6 @@ export default function DashboardPage() {
         catalogRows={catalogRows}
         items={items}
         initialChildId={form.child_id}
-        uploadPhoto={uploadPhoto}
         onAdded={(rows) => setItems((prev) => [...prev, ...rows])}
       />
 
