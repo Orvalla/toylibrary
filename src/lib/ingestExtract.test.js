@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   candidateKey,
   collectionPageUrl,
+  extractAggregateRating,
   extractAllFromJsonLd,
   extractFromJsonLd,
   extractFromOpenGraph,
@@ -150,6 +151,81 @@ describe('extractFromJsonLd', () => {
       image_url: null,
       details: '',
     })
+  })
+})
+
+describe('extractAggregateRating', () => {
+  it('reads a Product aggregateRating with string values (the Osmo shape)', () => {
+    const html = `
+      <script type="application/ld+json">
+      {"@type":"Product","name":"Numbers Game",
+       "aggregateRating":{"@type":"AggregateRating","ratingValue":"4.7","reviewCount":"2,648"}}
+      </script>`
+    expect(extractAggregateRating(html)).toEqual({ rating: 4.7, rating_count: 2648 })
+  })
+
+  it('accepts numeric values and prefers ratingCount over reviewCount', () => {
+    const html = `
+      <script type="application/ld+json">
+      {"@type":"Product","name":"Word Game",
+       "aggregateRating":{"@type":"AggregateRating","ratingValue":4.25,"ratingCount":312,"reviewCount":98}}
+      </script>`
+    expect(extractAggregateRating(html)).toEqual({ rating: 4.3, rating_count: 312 })
+  })
+
+  it('finds the rated Product inside an @graph document', () => {
+    const html = `
+      <script type="application/ld+json">
+      {"@context":"https://schema.org","@graph":[
+        {"@type":"WebPage","name":"Shop"},
+        {"@type":"Product","name":"Detective Agency",
+         "aggregateRating":{"@type":"AggregateRating","ratingValue":"4.9","ratingCount":"1,024"}}
+      ]}
+      </script>`
+    expect(extractAggregateRating(html)).toEqual({ rating: 4.9, rating_count: 1024 })
+  })
+
+  it('rescales when the block declares a non-5 bestRating', () => {
+    const html = `
+      <script type="application/ld+json">
+      {"@type":"Product","name":"Percent Rated",
+       "aggregateRating":{"@type":"AggregateRating","ratingValue":"92","bestRating":"100","ratingCount":40}}
+      </script>`
+    expect(extractAggregateRating(html)).toEqual({ rating: 4.6, rating_count: 40 })
+  })
+
+  it('returns a rating with a null count when the count is unusable', () => {
+    const html = `
+      <script type="application/ld+json">
+      {"@type":"Product","name":"Countless",
+       "aggregateRating":{"@type":"AggregateRating","ratingValue":5,"reviewCount":"lots"}}
+      </script>`
+    expect(extractAggregateRating(html)).toEqual({ rating: 5, rating_count: null })
+  })
+
+  it('returns null when no Product publishes a rating', () => {
+    expect(
+      extractAggregateRating(
+        '<script type="application/ld+json">{"@type":"Product","name":"Unrated"}</script>'
+      )
+    ).toBeNull()
+    expect(extractAggregateRating('<html><body>No data here</body></html>')).toBeNull()
+    expect(extractAggregateRating('')).toBeNull()
+  })
+
+  it('rejects nonsense ratings rather than storing them', () => {
+    const zero = `
+      <script type="application/ld+json">
+      {"@type":"Product","name":"Zero",
+       "aggregateRating":{"@type":"AggregateRating","ratingValue":"0","ratingCount":12}}
+      </script>`
+    expect(extractAggregateRating(zero)).toBeNull()
+    const over = `
+      <script type="application/ld+json">
+      {"@type":"Product","name":"Over",
+       "aggregateRating":{"@type":"AggregateRating","ratingValue":"7.5","ratingCount":12}}
+      </script>`
+    expect(extractAggregateRating(over)).toBeNull()
   })
 })
 

@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { PLATFORMS } from '../lib/platforms'
+import PlatformMark from '../components/PlatformMark'
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -19,6 +21,15 @@ export default function HomePage() {
         birthdays and holidays, and gift-givers can check it in ten seconds —
         no account needed on their end.
       </p>
+
+      <div className="brand-strip" aria-label="Platforms Toy Library tracks">
+        <span className="brand-strip-label">One library for all of them:</span>
+        {PLATFORMS.filter((p) => p.key !== 'other').map((p) => (
+          <span key={p.key} className="brand-strip-item" title={p.label}>
+            <PlatformMark platform={p.key} /> {p.label.split(' / ')[0]}
+          </span>
+        ))}
+      </div>
 
       <div className="card-grid">
         <div className="card">

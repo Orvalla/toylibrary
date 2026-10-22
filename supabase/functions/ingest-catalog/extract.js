@@ -207,6 +207,50 @@ export function extractFromJsonLd(html) {
   return extractAllFromJsonLd(html)[0] ?? null
 }
 
+// A rating count as stores serialize it: a number, a numeric
+// string, or a string with thousands separators ("2,648").
+// Anything that doesn't reduce to a positive integer is no count.
+function parseRatingCount(raw) {
+  if (typeof raw === 'number') return Number.isInteger(raw) && raw > 0 ? raw : null
+  if (typeof raw !== 'string') return null
+  const digits = raw.replace(/[,\s]/g, '')
+  if (!/^\d+$/.test(digits)) return null
+  const n = Number(digits)
+  return n > 0 ? n : null
+}
+
+// The store's own rating for the page's Product, from the
+// aggregateRating in its JSON-LD — the structured data the store
+// publishes for search engines. Returns
+// { rating, rating_count } with rating on the usual 0–5 scale
+// (rescaled when the block declares a different bestRating),
+// rounded to one decimal; rating_count is null when the block
+// carries a value but no usable count. Null when no Product on
+// the page publishes a sane rating — many stores load their
+// reviews through a widget (Bazaarvoice, Trustpilot, Okendo)
+// and never put the number in the static HTML at all.
+export function extractAggregateRating(html) {
+  if (!html) return null
+  for (const doc of jsonLdBlocks(html)) {
+    for (const product of productNodes(doc)) {
+      const agg = Array.isArray(product.aggregateRating)
+        ? product.aggregateRating[0]
+        : product.aggregateRating
+      if (!agg || typeof agg !== 'object') continue
+      let value = Number(agg.ratingValue)
+      if (!Number.isFinite(value) || value <= 0) continue
+      const best = Number(agg.bestRating ?? 5)
+      if (Number.isFinite(best) && best > 5) value = (value * 5) / best
+      if (value > 5) continue
+      return {
+        rating: Math.round(value * 10) / 10,
+        rating_count: parseRatingCount(agg.ratingCount) ?? parseRatingCount(agg.reviewCount),
+      }
+    }
+  }
+  return null
+}
+
 function metaContent(html, property) {
   // Attribute order varies between stores; check both orders.
   const patterns = [

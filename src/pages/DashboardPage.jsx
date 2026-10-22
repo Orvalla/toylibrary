@@ -4,7 +4,8 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
 import AmazonLink from '../components/AmazonLink'
-import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
+import { PLATFORMS, platformLabel } from '../lib/platforms'
+import PlatformMark from '../components/PlatformMark'
 import { childNameFor } from '../lib/children'
 import { formatOccasionLine, nearestOccasion } from '../lib/occasions'
 import BundleNote from '../components/BundleNote'
@@ -17,6 +18,7 @@ import {
 } from '../lib/bundles'
 import { recommendForChild } from '../lib/recommend'
 import PhotoScan from '../components/PhotoScan'
+import TourGuide from '../components/TourGuide'
 
 // The catalog is several thousand rows — page through it so the
 // bundle lookup below sees every row, not just the first page.
@@ -25,7 +27,7 @@ async function fetchCatalogIndex() {
   for (let from = 0; ; from += 1000) {
     const { data } = await supabase
       .from('catalog_items')
-      .select('id, platform, title, details, image_url, asin, is_bundle, item_type, sort_order')
+      .select('id, platform, title, details, image_url, asin, is_bundle, item_type, sort_order, age_min_years, age_max_years, rating, rating_count')
       .range(from, from + 999)
     rows.push(...(data ?? []))
     if (!data || data.length < 1000) break
@@ -44,6 +46,11 @@ export default function DashboardPage() {
   const [kids, setKids] = useState([])
   const [occasions, setOccasions] = useState([])
   const [childFilter, setChildFilter] = useState('all') // 'all' | 'family' | child id
+  // The welcome wizard's finale can send new parents here with
+  // ?tour=1 for the guided tour; Settings links here the same way.
+  const [showTour, setShowTour] = useState(
+    () => new URLSearchParams(window.location.search).get('tour') === '1'
+  )
   const [formChildTouched, setFormChildTouched] = useState(false)
   const [tab, setTab] = useState('have')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -361,7 +368,7 @@ export default function DashboardPage() {
     <main className="page">
       <h1>{profile.child_name ? `${profile.child_name}'s library` : 'My library'}</h1>
 
-      <section className="share-box">
+      <section className="share-box" data-tour="share">
         <div>
           <strong>Your gift-giver link</strong>
           <div className="share-url">{shareUrl}</div>
@@ -386,12 +393,12 @@ export default function DashboardPage() {
         </button>
       </section>
 
-      <p className="catalog-cta">
+      <p className="catalog-cta" data-tour="catalog">
         Building your list? <Link to="/catalog">Browse the catalog</Link> and tap to add the
         ones you own — faster than typing.
       </p>
 
-      <div className="tabs">
+      <div className="tabs" data-tour="lists">
         <button className={tab === 'have' ? 'active' : ''} onClick={() => setTab('have')}>
           ✅ We have it ({items.filter((i) => i.list_type === 'have').length})
         </button>
@@ -401,7 +408,7 @@ export default function DashboardPage() {
       </div>
 
       {kids.length > 0 && (
-        <div className="tabs child-tabs">
+        <div className="tabs child-tabs" data-tour="children">
           <button className={childFilter === 'all' ? 'active' : ''} onClick={() => selectChildFilter('all')}>
             Everyone
           </button>
@@ -427,7 +434,7 @@ export default function DashboardPage() {
       )}
 
       {filteredKid && recs.length > 0 && (
-        <section className="card recs-card">
+        <section className="card recs-card" data-tour="ideas">
           <h3>🎁 Gift ideas for {filteredKid.name}</h3>
           <p className="field-help">
             Based on the players {filteredKid.name} has and what they're into. Add one to
@@ -448,7 +455,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <form onSubmit={addItem} className="form inline-form">
+      <form onSubmit={addItem} className="form inline-form" data-tour="add">
         <select
           value={form.platform}
           onChange={(e) => setForm({ ...form, platform: e.target.value })}
@@ -576,7 +583,7 @@ export default function DashboardPage() {
         orderedPlatforms.map((platform) => (
           <section key={platform} className="platform-group">
             <h3>
-              {platformEmoji(platform)} {platformLabel(platform)}
+              <PlatformMark platform={platform} /> {platformLabel(platform)}
             </h3>
             <div className="tile-grid">
               {byPlatform[platform].map((item) => (
@@ -622,6 +629,14 @@ export default function DashboardPage() {
             </div>
           </section>
         ))
+      )}
+      {showTour && (
+        <TourGuide
+          onClose={() => {
+            setShowTour(false)
+            window.history.replaceState(null, '', '/dashboard')
+          }}
+        />
       )}
     </main>
   )

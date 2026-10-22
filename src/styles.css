@@ -77,12 +77,16 @@ a { color: var(--accent-dark); }
 .lede { font-size: 18px; line-height: 1.55; }
 
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
   background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 999px;
-  padding: 11px 22px;
+  padding: 10px 22px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
@@ -92,7 +96,7 @@ a { color: var(--accent-dark); }
 }
 .btn:hover { background: #ff6d71; }
 .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-dark); }
-.btn-small { padding: 7px 15px; font-size: 14px; box-shadow: 0 2px 0 var(--accent-dark); }
+.btn-small { padding: 7px 14px; font-size: 13.5px; min-height: 34px; box-shadow: 0 2px 0 var(--accent-dark); }
 .btn-small:active { box-shadow: 0 0 0 var(--accent-dark); }
 
 .linklike {
@@ -131,14 +135,15 @@ a { color: var(--accent-dark); }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .chip {
   border: 2px solid var(--line); background: #fff; color: var(--ink);
-  border-radius: 999px; padding: 8px 14px; font-family: inherit;
+  border-radius: 999px; padding: 9px 16px; font-family: inherit;
   font-weight: 700; font-size: 15px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 42px;
 }
 .chip.on { background: var(--coral); border-color: var(--coral); color: #fff; box-shadow: 0 2px 0 var(--accent-dark); }
-.chip.small { padding: 4px 10px; font-size: 13px; }
+.chip.small { padding: 6px 12px; font-size: 13px; min-height: 34px; }
 .chip:disabled { opacity: 0.5; cursor: default; }
 .wizard-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
-.wstep { font-size: 13px; font-weight: 700; color: var(--ink-faint); background: var(--soft); border-radius: 999px; padding: 5px 10px; }
+.wstep { font-size: 13px; font-weight: 700; color: var(--ink-faint); background: var(--soft); border-radius: 999px; padding: 6px 12px; min-height: 34px; display: inline-flex; align-items: center; }
 .wstep.on { background: var(--coral); color: #fff; }
 .wstep.done { background: #d8f3e3; color: #146c43; }
 .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin: 12px 0; }
@@ -183,7 +188,8 @@ a { color: var(--accent-dark); }
 .tabs { display: flex; gap: 8px; margin: 24px 0 6px; flex-wrap: wrap; }
 .tabs button {
   border: 2px solid var(--line); background: #fff; border-radius: 999px;
-  padding: 8px 16px; font: inherit; font-weight: 800; cursor: pointer; color: var(--ink);
+  padding: 9px 16px; font: inherit; font-weight: 800; cursor: pointer; color: var(--ink);
+  display: inline-flex; align-items: center; gap: 7px; min-height: 42px;
 }
 .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .child-tabs { margin-top: 8px; }
@@ -264,7 +270,9 @@ a { color: var(--accent-dark); }
 .grow-catalog { margin-top: 40px; border-top: 2px solid var(--line); padding-top: 10px; }
 .grow-catalog .notes { color: var(--ink-faint); font-size: 14px; }
 .edit-panel { margin: 14px 0; }
-.file-pick { font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.file-pick { font-weight: 800; display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.file-pick input[type='file'] { min-width: 0; max-width: 100%; flex: 1 1 auto; }
+.inline-form > * { min-width: 0; }
 
 .footer { text-align: center; color: #8b87ad; padding: 22px; border-top: 1px solid var(--line); font-size: 14px; }
 
@@ -308,3 +316,96 @@ a { color: var(--accent-dark); }
 .scan-emoji { display: flex; align-items: center; justify-content: center; font-size: 26px; background: var(--soft); }
 .scan-text { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .file-pick .notes { overflow-wrap: anywhere; }
+
+/* Platform brand marks (PlatformMark): real product logos on
+   chips, tabs and section headers. White/monochrome logos sit
+   on a brand-color badge so they read on white surfaces. */
+.plat-logo { height: 20px; width: auto; max-width: 84px; object-fit: contain; }
+.plat-badge {
+  width: 28px; height: 28px; border-radius: 9px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.plat-badge img { max-width: 21px; max-height: 21px; object-fit: contain; }
+.plat-emoji { font-size: 17px; line-height: 1; }
+h2 .plat-logo, h3 .plat-logo { height: 24px; }
+h2 .plat-badge, h3 .plat-badge { width: 32px; height: 32px; border-radius: 10px; }
+h2 .plat-badge img, h3 .plat-badge img { max-width: 24px; max-height: 24px; }
+.scan-emoji .plat-badge { width: 34px; height: 34px; }
+.cart-row .plat-badge { width: 34px; height: 34px; border-radius: 10px; }
+
+/* Secondary button: white with an indigo outline (tour,
+   welcome finale — anywhere coral would shout twice). */
+.btn-ghost {
+  background: #fff; color: var(--ink); border: 2px solid var(--line);
+  box-shadow: 0 3px 0 var(--line);
+}
+.btn-ghost:hover { background: var(--soft); }
+.btn-ghost:active { box-shadow: 0 1px 0 var(--line); }
+.btn-small.btn-ghost { box-shadow: 0 2px 0 var(--line); }
+
+/* Welcome wizard: a full-screen branded intro — gradient sky,
+   the page's polka dots, and one big friendly card. */
+.welcome-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(rgba(46, 42, 85, 0.07) 2.2px, transparent 2.3px) 0 0 / 26px 26px,
+    linear-gradient(155deg, #ffe9e4 0%, #f4f1ff 52%, #dff6f6 100%);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 30px 16px 56px;
+}
+.welcome-card {
+  background: #fff; border: 2px solid var(--line); border-radius: 26px;
+  box-shadow: 0 20px 55px rgba(46, 42, 85, 0.18);
+  width: 100%; max-width: 700px; padding: 30px 30px 24px;
+}
+.welcome-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.welcome-brand img { width: 46px; height: 46px; }
+.welcome-brand span { font-family: Fredoka, sans-serif; font-weight: 600; font-size: 24px; color: var(--ink); }
+.welcome-card h1 { margin: 4px 0 6px; font-size: 30px; }
+.welcome-card .lede { margin: 0 0 6px; }
+.wizard-dots { display: flex; align-items: center; gap: 8px; margin: 16px 0 20px; flex-wrap: wrap; }
+.wdot { width: 11px; height: 11px; border-radius: 50%; background: var(--line); transition: transform 0.15s ease, background 0.15s ease; }
+.wdot.on { background: var(--coral); transform: scale(1.3); }
+.wdot.done { background: var(--teal); }
+.wizard-dots-label { font-size: 13.5px; font-weight: 800; color: var(--ink-faint); margin-left: 6px; }
+.welcome-step h3 { font-size: 21px; }
+.welcome-finale { text-align: center; }
+.finale-mark { width: 92px; height: 92px; margin: 8px auto 12px; display: block; }
+.welcome-finale .field-help { font-size: 15.5px; }
+.finale-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+@media (max-width: 600px) {
+  .welcome-card { padding: 22px 18px 18px; border-radius: 22px; }
+  .welcome-card h1 { font-size: 25px; }
+}
+
+/* Guided tour: a bottom card + a sunny ring on the element
+   being introduced. The overlay itself never blocks taps. */
+.tour-overlay { position: fixed; inset: 0; z-index: 80; pointer-events: none; }
+.tour-card {
+  pointer-events: auto; position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: 16px; width: min(540px, calc(100vw - 24px));
+  background: #fff; border: 2px solid var(--line); border-radius: 20px;
+  box-shadow: 0 18px 50px rgba(46, 42, 85, 0.28); padding: 18px 20px 14px;
+}
+.tour-card h3 { margin: 2px 0 6px; font-size: 20px; }
+.tour-card p { margin: 0 0 10px; }
+.tour-count { font-size: 12.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-dark); }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tour-nav { display: inline-flex; gap: 8px; }
+.tour-highlight {
+  box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--sun) !important;
+  border-radius: 14px;
+}
+
+/* Landing brand strip: the platform logos as a quiet
+   "works with all of them" row under the hero. */
+.brand-strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+  margin: 22px 0 4px; padding: 14px 16px;
+  background: #fff; border: 2px solid var(--line); border-radius: 18px;
+}
+.brand-strip-label { font-weight: 800; color: var(--ink-faint); font-size: 14px; width: 100%; }
+.brand-strip-item { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; font-size: 14.5px; }
+.brand-strip-item .plat-logo { height: 18px; }
+.brand-strip-item .plat-badge { width: 24px; height: 24px; border-radius: 7px; }
+.brand-strip-item .plat-badge img { max-width: 18px; max-height: 18px; }

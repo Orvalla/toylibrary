@@ -6,7 +6,7 @@ import { GENDERS, HOLIDAYS, INTERESTS, ageLabel } from '../lib/onboarding'
 import { platformLabel } from '../lib/platforms'
 import { platformNoun } from '../lib/bundles'
 
-const STEP_TITLES = ['About your child', 'Gift occasions', 'Their devices', 'Interests', 'Fill the shelves']
+const STEP_TITLES = ['About your child', 'Gift occasions', 'Their devices', 'Interests', 'Fill the shelves', 'You’re all set']
 
 // The onboarding questionnaire. Five short steps that set up a
 // child's profile (name, gender, birthday), their gift-giving
@@ -78,9 +78,9 @@ export default function WelcomePage() {
   const childName = name.trim() || 'your child'
   const shareUrl = profile ? `${window.location.origin}/s/${profile.share_slug}` : ''
 
-  async function finish() {
+  async function finish(withTour = false) {
     await supabase.from('profiles').update({ onboarded_at: new Date().toISOString() }).eq('id', user.id)
-    navigate('/dashboard')
+    navigate(withTour ? '/dashboard?tour=1' : '/dashboard')
   }
 
   // Leaving via a shelf link still counts as set up — the
@@ -190,23 +190,32 @@ export default function WelcomePage() {
   if (loading) return <main className="page"><p>Getting things ready…</p></main>
 
   return (
-    <main className="page narrow">
-      <h1>Welcome to Toy Library 🎉</h1>
-      <p className="lede">
-        Five quick steps and {childName}'s library is set up — gift-givers get a link,
-        and the gift ideas actually fit.
-      </p>
-      <p className="wizard-steps" aria-label="Progress">
-        {STEP_TITLES.map((t, i) => (
-          <span key={t} className={i === step ? 'wstep on' : i < step ? 'wstep done' : 'wstep'}>
-            {i < step ? '✓' : i + 1} {t}
+    <main className="welcome-shell">
+      <div className="welcome-card">
+        <div className="welcome-brand">
+          <img src="/logo.svg" alt="" />
+          <span>Toy Library</span>
+        </div>
+        <h1>
+          {step < 5 ? `Let’s set up ${childName}’s library` : 'You’re all set 🎉'}
+        </h1>
+        <p className="lede">
+          {step < 5
+            ? 'A few quick questions — then gift-givers get a link, and the gift ideas actually fit.'
+            : `${childName}’s library is ready. Send the link before the next gift occasion and the duplicates stop.`}
+        </p>
+        <div className="wizard-dots" aria-label={`Step ${step + 1} of ${STEP_TITLES.length}: ${STEP_TITLES[step]}`}>
+          {STEP_TITLES.map((t, i) => (
+            <span key={t} className={i === step ? 'wdot on' : i < step ? 'wdot done' : 'wdot'} title={t} />
+          ))}
+          <span className="wizard-dots-label">
+            Step {step + 1} of {STEP_TITLES.length} · {STEP_TITLES[step]}
           </span>
-        ))}
-      </p>
-      {message && <p className="notice">{message}</p>}
+        </div>
+        {message && <p className="notice">{message}</p>}
 
       {step === 0 && (
-        <section className="card">
+        <section className="welcome-step">
           <h3>About your child</h3>
           {kids.length > 1 && (
             <div className="form">
@@ -276,7 +285,7 @@ export default function WelcomePage() {
       )}
 
       {step === 1 && (
-        <section className="card">
+        <section className="welcome-step">
           <h3>When do gifts arrive for {childName}?</h3>
           <p className="field-help">
             Pick the occasions relatives actually shop for. Wishlist claims last until
@@ -315,7 +324,7 @@ export default function WelcomePage() {
       )}
 
       {step === 2 && (
-        <section className="card">
+        <section className="welcome-step">
           <h3>Which players does {childName} already have?</h3>
           <p className="field-help">
             Tap the devices on your shelf. They'll be added to the have list, and gift
@@ -343,7 +352,7 @@ export default function WelcomePage() {
       )}
 
       {step === 3 && (
-        <section className="card">
+        <section className="welcome-step">
           <h3>What is {childName} into?</h3>
           <p className="field-help">Pick as many as fit — these steer the gift ideas.</p>
           <div className="chip-row">
@@ -366,7 +375,7 @@ export default function WelcomePage() {
       )}
 
       {step === 4 && (
-        <section className="card">
+        <section className="welcome-step">
           <h3>Now the fun part — fill {childName}'s shelves</h3>
           <p className="field-help">
             Go platform by platform and tap everything already on the shelf. Anything
@@ -394,14 +403,40 @@ export default function WelcomePage() {
             to grandparents before the next occasion.
           </p>
           <p>
-            <button className="btn" onClick={finish}>Finish — to my library</button>
+            <button className="btn" onClick={() => setStep(5)}>Continue</button>{' '}
+            <button className="linklike" onClick={() => setStep(3)}>Back</button>
           </p>
         </section>
       )}
 
-      <p>
-        <button className="linklike" onClick={finish}>Skip the setup for now</button>
-      </p>
+      {step === 5 && (
+        <section className="welcome-step welcome-finale">
+          <img className="finale-mark" src="/logo.svg" alt="" />
+          <p className="field-help">
+            Your gift-giver link is <span className="share-url">{shareUrl}</span> — send it
+            to grandparents before the next occasion. They’ll see the wishlist, what{' '}
+            {childName} already has, and they can claim a gift so nobody else buys it twice.
+          </p>
+          <p className="finale-actions">
+            <button className="btn" onClick={() => finish(true)}>
+              Take the 60-second tour
+            </button>
+            <button className="btn btn-ghost" onClick={() => finish(false)}>
+              Skip to my library
+            </button>
+          </p>
+        </section>
+      )}
+
+
+        {step < 5 && (
+          <p>
+            <button className="linklike" onClick={() => finish(false)}>
+              Skip the setup for now
+            </button>
+          </p>
+        )}
+      </div>
     </main>
   )
 }

@@ -1,6 +1,7 @@
 import ItemTile from './ItemTile'
 import BundleNote from './BundleNote'
-import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
+import { PLATFORMS, platformLabel } from '../lib/platforms'
+import PlatformMark from './PlatformMark'
 
 // Read-only tile grid grouped by platform — used for the share page's
 // have list. (The wishlist needs claim buttons, so it has its own
@@ -19,7 +20,7 @@ export default function ItemTiles({ items, emptyText }) {
       {ordered.map((platform) => (
         <section key={platform} className="platform-group">
           <h3>
-            {platformEmoji(platform)} {platformLabel(platform)}
+            <PlatformMark platform={platform} /> {platformLabel(platform)}
           </h3>
           <div className="tile-grid">
             {byPlatform[platform].map((item) => (

@@ -3,7 +3,8 @@ import { supabase } from '../supabaseClient'
 import ItemTile from './ItemTile'
 import AmazonLink from './AmazonLink'
 import BundleNote from './BundleNote'
-import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
+import { PLATFORMS, platformLabel } from '../lib/platforms'
+import PlatformMark from './PlatformMark'
 import { formatISODate } from '../lib/occasions'
 
 // Wishlist tiles with anonymous claiming, for the public share page.
@@ -153,7 +154,7 @@ export default function ClaimableWishlist({ slug, items, onChanged, cartIds, onT
       {ordered.map((platform) => (
         <section key={platform} className="platform-group">
           <h3>
-            {platformEmoji(platform)} {platformLabel(platform)}
+            <PlatformMark platform={platform} /> {platformLabel(platform)}
           </h3>
           <div className="tile-grid">
             {byPlatform[platform].map((item) => (

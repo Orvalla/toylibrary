@@ -5,6 +5,7 @@ import ItemTile, { OwnedBadge } from './ItemTile'
 import AmazonLink from './AmazonLink'
 import GrowCatalog from './GrowCatalog'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
+import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
 import BundleNote from './BundleNote'
 import {
@@ -17,6 +18,7 @@ import {
   platformNoun,
 } from '../lib/bundles'
 import { sortBySuggestions } from '../lib/recommend'
+import { AGE_BANDS, inAgeBand } from '../lib/ages'
 
 // Browsable catalog of the well-known titles per platform. Parents tap
 // to add instead of typing; anything already owned carries the green
@@ -37,6 +39,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
   )
   const [category, setCategory] = useState('all')
+  const [ageBand, setAgeBand] = useState('all')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('popular')
   const [message, setMessage] = useState('')
@@ -249,6 +252,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     (c) =>
       (platform === 'all' || c.platform === platform) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
+      (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (!qWords.length || matchesQuery(c))
   )
 
@@ -329,7 +333,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
             className={platform === p.key ? 'active' : ''}
             onClick={() => setPlatform(p.key)}
           >
-            {p.emoji} {p.label}
+            <PlatformMark platform={p.key} /> {p.label}
           </button>
         ))}
       </div>
@@ -353,6 +357,21 @@ export default function CatalogBrowser({ devicesOnly = false }) {
           ))}
         </div>
       )}
+
+      <div className="tabs" aria-label="Age">
+        <button className={ageBand === 'all' ? 'active' : ''} onClick={() => setAgeBand('all')}>
+          All ages
+        </button>
+        {AGE_BANDS.map((band) => (
+          <button
+            key={band.key}
+            className={ageBand === band.key ? 'active' : ''}
+            onClick={() => setAgeBand(band.key)}
+          >
+            {band.label}
+          </button>
+        ))}
+      </div>
 
       <input
         className="filter-input"

@@ -1,6 +1,6 @@
 import AmazonLink from './AmazonLink'
 import { amazonUrlFor } from '../lib/amazon'
-import { platformEmoji } from '../lib/platforms'
+import PlatformMark from './PlatformMark'
 
 // The gift cart drawer on the public share page. It is a list,
 // not a checkout: each item keeps its own "Buy on Amazon"
@@ -37,7 +37,7 @@ export default function GiftCart({ entries, onRemove, onClose }) {
                     <img className="cart-thumb" src={entry.image_url} alt="" loading="lazy" />
                   ) : (
                     <span className="cart-thumb cart-thumb-art" aria-hidden="true">
-                      {platformEmoji(entry.platform)}
+                      <PlatformMark platform={entry.platform} />
                     </span>
                   )}
                   <div className="cart-row-body">

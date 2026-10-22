@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { platformEmoji, platformLabel } from '../lib/platforms'
+import { platformLabel } from '../lib/platforms'
+import PlatformMark from './PlatformMark'
 import { itemKey } from '../lib/bundles'
 import { bestMatch } from '../lib/photoMatch'
 import { fileToDataUrl } from '../lib/photoImage'
@@ -158,7 +159,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
   const chosenCount = rows.filter((r) => r.include && !r.owned).length
 
   return (
-    <section className="card scan-card">
+    <section className="card scan-card" data-tour="photo">
       <h3>📸 Add from a photo</h3>
       <p className="field-help">
         Photograph a shelf or a pile of Tonies — we’ll spot the story toys in it and add
@@ -233,7 +234,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, up
                   {img ? (
                     <img className="scan-thumb" src={img} alt="" />
                   ) : (
-                    <span className="scan-thumb scan-emoji">{platformEmoji(platform)}</span>
+                    <span className="scan-thumb scan-emoji"><PlatformMark platform={platform} /></span>
                   )}
                   <span className="scan-text">
                     <strong>{title}</strong>

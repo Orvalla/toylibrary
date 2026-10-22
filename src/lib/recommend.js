@@ -14,6 +14,7 @@
 
 import { INTERESTS, ageYears } from './onboarding'
 import { itemKey } from './bundles'
+import { ageFits } from './ages'
 
 function keywordHit(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -45,6 +46,10 @@ export function suggestionScore(entry, { child, ownedPlatforms, today = new Date
     if (interest.keywords.some((kw) => keywordHit(text, kw))) score += 3
   }
   if (entry.platform === 'books' && bookAgeFit(entry.details, age)) score += 2
+  // Catalog age guidance (migration 0016): the child's age
+  // inside the product's suggested range is a fit signal on
+  // every platform, not just books.
+  if (ageFits(entry, age)) score += 2
   if (entry.is_bundle) score += 1
   return score
 }
@@ -86,6 +91,7 @@ export function recommendForChild({
       if (interest.keywords.some((kw) => keywordHit(text, kw))) score += 3
     }
     if (entry.platform === 'books' && bookAgeFit(entry.details, age)) score += 2
+    if (ageFits(entry, age)) score += 2
     if (entry.is_bundle) score += 1
     scored.push({ entry, score })
   }

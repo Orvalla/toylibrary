@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { platformEmoji } from '../lib/platforms'
+import { ageLabelFor } from '../lib/ages'
 
 // One item as a tile: photo on top (or platform art when there's no
 // photo yet), title/details below, and whatever actions the parent
@@ -8,6 +9,13 @@ import { platformEmoji } from '../lib/platforms'
 export default function ItemTile({ item, badge, children }) {
   const [imgOk, setImgOk] = useState(true)
   const showImg = Boolean(item.image_url) && imgOk
+  // Ratings come from the catalog row (Open Library for books,
+  // the store's own JSON-LD for products — migration 0017).
+  // Both halves are required: a bare average with no count
+  // behind it isn't evidence of anything.
+  const rating = Number(item.rating)
+  const ratingCount = Number(item.rating_count)
+  const showRating = Number.isFinite(rating) && rating > 0 && Number.isFinite(ratingCount) && ratingCount > 0
 
   return (
     <article className={`tile tile-${item.platform}`}>
@@ -24,6 +32,15 @@ export default function ItemTile({ item, badge, children }) {
       <div className="tile-body">
         <strong>{item.title}</strong>
         {item.details && <div className="details">{item.details}</div>}
+        {showRating && (
+          <div
+            className="notes"
+            aria-label={`Rated ${rating.toFixed(1)} out of 5 from ${ratingCount} ratings`}
+          >
+            ★ {rating.toFixed(1)} ({ratingCount.toLocaleString('en-US')})
+          </div>
+        )}
+        {ageLabelFor(item) && <div className="notes">🎂 {ageLabelFor(item)}</div>}
         {item.notes && <div className="notes">{item.notes}</div>}
         {children}
       </div>

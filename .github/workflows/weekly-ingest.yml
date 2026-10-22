@@ -1,0 +1,30 @@
+name: Weekly catalog scan
+
+# Mondays: re-scan the tracked stores for net-new products,
+# attach age guidance, and top up product ratings. Delta-only —
+# the job never edits an existing catalog row (see
+# ingestor/weekly.mjs), so curated data is safe.
+on:
+  schedule:
+    - cron: '7 15 * * 1' # Mondays ~08:07 Pacific
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Dry run (scan and report, change nothing)'
+        type: boolean
+        default: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Scan stores, insert net-new, top up ratings
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WEEKLY_DRY: ${{ inputs.dry && '1' || '' }}
+        run: node ingestor/weekly.mjs

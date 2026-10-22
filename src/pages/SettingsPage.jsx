@@ -228,6 +228,18 @@ export default function SettingsPage() {
   if (loading) return <main className="page narrow"><p>Loading…</p></main>
   if (!profile) return <main className="page narrow"><p>We couldn't load your profile.</p></main>
 
+  async function toggleReminders(on) {
+    setProfile((p) => ({ ...p, occasion_reminders: on }))
+    const { error } = await supabase
+      .from('profiles')
+      .update({ occasion_reminders: on })
+      .eq('id', user.id)
+    if (error) {
+      setMessage(error.message)
+      setProfile((p) => ({ ...p, occasion_reminders: !on }))
+    }
+  }
+
   const shareUrl = `${window.location.origin}/s/${profile.share_slug}`
 
   return (
@@ -254,7 +266,8 @@ export default function SettingsPage() {
           everyone. Removing a child moves their toys to Family; nothing
           is ever deleted. Birthday, gender and interests steer the gift
           ideas on your library page — or{' '}
-          <Link to="/welcome">run the setup questions</Link> to do it the fun way.
+          <Link to="/welcome">run the setup questions</Link> to do it the fun way, or{' '}
+          <Link to="/dashboard?tour=1">take the guided tour</Link>.
         </p>
         {kids.length === 0 && <p className="notes">No children yet — add the first one below.</p>}
         <ul className="item-list">
@@ -458,6 +471,19 @@ export default function SettingsPage() {
             Regenerate share link
           </button>
         )}
+        <h4>Occasion reminders</h4>
+        <p>
+          Before a birthday or holiday on a child's list, we'll email you the
+          wishlist link so you can forward it to family before they shop.
+        </p>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={profile.occasion_reminders !== false}
+            onChange={(e) => toggleReminders(e.target.checked)}
+          />{' '}
+          Email me before gift occasions
+        </label>
       </section>
 
       {message && <p className="notice">{message}</p>}

@@ -1,0 +1,25 @@
+name: Occasion reminders
+
+# Daily nudge: asks the send-occasion-reminders Edge Function
+# to email owners whose children's gift occasions fall within
+# 14 days. The function dedupes per occurrence, so a repeat
+# run is harmless. Dormant until RESEND_API_KEY is set as a
+# Supabase function secret.
+on:
+  schedule:
+    - cron: '17 14 * * *' # ~06:17-07:17 Pacific, daily
+  workflow_dispatch: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reminder run
+        env:
+          CRON_SECRET: ${{ secrets.REMINDER_CRON_SECRET }}
+        run: |
+          curl -sS -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H 'Content-Type: application/json' \
+            -d '{}' \
+            https://seskzmdgazqfuryrtgmg.supabase.co/functions/v1/send-occasion-reminders
