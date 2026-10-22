@@ -45,8 +45,11 @@ values
    'https://cdn.shopify.com/s/files/1/0644/5426/2826/files/FAH-top-01_983946e7-179b-46f8-b521-7d26c8ce5526.jpg?v=1741198514',
    'https://lunii.com/en-us/products/ma-fabrique-a-histoires-bilingue', 'device', 1),
   ('projector', 'Little Tikes Story Dream Machine', 'Story Dream Machine projector',
-   'https://cdn.shopify.com/s/files/1/0539/4402/5275/files/image_65.png?v=1764098598',
-   'https://www.littletikes.com/products/story-dream-machine™-dr-seuss-starter-pack', 'device', 1),
+   -- Plain-edition photo (Fairy Tale box), NOT the Dr. Seuss Starter
+   -- Pack shot this originally seeded — corrected live 2026-10-21 at
+   -- the owner's request; keep the two in sync.
+   'https://www.mumzworld.com/media/catalog/product/cache/abbe87547126054a260ab1dcf2fa50de/816-LIT_174681-1.jpg',
+   'https://www.mumzworld.com/en/little-tikes-story-dream-machine-electronic-learning-toy-multicolor-816-lit-174681', 'device', 1),
   ('projector', 'Moonlite Storytime Projector', 'Moonlite projector (clips to a phone)',
    'https://cdn.shopify.com/s/files/1/1723/9779/files/projector_box_threelittlepigs_disc_v2.webp?v=1764176356',
    'https://www.mymoonlite.com/products/the-three-little-pigs-story-with-moonlite-storytime-projector', 'device', 2),
