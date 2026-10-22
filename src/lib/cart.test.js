@@ -51,17 +51,17 @@ describe('cart entries', () => {
 describe('cart storage', () => {
   it('round-trips through storage under a per-slug key', () => {
     const storage = memoryStorage()
-    saveCart('millers', addToCart([], item), storage)
-    expect(loadCart('millers', storage)).toHaveLength(1)
+    saveCart('fam-x', addToCart([], item), storage)
+    expect(loadCart('fam-x', storage)).toHaveLength(1)
     expect(loadCart('someone-else', storage)).toEqual([])
   })
 
   it('treats missing or corrupt storage as an empty cart', () => {
     const storage = memoryStorage()
-    expect(loadCart('millers', storage)).toEqual([])
-    storage.setItem('giftcart:millers', '{not json')
-    expect(loadCart('millers', storage)).toEqual([])
-    storage.setItem('giftcart:millers', JSON.stringify([{ no_id: true }, null, 'junk']))
-    expect(loadCart('millers', storage)).toEqual([])
+    expect(loadCart('fam-x', storage)).toEqual([])
+    storage.setItem('giftcart:fam-x', '{not json')
+    expect(loadCart('fam-x', storage)).toEqual([])
+    storage.setItem('giftcart:fam-x', JSON.stringify([{ no_id: true }, null, 'junk']))
+    expect(loadCart('fam-x', storage)).toEqual([])
   })
 })

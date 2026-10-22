@@ -30,8 +30,8 @@ server code, and all access control still lives in the database:
   "Family" bucket for items with no single owner). Each child has their
   own have-list and wishlist, the dashboard filters by child, the
   catalog's owned/wishlist badges are per child, and the share page
-  groups everything under "For Emma"-style headings. Duplicate
-  protection is per child — Alex owning Bluey doesn't block Noah's copy.
+  groups everything under "For Sam"-style headings. Duplicate
+  protection is per child — Sam owning Bluey doesn't block Noah's copy.
   Deleting a child never deletes toys: their items move to Family.
 - A "Mark as received" action moves a wishlist item onto the have-list
   after a holiday, so it blocks duplicates from then on.
@@ -151,12 +151,12 @@ npm install && npm run dev
 The seed creates a demo family so you can click through immediately:
 
 - Login: `demo@example.com` / `demo-password`
-- Two demo children (Alex and Noah) with items split between them and
-  Family, so the per-child grouping shows on both pages. Alex also
+- Two demo children (Sam and Noah) with items split between them and
+  Family, so the per-child grouping shows on both pages. Sam also
   has a birthday occasion (Nov 3), which the share page highlights.
 - Share page: `/s/fam-demo` (includes one pre-claimed wishlist item;
   its undo token is the literal string `demo-token`, and the claim
-  expires the day after Alex's birthday, 2026-11-04)
+  expires the day after Sam's birthday, 2026-11-04)
 - Local Supabase values for `.env.local` are printed by `supabase start`
   (API URL `http://localhost:54321` plus the local anon key).
 

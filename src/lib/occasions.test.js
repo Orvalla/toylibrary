@@ -40,20 +40,20 @@ describe('daysUntil', () => {
 })
 
 describe('nearestOccasion', () => {
-  const alexs = [
+  const sams = [
     { label: 'Christmas', month: 12, day: 25 },
     { label: 'Birthday', month: 11, day: 3 },
   ]
 
   it('picks the soonest of several occasions', () => {
-    const best = nearestOccasion(alexs, d(2026, 10, 21))
+    const best = nearestOccasion(sams, d(2026, 10, 21))
     expect(best.label).toBe('Birthday')
     expect(ymd(best.date)).toEqual([2026, 11, 3])
     expect(best.daysUntil).toBe(13)
   })
 
   it('wraps the year when choosing (all dates passed → next year)', () => {
-    const best = nearestOccasion(alexs, d(2026, 12, 26))
+    const best = nearestOccasion(sams, d(2026, 12, 26))
     expect(best.label).toBe('Birthday')
     expect(ymd(best.date)).toEqual([2027, 11, 3])
   })
@@ -87,20 +87,20 @@ describe('claimExpiryFor', () => {
 })
 
 describe('formatOccasionLine', () => {
-  const alex= { childName: 'Alex', label: 'Birthday', month: 11, day: 3 }
+  const sam = { childName: 'Sam', label: 'Birthday', month: 11, day: 3 }
 
   it('formats "Name\'s label · Mon D · in N days"', () => {
-    expect(formatOccasionLine(alex, d(2026, 10, 21))).toBe("Alex's birthday · Nov 3 · in 13 days")
+    expect(formatOccasionLine(sam, d(2026, 10, 21))).toBe("Sam's birthday · Nov 3 · in 13 days")
   })
 
   it('says today and tomorrow instead of counts', () => {
-    expect(formatOccasionLine(alex, d(2026, 11, 3))).toBe("Alex's birthday · Nov 3 · today")
-    expect(formatOccasionLine(alex, d(2026, 11, 2))).toBe("Alex's birthday · Nov 3 · tomorrow")
+    expect(formatOccasionLine(sam, d(2026, 11, 3))).toBe("Sam's birthday · Nov 3 · today")
+    expect(formatOccasionLine(sam, d(2026, 11, 2))).toBe("Sam's birthday · Nov 3 · tomorrow")
   })
 
   it('works from the share RPC shape (ISO date + days_until)', () => {
-    const rpc = { child_name: 'Alex', label: 'Birthday', date: '2026-11-03', days_until: 13 }
-    expect(formatOccasionLine(rpc, d(2026, 10, 21))).toBe("Alex's birthday · Nov 3 · in 13 days")
+    const rpc = { child_name: 'Sam', label: 'Birthday', date: '2026-11-03', days_until: 13 }
+    expect(formatOccasionLine(rpc, d(2026, 10, 21))).toBe("Sam's birthday · Nov 3 · in 13 days")
   })
 
   it('omits the name when there is no child (family occasion)', () => {

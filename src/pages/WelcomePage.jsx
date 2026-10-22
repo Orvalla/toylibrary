@@ -255,7 +255,7 @@ export default function WelcomePage() {
           <div className="form">
             <label>
               Name
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Alex" maxLength={60} />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sam" maxLength={60} />
             </label>
             <label>
               Birthday

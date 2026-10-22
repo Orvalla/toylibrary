@@ -98,7 +98,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   }, [platform])
 
   // Ownership is per child: a title only counts as owned (or wished)
-  // for the child currently selected above — Alex having Bluey doesn't
+  // for the child currently selected above — Sam having Bluey doesn't
   // mean Noah does.
   const key = (childId, platformKey, title) =>
     `${childId ?? ''}|${platformKey}|${title.trim().toLowerCase()}`

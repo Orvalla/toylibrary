@@ -8,7 +8,7 @@ describe('normalizeShareSlug', () => {
   })
 
   it('strips punctuation and collapses repeated hyphens', () => {
-    expect(normalizeShareSlug("Alex's 5th Birthday!!")).toBe('alexs-5th-birthday')
+    expect(normalizeShareSlug("Sam's 5th Birthday!!")).toBe('sams-5th-birthday')
     expect(normalizeShareSlug('fam--ily---fun')).toBe('fam-ily-fun')
     expect(normalizeShareSlug('  --hello--  ')).toBe('hello')
   })
@@ -27,7 +27,7 @@ describe('normalizeShareSlug', () => {
 describe('validateShareSlug', () => {
   it('accepts ordinary slugs', () => {
     expect(validateShareSlug('the-millers')).toBeNull()
-    expect(validateShareSlug('alex-5')).toBeNull()
+    expect(validateShareSlug('sam-5')).toBeNull()
     expect(validateShareSlug('abc')).toBeNull()
   })
 

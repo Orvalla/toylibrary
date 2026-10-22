@@ -89,7 +89,7 @@ export function SignupPage() {
           <input
             value={childName}
             onChange={(e) => setChildName(e.target.value)}
-            placeholder="Shown on your share page, e.g. “Alex's library”"
+            placeholder="Shown on your share page, e.g. “Sam's library”"
           />
         </label>
         <label>

@@ -77,7 +77,7 @@ export function formatISODate(iso) {
   return formatMonthDay(Number(m[2]), Number(m[3]))
 }
 
-// "Alex's birthday" from { childName: 'Alex', label: 'Birthday' }.
+// "Sam's birthday" from { childName: 'Sam', label: 'Birthday' }.
 // Without a child name it's just the label ("Christmas").
 export function occasionTitle(occ) {
   const name = occ?.childName ?? occ?.child_name ?? occ?.name
@@ -93,7 +93,7 @@ export function occasionWhen(days) {
   return `in ${days} days`
 }
 
-// "Alex's birthday · Nov 3 · in 13 days"
+// "Sam's birthday · Nov 3 · in 13 days"
 // Accepts an occasion carrying a computed `date` (Date or ISO string)
 // or raw { month, day }, and a precomputed daysUntil/days_until
 // (the share RPC sends both) or computes them from `from`.

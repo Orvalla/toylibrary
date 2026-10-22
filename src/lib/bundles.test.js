@@ -11,14 +11,14 @@ import {
 
 describe('bundleHeadline', () => {
   it('names the child and uses the platform noun', () => {
-    expect(bundleHeadline({ name: 'Alex', owned: 3, total: 4, platform: 'tonies' })).toBe(
-      'Alex already has 3 of the 4 figures in this collection'
+    expect(bundleHeadline({ name: 'Sam', owned: 3, total: 4, platform: 'tonies' })).toBe(
+      'Sam already has 3 of the 4 figures in this collection'
     )
     expect(bundleHeadline({ name: 'Noah', owned: 0, total: 6, platform: 'books' })).toBe(
       'Noah already has 0 of the 6 books in this collection'
     )
-    expect(bundleHeadline({ name: 'Alex', owned: 2, total: 5, platform: 'yoto' })).toBe(
-      'Alex already has 2 of the 5 cards in this collection'
+    expect(bundleHeadline({ name: 'Sam', owned: 2, total: 5, platform: 'yoto' })).toBe(
+      'Sam already has 2 of the 5 cards in this collection'
     )
   })
 

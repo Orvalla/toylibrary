@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { childNameFor, groupByChild } from './children'
 
 const KIDS = [
-  { id: 'alex', name: 'Alex' },
+  { id: 'sam', name: 'Sam' },
   { id: 'noah', name: 'Noah' },
 ]
 const item = (id, child_id) => ({ id, child_id, title: id })
@@ -21,16 +21,16 @@ describe('childNameFor', () => {
 
 describe('groupByChild', () => {
   it('groups in the given child order with Family last', () => {
-    const items = [item('f1', null), item('n1', 'noah'), item('e1', 'alex'), item('e2', 'alex')]
+    const items = [item('f1', null), item('n1', 'noah'), item('e1', 'sam'), item('e2', 'sam')]
     const sections = groupByChild(items, KIDS)
-    expect(sections.map((s) => s.childName)).toEqual(['Alex', 'Noah', 'Family'])
+    expect(sections.map((s) => s.childName)).toEqual(['Sam', 'Noah', 'Family'])
     expect(sections[0].items.map((i) => i.id)).toEqual(['e1', 'e2'])
     expect(sections[2].childId).toBeNull()
   })
 
   it('omits the Family section when nothing is shared', () => {
-    const sections = groupByChild([item('e1', 'alex')], KIDS)
-    expect(sections.map((s) => s.childName)).toEqual(['Alex'])
+    const sections = groupByChild([item('e1', 'sam')], KIDS)
+    expect(sections.map((s) => s.childName)).toEqual(['Sam'])
   })
 
   it('omits children with no items, and folds orphaned items into Family', () => {

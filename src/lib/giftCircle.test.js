@@ -49,17 +49,17 @@ describe('giftMessage', () => {
       relativeName: 'Aunt Jen',
       ownerName: 'Morgan',
       kidsLabel: 'Sam',
-      link: 'https://toylibrary.store/s/millers',
+      link: 'https://x.test/s/sam',
     })
     expect(msg).toContain('Hi Aunt Jen!')
     expect(msg).toContain("It's Morgan.")
     expect(msg).toContain("Sam's wishlist")
-    expect(msg).toContain('https://toylibrary.store/s/millers')
+    expect(msg).toContain('https://x.test/s/sam')
   })
 
   it('still reads fine without names', () => {
-    const msg = giftMessage({ kidsLabel: 'Sam and Alex', link: 'https://x.test/s/f' })
+    const msg = giftMessage({ kidsLabel: 'Sam and Sam', link: 'https://x.test/s/f' })
     expect(msg.startsWith('Hi!')).toBe(true)
-    expect(msg).toContain("Sam and Alex's wishlist")
+    expect(msg).toContain("Sam and Sam's wishlist")
   })
 })
