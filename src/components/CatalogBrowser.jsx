@@ -41,8 +41,30 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const [{ data: cat }, { data: items }, { data: childRows }, { data: bundleRows }] = await Promise.all([
-      supabase.from('catalog_items').select('*').order('sort_order').order('title'),
+    // The catalog fetch MUST page: PostgREST caps a response at
+    // 1,000 rows, and an unpaged select silently delivered only
+    // the first 1,000 — 16 of 481 Tonies, 2 of 1,570 Yoto cards —
+    // because the platforms' sort_order ranges interleave. The
+    // id tiebreaker keeps the page order total so rows can't
+    // slip between pages. (The dashboard's index fetch paginates
+    // the same way; this one was missed.)
+    const fetchCatalog = async () => {
+      const rows = []
+      for (let from = 0; ; from += 1000) {
+        const { data } = await supabase
+          .from('catalog_items')
+          .select('*')
+          .order('sort_order')
+          .order('title')
+          .order('id')
+          .range(from, from + 999)
+        rows.push(...(data ?? []))
+        if (!data || data.length < 1000) break
+      }
+      return rows
+    }
+    const [cat, { data: items }, { data: childRows }, { data: bundleRows }] = await Promise.all([
+      fetchCatalog(),
       supabase.from('items').select('id, platform, title, list_type, child_id').eq('owner_id', user.id),
       supabase.from('children').select('*').eq('owner_id', user.id).order('sort_order').order('name'),
       supabase.from('bundle_contents').select('*'),

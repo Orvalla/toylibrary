@@ -25,6 +25,7 @@ function fakeQuery(table) {
   const q = {
     select: () => q,
     order: () => q,
+    range: () => q,
     eq: () => q,
     then(res, rej) {
       const data = table === 'catalog_items' ? CATALOG : table === 'children' ? KIDS : MINE
