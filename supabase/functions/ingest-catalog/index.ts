@@ -11,8 +11,9 @@
 //                                   and add what it points at: one
 //                                   product page → that product; a
 //                                   collection page → everything in
-//                                   it, filtered by the store's own
-//                                   content rules (see extract.js);
+//                                   it (no content filtering — the
+//                                   parent asked for that page; see
+//                                   extract.js "product facts");
 //                                   any other listing page (JSON-LD
 //                                   ItemList, or a page of product
 //                                   links) → everything listed on
@@ -35,6 +36,7 @@ import {
   candidateKey,
   cleanText,
   collectionPageUrl,
+  extractAggregateRating,
   extractAllFromJsonLd,
   extractFromJsonLd,
   extractFromOpenGraph,
@@ -46,6 +48,7 @@ import {
   parseShopifyPath,
   planCollectionImport,
   planRowImport,
+  platformForProduct,
   platformForUrl,
 } from './extract.js'
 
@@ -78,6 +81,17 @@ const PLATFORM_KEYS = [
   'storypod',
   'osmo',
   'lunii',
+  'haba',
+  'magnatiles',
+  'smartgames',
+  'lovevery',
+  'melissaanddoug',
+  'littlepeople',
+  'brio',
+  'fatbrain',
+  'lakeshore',
+  'learningresources',
+  'littletikes',
 ]
 
 // The stores live search can ask. All are Shopify stores with a
@@ -89,7 +103,7 @@ const STORES = [
   { id: 'yoto', origin: 'https://us.yotoplay.com', platform: 'yoto' },
   { id: 'storypod', origin: 'https://storypod.com', platform: 'storypod' },
   { id: 'osmo', origin: 'https://www.playosmo.com', platform: 'osmo' },
-  { id: 'littletikes', origin: 'https://www.littletikes.com', platform: 'projector' },
+  { id: 'littletikes', origin: 'https://www.littletikes.com', platform: 'littletikes' },
   { id: 'moonlite', origin: 'https://www.mymoonlite.com', platform: 'projector' },
 ]
 
@@ -174,7 +188,17 @@ async function fetchTextCapped(
 async function upsertCatalogItem(
   admin: ReturnType<typeof createClient>,
   userId: string,
-  row: { platform: string; title: string; details: string; image_url: string | null; source_url: string | null },
+  row: {
+    platform: string
+    title: string
+    details: string
+    image_url: string | null
+    source_url: string | null
+    age_min_years?: number | null
+    age_max_years?: number | null
+    rating?: number | null
+    rating_count?: number | null
+  },
 ): Promise<{ status: 'added' | 'exists'; item: Record<string, unknown> }> {
   const { data: existing, error: findError } = await admin
     .from('catalog_items')
@@ -195,6 +219,10 @@ async function upsertCatalogItem(
         // catalog_items.image_url is NOT NULL; '' is its "no photo"
         // value and the tiles fall back to platform art for it.
         image_url: row.image_url ?? '',
+        age_min_years: row.age_min_years ?? null,
+        age_max_years: row.age_max_years ?? null,
+        rating: row.rating ?? null,
+        rating_count: row.rating_count ?? null,
         source_url: row.source_url,
         added_by: userId,
       },
@@ -273,6 +301,10 @@ async function insertCatalogRows(
       title: row.title.slice(0, TITLE_CAP),
       details: row.details ?? '',
       image_url: row.image_url ?? '',
+      age_min_years: row.age_min_years ?? null,
+      age_max_years: row.age_max_years ?? null,
+      rating: row.rating ?? null,
+      rating_count: row.rating_count ?? null,
       source_url: row.source_url ?? sourceUrl,
       added_by: userId,
     }))
@@ -296,6 +328,35 @@ async function insertCatalogRows(
   return inserted.length
 }
 
+// Ratings live on product pages, not in store feeds — a bulk
+// import only goes back for them when the haul is small enough
+// that a page fetch per item stays cheap (batched, best-effort:
+// a page that won't talk just leaves the rating null, which the
+// site already treats as "no rating to show").
+const RATING_ENRICH_CAP = 12
+const RATING_ENRICH_BATCH = 6
+
+async function enrichRatings(rows: any[]): Promise<void> {
+  const targets = rows.filter((r) => r.rating == null && r.source_url)
+  if (targets.length === 0 || rows.length > RATING_ENRICH_CAP) return
+  for (let i = 0; i < targets.length; i += RATING_ENRICH_BATCH) {
+    await Promise.all(
+      targets.slice(i, i + RATING_ENRICH_BATCH).map(async (row) => {
+        try {
+          const { text: html } = await fetchTextCapped(row.source_url)
+          const agg = extractAggregateRating(html)
+          if (agg) {
+            row.rating = agg.rating
+            row.rating_count = agg.rating_count
+          }
+        } catch {
+          // Best-effort only.
+        }
+      }),
+    )
+  }
+}
+
 async function insertPlannedCollection(
   admin: ReturnType<typeof createClient>,
   userId: string,
@@ -306,6 +367,7 @@ async function insertPlannedCollection(
 ): Promise<Record<string, unknown>> {
   const existingTitles = await loadExistingTitles(admin, platform)
   const plan = planCollectionImport(products, existingTitles, platform, origin)
+  await enrichRatings(plan.toAdd)
   const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
   return {
     status: 'collection',
@@ -381,7 +443,48 @@ async function importCollection(
       "Couldn't read that collection — check the link, or try a single product page.",
     )
   }
-  return insertPlannedCollection(admin, userId, products, platform, origin, sourceUrl)
+  // One pasted collection can span two shelves (Little Tikes:
+  // its own platform, with the Dream Machine line filed under
+  // projector) — plan and insert per resolved platform, then
+  // merge the tallies; the reported platform is the biggest group.
+  const groups = new Map<string, unknown[]>()
+  for (const product of products) {
+    const p = platformForProduct(platform, product)
+    const group = groups.get(p) ?? []
+    group.push(product)
+    groups.set(p, group)
+  }
+  if (groups.size === 1) {
+    return insertPlannedCollection(admin, userId, products, platform, origin, sourceUrl)
+  }
+  let merged: Record<string, unknown> | null = null
+  let biggest = -1
+  for (const [groupPlatform, groupProducts] of groups) {
+    const result = await insertPlannedCollection(
+      admin,
+      userId,
+      groupProducts,
+      groupPlatform,
+      origin,
+      sourceUrl,
+    )
+    if (!merged) {
+      merged = { ...result }
+    } else {
+      merged.total_found =
+        (merged.total_found as number) + (result.total_found as number)
+      merged.added = (merged.added as number) + (result.added as number)
+      merged.already_present =
+        (merged.already_present as number) + (result.already_present as number)
+      merged.skipped_filtered =
+        (merged.skipped_filtered as number) + (result.skipped_filtered as number)
+    }
+    if (groupProducts.length > biggest) {
+      biggest = groupProducts.length
+      merged.platform = groupPlatform
+    }
+  }
+  return merged
 }
 
 // Collection-shaped link on a store with no products.json feed:
@@ -415,6 +518,8 @@ async function importItemListCollection(
     tags: [],
     handle: null,
     images: item.image_url ? [{ src: item.image_url }] : [],
+    rating: item.rating ?? null,
+    rating_count: item.rating_count ?? null,
   }))
   return insertPlannedCollection(admin, userId, products, platform, origin, sourceUrl)
 }
@@ -453,10 +558,13 @@ async function fetchProductRow(link: string, platform: string): Promise<any | nu
   const { text: html } = await fetchTextCapped(link)
   const extracted = extractFromJsonLd(html) ?? extractFromOpenGraph(html)
   if (!extracted?.title) return null
+  const agg = extractAggregateRating(html)
   return {
     title: extracted.title,
     details: extracted.details ?? '',
     image_url: extracted.image_url ?? '',
+    rating: agg?.rating ?? null,
+    rating_count: agg?.rating_count ?? null,
     source_url: link,
   }
 }
@@ -533,6 +641,22 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
         const { text } = await fetchTextCapped(jsonUrl)
         const row = normalizeShopifyProduct(JSON.parse(text), platform)
         if (row?.title) {
+          row.platform = platformForProduct(platform, row)
+          // The feed publishes no rating; the product page's own
+          // structured data may. Best-effort — the product is
+          // added either way.
+          if (row.rating == null) {
+            try {
+              const { text: pageHtml } = await fetchTextCapped(url)
+              const agg = extractAggregateRating(pageHtml)
+              if (agg) {
+                row.rating = agg.rating
+                row.rating_count = agg.rating_count
+              }
+            } catch {
+              // Keep the product; skip the rating.
+            }
+          }
           return json(
             await upsertCatalogItem(admin, userId, {
               ...row,
@@ -602,12 +726,15 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
       "We couldn't find a product on that page. Try a link that goes straight to one product.",
     )
   }
+  const agg = extractAggregateRating(html)
   return json(
     await upsertCatalogItem(admin, userId, {
-      platform,
+      platform: platformForProduct(platform, extracted.title),
       title: extracted.title.slice(0, TITLE_CAP),
       details: extracted.details ?? '',
       image_url: extracted.image_url,
+      rating: extracted.rating ?? agg?.rating ?? null,
+      rating_count: extracted.rating_count ?? agg?.rating_count ?? null,
       source_url: url,
     }),
   )
@@ -636,10 +763,10 @@ async function handleSearch(body: any) {
         return products
           .map((p: unknown) => normalizeSuggestResult(store, p))
           .filter(Boolean)
-          // Little Tikes is a general toy store sharing the projector
-          // platform — only its Dream Machine line belongs here (the
-          // same title rule the ingestor applies to that feed).
-          .filter((c: any) => store.id !== 'littletikes' || /dream machine/i.test(c.title))
+          // Little Tikes spans two shelves: its Dream Machine
+          // line is projector content, everything else is the
+          // Little Tikes platform.
+          .map((c: any) => ({ ...c, platform: platformForProduct(store.platform, c.title) }))
       } catch {
         return [] // one store being down shouldn't sink the search
       }
@@ -680,7 +807,7 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
 
   return json(
     await upsertCatalogItem(admin, userId, {
-      platform: c.platform,
+      platform: platformForProduct(c.platform, title),
       title,
       details: cleanText(typeof c.details === 'string' ? c.details : '').slice(0, TITLE_CAP),
       image_url: optionalUrl(c.image_url),

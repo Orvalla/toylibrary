@@ -12,8 +12,9 @@ import {
   normalizeShopifyProduct,
   normalizeSuggestResult,
   parseShopifyPath,
-  passesStoreFilter,
+  extractAgeRange,
   planCollectionImport,
+  platformForProduct,
   planRowImport,
   platformForUrl,
 } from '../../supabase/functions/ingest-catalog/extract.js'
@@ -28,8 +29,8 @@ describe('platformForUrl', () => {
     expect(platformForUrl('https://us.yotoplay.com/products/the-gruffalo')).toBe('yoto')
     expect(platformForUrl('https://storypod.com/products/some-craftie')).toBe('storypod')
     expect(platformForUrl('https://www.playosmo.com/products/detective-agency')).toBe('osmo')
-    expect(platformForUrl('https://www.littletikes.com/products/story-dream-machine')).toBe(
-      'projector'
+    expect(platformForUrl('https://www.littletikes.com/products/cozy-coupe')).toBe(
+      'littletikes'
     )
     expect(platformForUrl('https://www.mymoonlite.com/products/biscuit')).toBe('projector')
   })
@@ -101,6 +102,8 @@ describe('extractFromJsonLd', () => {
       title: 'Bluey',
       image_url: 'https://cdn.example.com/bluey.png',
       details: 'Tonies',
+      rating: null,
+      rating_count: null,
     })
   })
 
@@ -115,6 +118,8 @@ describe('extractFromJsonLd', () => {
       title: 'The Gruffalo',
       image_url: 'https://cdn.example.com/g1.jpg',
       details: 'Yoto Cards',
+      rating: null,
+      rating_count: null,
     })
   })
 
@@ -131,6 +136,8 @@ describe('extractFromJsonLd', () => {
       title: 'Detective Agency',
       image_url: 'https://cdn.example.com/osmo.jpg',
       details: 'Osmo',
+      rating: null,
+      rating_count: null,
     })
   })
 
@@ -150,6 +157,8 @@ describe('extractFromJsonLd', () => {
       title: 'Mystery Toy',
       image_url: null,
       details: '',
+      rating: null,
+      rating_count: null,
     })
   })
 })
@@ -274,6 +283,10 @@ describe('normalizeShopifyProduct', () => {
       title: 'Bluey',
       details: 'Tonie figure',
       image_url: 'https://cdn.shopify.com/bluey.png',
+      age_min_years: null,
+      age_max_years: null,
+      rating: null,
+      rating_count: null,
     })
   })
 
@@ -288,6 +301,10 @@ describe('normalizeShopifyProduct', () => {
       title: 'LeapStart: 3D',
       details: 'Activity Book',
       image_url: 'https://cdn.example.com/leap.jpg',
+      age_min_years: null,
+      age_max_years: null,
+      rating: null,
+      rating_count: null,
     })
   })
 
@@ -297,6 +314,10 @@ describe('normalizeShopifyProduct', () => {
       title: 'Plain Thing',
       details: '',
       image_url: null,
+      age_min_years: null,
+      age_max_years: null,
+      rating: null,
+      rating_count: null,
     })
   })
 
@@ -361,8 +382,8 @@ describe('extractAllFromJsonLd', () => {
       ]}
       </script>`
     expect(extractAllFromJsonLd(html)).toEqual([
-      { title: 'First Toy', image_url: 'https://cdn.example.com/1.jpg', details: 'Acme' },
-      { title: 'Second Toy', image_url: 'https://cdn.example.com/2.jpg', details: '' },
+      { title: 'First Toy', image_url: 'https://cdn.example.com/1.jpg', details: 'Acme', rating: null, rating_count: null },
+      { title: 'Second Toy', image_url: 'https://cdn.example.com/2.jpg', details: '', rating: null, rating_count: null },
     ])
   })
 
@@ -422,115 +443,10 @@ describe('collectionPageUrl', () => {
 // Fixtures below mirror ingestor/lib/ingestor.test.mjs — the same
 // products, judged by the ported rules, must get the same verdicts
 // the ingestor gives them.
-describe('passesStoreFilter', () => {
-  const base = { images: [{ src: 'https://cdn.shopify.com/x.jpg' }], handle: 'x', tags: [] }
-
-  it('tonies: content types in, hardware / packs / bundles out', () => {
-    expect(
-      passesStoreFilter('tonies', {
-        ...base,
-        product_type: 'Tonie',
-        title: 'Disney Sofia the First: Royal Magic Tonie',
-      })
-    ).toBe(true)
-    expect(passesStoreFilter('tonies', { ...base, product_type: 'Audiobook', title: 'Goosebumps' })).toBe(true)
-    expect(passesStoreFilter('tonies', { ...base, product_type: 'Toniebox', title: 'Toniebox 2' })).toBe(false)
-    expect(passesStoreFilter('tonies', { ...base, product_type: 'Bundle', title: 'Starter Set' })).toBe(false)
-    expect(
-      passesStoreFilter('tonies', {
-        ...base,
-        product_type: 'Audiobook',
-        title: 'Goosebumps Book Tonies - 4 Pack',
-      })
-    ).toBe(false)
-    expect(passesStoreFilter('tonies', { ...base, product_type: 'Tonie', title: 'Tonies Bundle' })).toBe(false)
-  })
-
-  it('yoto: cards and packs in, players / digital out', () => {
-    expect(passesStoreFilter('yoto', { ...base, product_type: 'single-card', title: 'The Gruffalo' })).toBe(true)
-    expect(passesStoreFilter('yoto', { ...base, product_type: 'bundle', title: 'Daniel & Friends Pack' })).toBe(true)
-    expect(passesStoreFilter('yoto', { ...base, product_type: 'soft-bundle', title: 'Pixar Collection' })).toBe(true)
-    expect(passesStoreFilter('yoto', { ...base, product_type: 'content-bundle', title: 'Yoto Mini + Bundle' })).toBe(false)
-    expect(passesStoreFilter('yoto', { ...base, product_type: 'player-unit', title: 'Yoto Player' })).toBe(false)
-    expect(
-      passesStoreFilter('yoto', {
-        ...base,
-        product_type: 'single-card',
-        title: 'The Legend of Sleepy Hollow (Digital)',
-        tags: ['flag:Digital Card'],
-      })
-    ).toBe(false)
-    expect(
-      passesStoreFilter('yoto', { ...base, product_type: 'single-card', title: 'Voyager en musique (Digital)' })
-    ).toBe(false)
-    // Tags also arrive as one comma-joined string on some payloads.
-    expect(
-      passesStoreFilter('yoto', {
-        ...base,
-        product_type: 'single-card',
-        title: 'A Card',
-        tags: 'media:physical, flag:Digital Card',
-      })
-    ).toBe(false)
-  })
-
-  it('storypod: content line in, sleeves / plush / device listings out', () => {
-    expect(passesStoreFilter('storypod', { ...base, product_type: 'Crafties', title: 'Riley Raccoon' })).toBe(true)
-    expect(passesStoreFilter('storypod', { ...base, product_type: '', title: 'Recordable Token' })).toBe(true)
-    expect(passesStoreFilter('storypod', { ...base, product_type: 'Sleeves', title: 'Teal Sleeve' })).toBe(false)
-    expect(passesStoreFilter('storypod', { ...base, product_type: 'Plush', title: 'Snuggly Sounds Fox' })).toBe(false)
-    expect(passesStoreFilter('storypod', { ...base, product_type: '', title: 'The Eddi System' })).toBe(false)
-    expect(passesStoreFilter('storypod', { ...base, product_type: '', title: 'Storypod Charging Cable' })).toBe(false)
-  })
-
-  it('osmo: standalone games in, kits / hardware / bundles out', () => {
-    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Detective Agency' })).toBe(true)
-    expect(passesStoreFilter('osmo', { ...base, product_type: 'game', title: 'Little Genius Costume Pieces' })).toBe(true)
-    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Math Wizard and the Magical Workshop' })).toBe(true)
-    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Genius Starter Kit - iPad' })).toBe(false)
-    expect(passesStoreFilter('osmo', { ...base, product_type: 'game', title: 'Pretend Play Bundle' })).toBe(false)
-    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Math Wizard Series' })).toBe(false)
-    expect(passesStoreFilter('osmo', { ...base, product_type: '', title: 'Osmo Large Carrying Case' })).toBe(false)
-  })
-
-  it('projector: Moonlite reels and the Dream Machine line, told apart', () => {
-    expect(
-      passesStoreFilter('projector', { ...base, product_type: 'Single Story', title: 'The Very Hungry Caterpillar' })
-    ).toBe(true)
-    expect(passesStoreFilter('projector', { ...base, product_type: 'Single Story', title: 'Story Reel 3 Pack' })).toBe(false)
-    expect(passesStoreFilter('projector', { ...base, product_type: 'Starter Pack', title: 'Starter Pack' })).toBe(false)
-    expect(
-      passesStoreFilter('projector', {
-        ...base,
-        product_type: 'preschool toys',
-        title: 'Story Dream Machine™ Random House The Berenstain Bears™ - 3 Pack Collection',
-      })
-    ).toBe(true)
-    expect(
-      passesStoreFilter('projector', {
-        ...base,
-        product_type: 'preschool toys',
-        title: 'Story Dream Machine™ Dr. Seuss Starter Pack',
-      })
-    ).toBe(false)
-    expect(
-      passesStoreFilter('projector', { ...base, product_type: 'preschool toys', title: 'Story Dream Pals™ Grinch' })
-    ).toBe(false)
-    expect(passesStoreFilter('projector', { ...base, product_type: 'Kids Beds', title: 'Read & Dream Nap Nook' })).toBe(false)
-  })
-
-  it('platforms without store rules keep anything titled; junk never passes', () => {
-    expect(passesStoreFilter('other', { title: 'Literally Anything' })).toBe(true)
-    expect(passesStoreFilter('leapfrog', { title: 'LeapStart Book' })).toBe(true)
-    expect(passesStoreFilter('tonies', null)).toBe(false)
-    expect(passesStoreFilter('tonies', { product_type: 'Tonie' })).toBe(false)
-  })
-})
-
 describe('planCollectionImport', () => {
   const img = [{ src: 'https://cdn.shopify.com/x.jpg' }]
 
-  it('splits a Tonies page into add / present / filtered, tallies reconciling', () => {
+  it('adds everything on a Tonies page — players included — splitting add / present, tallies reconciling', () => {
     const products = [
       { title: 'Disney Frozen: Elsa Tonie', product_type: 'Tonie', handle: 'elsa', images: img, tags: [] },
       { title: 'Bluey Tonie', product_type: 'Tonie', handle: 'bluey', images: img, tags: [] },
@@ -541,7 +457,7 @@ describe('planCollectionImport', () => {
     // ingestor-stocked title for #1 is the suffix-stripped 'Disney
     // Frozen: Elsa' — the plan must normalise to match it.
     const plan = planCollectionImport(products, ['bluey'], 'tonies', 'https://us.tonies.com')
-    expect(plan.skippedFiltered).toBe(1)
+    expect(plan.skippedFiltered).toBe(0)
     expect(plan.alreadyPresent).toBe(2) // Bluey + the in-feed repeat of Elsa
     expect(plan.toAdd).toEqual([
       {
@@ -549,7 +465,22 @@ describe('planCollectionImport', () => {
         title: 'Disney Frozen: Elsa',
         details: 'Tonie figure',
         image_url: 'https://cdn.shopify.com/x.jpg',
+        age_min_years: null,
+        age_max_years: null,
+        rating: null,
+        rating_count: null,
         source_url: 'https://us.tonies.com/products/elsa',
+      },
+      {
+        platform: 'tonies',
+        title: 'Toniebox 2',
+        details: 'Toniebox',
+        image_url: 'https://cdn.shopify.com/x.jpg',
+        age_min_years: null,
+        age_max_years: null,
+        rating: null,
+        rating_count: null,
+        source_url: 'https://us.tonies.com/products/tb2',
       },
     ])
     expect(plan.toAdd.length + plan.alreadyPresent + plan.skippedFiltered).toBe(products.length)
@@ -579,6 +510,10 @@ describe('planCollectionImport', () => {
         title: 'Dr. Seuss Cat in The Hat Collection',
         details: 'Dream Machine story collection',
         image_url: 'https://cdn.shopify.com/x.jpg',
+        age_min_years: null,
+        age_max_years: null,
+        rating: null,
+        rating_count: null,
         source_url: 'https://www.littletikes.com/products/cat-hat',
       },
       {
@@ -586,6 +521,10 @@ describe('planCollectionImport', () => {
         title: 'Harper Collins Digger the Dinosaur',
         details: 'Dream Machine story cartridge',
         image_url: 'https://cdn.shopify.com/x.jpg',
+        age_min_years: null,
+        age_max_years: null,
+        rating: null,
+        rating_count: null,
         source_url: 'https://www.littletikes.com/products/digger',
       },
     ])
@@ -605,6 +544,10 @@ describe('planCollectionImport', () => {
         title: 'Recordable Token',
         details: 'Token',
         image_url: null,
+        age_min_years: null,
+        age_max_years: null,
+        rating: null,
+        rating_count: null,
         source_url: 'https://storypod.com/products/rt',
       },
     ])
@@ -674,7 +617,16 @@ describe('planRowImport', () => {
     ]
     const plan = planRowImport(rows, ['Elmer'], 'lunii')
     expect(plan.toAdd).toEqual([
-      { title: 'The Gruffalo', details: 'Story', image_url: 'https://x/g.jpg', source_url: 'https://s/g' },
+      {
+        title: 'The Gruffalo',
+        details: 'Story',
+        image_url: 'https://x/g.jpg',
+        source_url: 'https://s/g',
+        age_min_years: null,
+        age_max_years: null,
+        rating: null,
+        rating_count: null,
+      },
     ])
     expect(plan.alreadyPresent).toBe(1)
     expect(plan.skippedFiltered).toBe(0)
@@ -699,5 +651,60 @@ describe('planRowImport', () => {
   it('handles empty inputs', () => {
     expect(planRowImport([], [], 'tonies')).toEqual({ toAdd: [], alreadyPresent: 0, skippedFiltered: 0 })
     expect(planRowImport(null, null, 'tonies').toAdd).toEqual([])
+  })
+})
+
+describe('extractAgeRange', () => {
+  it('reads Little Tikes structured Age tags (the learn-play shapes)', () => {
+    expect(extractAgeRange({ tags: ['Age:6 - 36 months', 'best-seller'] })).toEqual({
+      age_min_years: 0.5,
+      age_max_years: 3,
+    })
+    expect(extractAgeRange({ tags: ['Age:9 months - 3 years'] })).toEqual({
+      age_min_years: 0.8,
+      age_max_years: 3,
+    })
+    expect(extractAgeRange({ tags: ['Age:2 - 5 years'] })).toEqual({
+      age_min_years: 2,
+      age_max_years: 5,
+    })
+    expect(extractAgeRange({ tags: ['Age:3+ years'] })).toEqual({
+      age_min_years: 3,
+      age_max_years: null,
+    })
+  })
+
+  it('falls back to the description text around "ages"', () => {
+    expect(
+      extractAgeRange({ tags: [], body_html: '<p>Perfect for ages 4 - 6 years. Batteries included.</p>' })
+    ).toEqual({ age_min_years: 4, age_max_years: 6 })
+    expect(
+      extractAgeRange({ tags: [], body_html: '<p>Ages 18 months and up. Soft plush.</p>' })
+    ).toEqual({ age_min_years: 1.5, age_max_years: null })
+  })
+
+  it('returns null when nothing sane is published', () => {
+    expect(extractAgeRange({ tags: ['best-seller'], body_html: '<p>A fun toy.</p>' })).toBeNull()
+    expect(extractAgeRange({})).toBeNull()
+    expect(extractAgeRange(null)).toBeNull()
+    // An inverted or absurd range is worse than no guidance.
+    expect(extractAgeRange({ tags: ['Age:9 - 2 years'] })).toBeNull()
+    expect(extractAgeRange({ tags: ['Age:2 - 40 years'] })).toBeNull()
+  })
+})
+
+describe('platformForProduct', () => {
+  it('splits Little Tikes: Dream Machine line to the projector shelf, the rest to Little Tikes', () => {
+    expect(platformForProduct('littletikes', { title: 'Story Dream Machine™ Dr. Seuss Collection' })).toBe(
+      'projector'
+    )
+    expect(platformForProduct('littletikes', 'Story Dream Machine - Winnie the Pooh')).toBe('projector')
+    expect(platformForProduct('littletikes', { title: 'Activity Garden™' })).toBe('littletikes')
+    expect(platformForProduct('littletikes', 'Cozy Coupe®')).toBe('littletikes')
+  })
+
+  it('leaves every other platform alone', () => {
+    expect(platformForProduct('tonies', { title: 'Story Dream Machine' })).toBe('tonies')
+    expect(platformForProduct('projector', { title: 'Anything' })).toBe('projector')
   })
 })

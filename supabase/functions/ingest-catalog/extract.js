@@ -24,10 +24,12 @@ const HOST_PLATFORMS = [
   ['www.storypod.com', 'storypod'],
   ['www.playosmo.com', 'osmo'],
   ['playosmo.com', 'osmo'],
-  // Little Tikes and Moonlite both feed the shared projector platform;
-  // the Dream Machine line is told apart by its details text.
-  ['www.littletikes.com', 'projector'],
-  ['littletikes.com', 'projector'],
+  // Moonlite feeds the shared projector platform. Little Tikes is
+  // a general toy store with its own platform — only its Dream
+  // Machine line belongs to the projector shelf, and that split
+  // happens per product (platformForProduct below).
+  ['www.littletikes.com', 'littletikes'],
+  ['littletikes.com', 'littletikes'],
   ['www.mymoonlite.com', 'projector'],
   ['mymoonlite.com', 'projector'],
   ['store.leapfrog.com', 'leapfrog'],
@@ -187,7 +189,8 @@ function jsonLdDetails(product) {
 // Every Product described by a page's JSON-LD, in document order —
 // a single product page yields one; a collection page's ItemList
 // yields the whole list (the bulk-import fallback for stores
-// without a Shopify feed).
+// without a Shopify feed). Each item carries the product's own
+// published rating when its block has one (aggRatingOf).
 export function extractAllFromJsonLd(html) {
   if (!html) return []
   const out = []
@@ -197,7 +200,14 @@ export function extractAllFromJsonLd(html) {
       if (!title) continue
       const image = Array.isArray(product.image) ? product.image[0] : product.image
       const imageUrl = typeof image === 'string' ? fixImageUrl(image) : null
-      out.push({ title, image_url: imageUrl, details: jsonLdDetails(product) })
+      const agg = aggRatingOf(product)
+      out.push({
+        title,
+        image_url: imageUrl,
+        details: jsonLdDetails(product),
+        rating: agg?.rating ?? null,
+        rating_count: agg?.rating_count ?? null,
+      })
     }
   }
   return out
@@ -229,23 +239,30 @@ function parseRatingCount(raw) {
 // the page publishes a sane rating — many stores load their
 // reviews through a widget (Bazaarvoice, Trustpilot, Okendo)
 // and never put the number in the static HTML at all.
+// One Product node's aggregateRating, normalised (see
+// extractAggregateRating for the rules), or null.
+export function aggRatingOf(product) {
+  const agg = Array.isArray(product?.aggregateRating)
+    ? product.aggregateRating[0]
+    : product?.aggregateRating
+  if (!agg || typeof agg !== 'object') return null
+  let value = Number(agg.ratingValue)
+  if (!Number.isFinite(value) || value <= 0) return null
+  const best = Number(agg.bestRating ?? 5)
+  if (Number.isFinite(best) && best > 5) value = (value * 5) / best
+  if (value > 5) return null
+  return {
+    rating: Math.round(value * 10) / 10,
+    rating_count: parseRatingCount(agg.ratingCount) ?? parseRatingCount(agg.reviewCount),
+  }
+}
+
 export function extractAggregateRating(html) {
   if (!html) return null
   for (const doc of jsonLdBlocks(html)) {
     for (const product of productNodes(doc)) {
-      const agg = Array.isArray(product.aggregateRating)
-        ? product.aggregateRating[0]
-        : product.aggregateRating
-      if (!agg || typeof agg !== 'object') continue
-      let value = Number(agg.ratingValue)
-      if (!Number.isFinite(value) || value <= 0) continue
-      const best = Number(agg.bestRating ?? 5)
-      if (Number.isFinite(best) && best > 5) value = (value * 5) / best
-      if (value > 5) continue
-      return {
-        rating: Math.round(value * 10) / 10,
-        rating_count: parseRatingCount(agg.ratingCount) ?? parseRatingCount(agg.reviewCount),
-      }
+      const agg = aggRatingOf(product)
+      if (agg) return agg
     }
   }
   return null
@@ -315,7 +332,12 @@ const DETAILS_BY_TYPE = {
 // One product from a Shopify /products/<handle>.json response
 // ({ product: {...} } — or the product object itself) → catalog row.
 // No filtering here, unlike the bulk ingestor: the user asked for
-// this specific product.
+// this specific product. The row also carries the suggested age
+// range read from the product's tags/description (extractAgeRange)
+// and a rating only when the source object itself carries one
+// (the synthetic products built from JSON-LD do; real Shopify
+// feeds don't publish ratings, so theirs stay null — the
+// function enriches small imports from the product pages).
 export function normalizeShopifyProduct(json, platform) {
   const p = json && typeof json === 'object' && json.product ? json.product : json
   if (!p || typeof p !== 'object') return null
@@ -325,11 +347,16 @@ export function normalizeShopifyProduct(json, platform) {
   const image =
     (typeof p.image === 'string' ? p.image : p.image?.src) ??
     (Array.isArray(p.images) ? (typeof p.images[0] === 'string' ? p.images[0] : p.images[0]?.src) : null)
+  const ages = extractAgeRange(p)
   return {
     platform,
     title,
     details: DETAILS_BY_TYPE[type] ?? type,
     image_url: fixImageUrl(image),
+    age_min_years: ages?.age_min_years ?? null,
+    age_max_years: ages?.age_max_years ?? null,
+    rating: typeof p.rating === 'number' ? p.rating : null,
+    rating_count: typeof p.rating_count === 'number' ? p.rating_count : null,
   }
 }
 
@@ -401,14 +428,88 @@ export function collectionPageUrl(origin, handle, page) {
   return `${origin}/collections/${encodeURIComponent(handle)}/products.json?limit=250&page=${page}`
 }
 
-// ------------------------------------------------- store content rules
+// ------------------------------------------------------- product facts
 //
-// The keep/drop rules the offline ingestor applies per store
-// (ingestor/lib/sources.mjs), ported so a bulk collection import
-// stocks the same catalog a feed run would: content only, never
-// players, bundles that duplicate singles, or accessories. The
-// ingestor's config is declarative; this is the same data in the
-// shape the checks below need.
+// What a pasted collection import keeps: EVERYTHING on the page.
+// (The offline ingestor curates whole store feeds with its own
+// keep/drop rules in ingestor/lib/sources.mjs; a parent pasting
+// one collection link asked for that page's items, so this path
+// adds them all — dedupe against the catalog still applies.)
+// Each row also picks up the facts the feed itself publishes:
+// the picture (normalizeShopifyProduct) and the suggested ages
+// (extractAgeRange below).
+
+const AGE_UNIT = '(?:months?|mos\.?|years?|yrs\.?)'
+const AGE_RANGE_RE = new RegExp(
+  `(\\d+(?:\\.\\d+)?)\\s*(${AGE_UNIT})?\\s*(?:[-\u2013\u2014]|\\bto\\b)\\s*(\\d+(?:\\.\\d+)?)\\s*(${AGE_UNIT})?`,
+  'i',
+)
+const AGE_SINGLE_RE = new RegExp(
+  `(\\d+(?:\\.\\d+)?)\\s*(${AGE_UNIT})?\\s*(?:\\+|and up|& up)`,
+  'i',
+)
+
+function ageAmount(numStr, unitStr) {
+  const n = Number(numStr)
+  if (!Number.isFinite(n)) return null
+  const u = String(unitStr ?? '').toLowerCase()
+  if (u.startsWith('mo')) return n / 12
+  return n // years, yrs, or unitless (inherits/resolved by caller)
+}
+
+// One age text ("6 - 36 months", "9 months - 3 years", "3+") →
+// { age_min_years, age_max_years } in decimal years (one decimal
+// place, matching catalog_items numeric(3,1)), or null when the
+// text holds nothing sane. A unitless side of a range inherits
+// the other side's unit.
+function parseAgeText(text) {
+  const s = String(text ?? '')
+  const range = s.match(AGE_RANGE_RE)
+  if (range) {
+    const loUnit = range[2] ?? range[4]
+    const hiUnit = range[4] ?? range[2]
+    let lo = ageAmount(range[1], loUnit)
+    let hi = ageAmount(range[3], hiUnit)
+    if (lo !== null && hi !== null) {
+      lo = Math.round(lo * 10) / 10
+      hi = Math.round(hi * 10) / 10
+      if (lo >= 0 && hi >= lo && hi <= 18) return { age_min_years: lo, age_max_years: hi }
+    }
+    return null
+  }
+  const single = s.match(AGE_SINGLE_RE)
+  if (single) {
+    const lo = ageAmount(single[1], single[2])
+    if (lo !== null && lo >= 0 && lo <= 18) {
+      return { age_min_years: Math.round(lo * 10) / 10, age_max_years: null }
+    }
+  }
+  return null
+}
+
+// The suggested age range a Shopify product publishes about
+// itself: structured tags first (Little Tikes writes
+// 'Age:6 - 36 months'; other stores use 'ages 3+' style tags),
+// then the description text around the word "age(s)". Stores
+// that publish neither simply yield null — no guidance, like
+// every other ageless catalog row.
+export function extractAgeRange(product) {
+  const tags = productTags(product)
+  for (const tag of tags) {
+    if (!/age/i.test(tag)) continue
+    const parsed = parseAgeText(tag)
+    if (parsed) return parsed
+  }
+  const body = cleanText(String(product?.body_html ?? '').replace(/<[^>]*>/g, ' '))
+  if (body) {
+    const snippets = body.match(/\bages?\b[^.;]{0,40}/gi) ?? []
+    for (const snippet of snippets) {
+      const parsed = parseAgeText(snippet)
+      if (parsed) return parsed
+    }
+  }
+  return null
+}
 
 function productTags(p) {
   if (Array.isArray(p?.tags)) return p.tags.map((t) => String(t).trim())
@@ -420,60 +521,17 @@ function productTags(p) {
   return []
 }
 
-const STORE_FILTERS = {
-  tonies: {
-    // Content figures only — Toniebox players, bundles/sets,
-    // accessories and Tonieplay games never reach the allow-list.
-    includeTypes: ['Tonie', 'Creative Tonie', 'Clever Tonie', 'My First Tonie', 'Audiobook'],
-    excludeTitle: /\b\d+\s*pack\b|\bbundle\b/i,
-  },
-  yoto: {
-    includeTypes: ['single-card', 'bundle', 'soft-bundle'],
-    excludeTitle: /\(Digital\)\s*$/i,
-    excludeTags: ['flag:Digital Card'],
-  },
-  storypod: {
-    excludeTypes: ['Sleeves', 'Plush'],
-    excludeTitle: /charging cable|subscription buy out|\beddi\b/i,
-  },
-  osmo: {
-    includeTitle:
-      /^(Detective Agency|Genius Numbers|Genius Words|Genius Tangram|Little Genius Costume Pieces|Little Genius Sticks & Rings|Math Wizard and the|Monster|Pizza Co)/i,
-    excludeTitle: /starter kit|\bbase\b|reflector|\bcase\b|bundle|series|mystery gift/i,
-  },
-}
-
-// The projector platform is fed by two stores with different rules,
-// told apart the same way their feeds present: Moonlite marks its
-// stories with the 'Single Story' type; Little Tikes' Dream Machine
-// line is recognised by title (its product types are generic).
-function passesProjectorFilter(title, type) {
-  if (type === 'Single Story') return !/\bpack\b|\bset\b/i.test(title)
-  if (!/^Story Dream Machine/i.test(title)) return false
-  return !/^Story Dream Pals\b|\bPlush\b|Starter Pack|Special Edition Pack|\bCase\b|^Build Your Own\b/i.test(
-    title,
+// Which platform one product from a pasted link belongs to.
+// Only Little Tikes splits: it's a general toy store (its own
+// platform), but its Dream Machine line is projector content —
+// the same title rule the projector shelf has always used.
+// Accepts a Shopify product or a bare title (search/add paths).
+export function platformForProduct(urlPlatform, product) {
+  if (urlPlatform !== 'littletikes') return urlPlatform
+  const title = cleanText(
+    typeof product === 'string' ? product : (product?.title ?? ''),
   )
-}
-
-// Would the ingestor keep this product for this platform? Platforms
-// without a rule set here (leapfrog, lunii, other, …) keep
-// everything with a title — they have no Shopify feed rules to
-// mirror.
-export function passesStoreFilter(platform, product) {
-  if (!product || typeof product !== 'object') return false
-  const title = cleanText(product.title)
-  if (!title) return false
-  const type = cleanText(product.product_type)
-  if (platform === 'projector') return passesProjectorFilter(title, type)
-  const rules = STORE_FILTERS[platform]
-  if (!rules) return true
-  if (rules.includeTypes && !rules.includeTypes.includes(type)) return false
-  if (rules.excludeTypes?.includes(type)) return false
-  if (rules.includeTitle && !rules.includeTitle.test(title)) return false
-  if (rules.excludeTitle?.test(title)) return false
-  if (rules.excludeTags && productTags(product).some((t) => rules.excludeTags.includes(t)))
-    return false
-  return true
+  return /^Story Dream Machine/i.test(title) ? 'projector' : 'littletikes'
 }
 
 // The ingestor also tidies titles per store (the format/line name
@@ -499,11 +557,12 @@ function applyCollectionTitleRules(platform, row) {
   return row
 }
 
-// Plan a bulk import: filter a collection's products by the store's
-// rules, normalise the survivors, and split them against the titles
-// already in the catalog. Pure — the function does the fetching and
-// inserting, this decides what goes where, and the tallies always
-// reconcile: toAdd + alreadyPresent + skippedFiltered = products in.
+// Plan a bulk import: normalise a collection's products (all of
+// them — see "product facts" above), and split them against the
+// titles already in the catalog. Pure — the function does the
+// fetching and inserting, this decides what goes where, and the
+// tallies always reconcile: toAdd + alreadyPresent +
+// skippedFiltered = products in.
 //
 // existingTitles is the catalog's current titles for the platform
 // (compared case-insensitively, like the app's duplicate rule).
@@ -517,10 +576,9 @@ export function planCollectionImport(products, existingTitles, platform, origin 
   let alreadyPresent = 0
   let skippedFiltered = 0
   for (const product of products ?? []) {
-    if (!passesStoreFilter(platform, product)) {
-      skippedFiltered++
-      continue
-    }
+    // No keep/drop rules on this path (see "product facts"
+    // above): everything on the page is planned. skippedFiltered
+    // now counts only products too broken to normalise (no title).
     const normalised = normalizeShopifyProduct(product, platform)
     if (!normalised) {
       skippedFiltered++
@@ -607,6 +665,10 @@ export function planRowImport(rows, existingTitles, platform) {
       details: cleanText(raw.details ?? ''),
       image_url: fixImageUrl(raw.image_url) ?? '',
       source_url: typeof raw.source_url === 'string' ? raw.source_url : '',
+      age_min_years: typeof raw.age_min_years === 'number' ? raw.age_min_years : null,
+      age_max_years: typeof raw.age_max_years === 'number' ? raw.age_max_years : null,
+      rating: typeof raw.rating === 'number' ? raw.rating : null,
+      rating_count: typeof raw.rating_count === 'number' ? raw.rating_count : null,
     })
     const key = row.title.toLowerCase()
     if (!key) continue
