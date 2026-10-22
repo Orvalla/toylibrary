@@ -141,16 +141,20 @@ export default function DashboardPage() {
       setMessage(`Photo upload failed: ${err.message}`)
       return
     }
-    const { error } = await supabase.from('items').insert({
-      owner_id: user.id,
-      list_type: tab,
-      platform: form.platform,
-      title: form.title.trim(),
-      details: form.details.trim(),
-      notes: form.notes.trim(),
-      image_url: imageUrl,
-      child_id: form.child_id || null,
-    })
+    const { data, error } = await supabase
+      .from('items')
+      .insert({
+        owner_id: user.id,
+        list_type: tab,
+        platform: form.platform,
+        title: form.title.trim(),
+        details: form.details.trim(),
+        notes: form.notes.trim(),
+        image_url: imageUrl,
+        child_id: form.child_id || null,
+      })
+      .select()
+      .single()
     if (error) {
       // The unique index items_no_duplicates_idx is the last line of defence
       // against the exact problem this app solves.
@@ -165,12 +169,22 @@ export default function DashboardPage() {
     // for the same kid.
     setForm((f) => ({ ...EMPTY_FORM, child_id: f.child_id }))
     setPhotoFile(null)
-    load()
+    // Append the new row locally instead of load(): a full reload
+    // re-pages the whole catalog index and takes seconds, which
+    // made every mutation look like it hadn't happened.
+    if (data) setItems((prev) => [...prev, data])
   }
 
   async function removeItem(item) {
-    await supabase.from('items').delete().eq('id', item.id)
-    load()
+    setMessage('')
+    // Optimistic: drop the tile immediately, then delete. Rolling
+    // back through load() only if the delete actually failed.
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    const { error } = await supabase.from('items').delete().eq('id', item.id)
+    if (error) {
+      setMessage(`Couldn't remove “${item.title}”: ${error.message}`)
+      load()
+    }
   }
 
   function startEdit(item) {
@@ -206,8 +220,22 @@ export default function DashboardPage() {
       )
       return
     }
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? {
+              ...i,
+              platform: editForm.platform,
+              title: editForm.title.trim(),
+              details: editForm.details.trim(),
+              notes: editForm.notes.trim(),
+              image_url: editForm.image_url.trim(),
+              child_id: editForm.child_id || null,
+            }
+          : i,
+      ),
+    )
     setEditingId(null)
-    load()
   }
 
   // The post-holiday flow: a wishlist item was gifted, so it moves to
@@ -226,12 +254,18 @@ export default function DashboardPage() {
       )
       return
     }
-    load()
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? { ...i, list_type: 'have', claimed_at: null, claimed_by_name: '', claim_token_hash: null }
+          : i,
+      ),
+    )
   }
 
   async function toggleSharing(enabled) {
     await supabase.from('profiles').update({ share_enabled: enabled }).eq('id', user.id)
-    load()
+    setProfile((p) => (p ? { ...p, share_enabled: enabled } : p))
   }
 
   const catalogIndex = useMemo(() => indexCatalog(catalogRows), [catalogRows])
@@ -300,22 +334,26 @@ export default function DashboardPage() {
 
   async function addToWishlist(entry) {
     setMessage('')
-    const { error } = await supabase.from('items').insert({
-      owner_id: user.id,
-      list_type: 'wishlist',
-      platform: entry.platform,
-      title: entry.title,
-      details: entry.details ?? '',
-      notes: '',
-      image_url: entry.image_url ?? '',
-      asin: entry.asin ?? null,
-      child_id: filteredKid.id,
-    })
+    const { data, error } = await supabase
+      .from('items')
+      .insert({
+        owner_id: user.id,
+        list_type: 'wishlist',
+        platform: entry.platform,
+        title: entry.title,
+        details: entry.details ?? '',
+        notes: '',
+        image_url: entry.image_url ?? '',
+        asin: entry.asin ?? null,
+        child_id: filteredKid.id,
+      })
+      .select()
+      .single()
     if (error) {
       setMessage(error.code === '23505' ? `“${entry.title}” is already on a list.` : error.message)
       return
     }
-    load()
+    if (data) setItems((prev) => [...prev, data])
   }
 
   return (
