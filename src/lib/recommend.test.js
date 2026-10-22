@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recommendForChild } from './recommend'
+import { recommendForChild, sortBySuggestions } from './recommend'
 import { itemKey } from './bundles'
 
 const today = new Date(2026, 9, 21)
@@ -56,5 +56,35 @@ describe('recommendForChild', () => {
     // No interest signal: the age-fit picture book leads, then the
     // front of the catalog by sort order.
     expect(recs.map((r) => r.id)).toEqual(['b1', 't2'])
+  })
+})
+
+describe('sortBySuggestions', () => {
+  it('floats platform fit + interests + age fit up, and keeps everything', () => {
+    const sorted = sortBySuggestions(catalog, {
+      child,
+      ownedPlatforms: new Set(['tonies']),
+      today,
+    })
+    // Nothing is hidden by a sort — even the device stays.
+    expect(sorted).toHaveLength(catalog.length)
+    // b1: books fit (+4) + two interest hits, dinosaur & planet
+    // (+6) + picture-book age fit (+2) = 12. t1/t3: tonies fit
+    // (+4) + one interest hit (+3) = 7, sort order breaks the
+    // tie. d1/t2/b2/b3: platform fit only (+4). y1: a space hit
+    // (+3) but no Yoto player in the house.
+    expect(sorted.map((r) => r.id)).toEqual(['b1', 't1', 't3', 'd1', 't2', 'b2', 'b3', 'y1'])
+  })
+
+  it('with no child signals it falls back to catalog order', () => {
+    const sorted = sortBySuggestions(catalog, {
+      child: { name: 'X', birth_date: null, interests: [] },
+      ownedPlatforms: new Set(),
+      today,
+    })
+    // Only the always-allowed platforms (books, projector) get
+    // the fit term, so books lead in sort order, then the rest
+    // by sort order.
+    expect(sorted.map((r) => r.id)).toEqual(['b1', 'b2', 'b3', 'd1', 'y1', 't2', 't1', 't3'])
   })
 })

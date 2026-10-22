@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import CatalogPage from './CatalogPage'
 import { AuthProvider, useAuth } from '../lib/auth'
@@ -62,5 +62,35 @@ describe('CatalogPage', () => {
     expect(screen.getByText('＋ We have it')).toBeInTheDocument()
     expect(screen.getByText('☆ Add to wishlist')).toBeInTheDocument()
     expect(screen.getByText('Peppa Pig')).toBeInTheDocument()
+  })
+})
+
+describe('CatalogPage sorting', () => {
+  it('reorders tiles when the sort changes', async () => {
+    render(
+      <AuthProvider>
+        <Harness />
+      </AuthProvider>
+    )
+    await screen.findByText('Peppa Pig')
+    const before = screen.getByText('Bluey').compareDocumentPosition(screen.getByText('Peppa Pig'))
+    expect(before & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy() // Bluey first (popular)
+
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'za' } })
+    const after = screen.getByText('Bluey').compareDocumentPosition(screen.getByText('Peppa Pig'))
+    expect(after & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // Peppa first (Z–A)
+  })
+
+  it('offers Popular and Suggested sort options', async () => {
+    render(
+      <AuthProvider>
+        <Harness />
+      </AuthProvider>
+    )
+    await screen.findByText('Peppa Pig')
+    const select = screen.getByLabelText('Sort')
+    const labels = [...select.options].map((o) => o.textContent)
+    expect(labels[0]).toContain('Popular')
+    expect(labels[1]).toContain('Suggested')
   })
 })

@@ -16,6 +16,7 @@ import {
   ownedKeysForBucket,
 } from '../lib/bundles'
 import { recommendForChild } from '../lib/recommend'
+import PhotoScan from '../components/PhotoScan'
 
 // The catalog is several thousand rows — page through it so the
 // bundle lookup below sees every row, not just the first page.
@@ -505,6 +506,15 @@ export default function DashboardPage() {
         <button className="btn">Add to {tab === 'have' ? 'have list' : 'wishlist'}</button>
       </form>
       {message && <p className="notice">{message}</p>}
+
+      <PhotoScan
+        kids={kids}
+        catalogRows={catalogRows}
+        items={items}
+        initialChildId={form.child_id}
+        uploadPhoto={uploadPhoto}
+        onAdded={(rows) => setItems((prev) => [...prev, ...rows])}
+      />
 
       <input
         className="filter-input"

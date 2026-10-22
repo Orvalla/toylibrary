@@ -12,9 +12,11 @@ import {
   cascadeContentRows,
   indexCatalog,
   indexContents,
+  itemKey,
   ownedKeysForBucket,
   platformNoun,
 } from '../lib/bundles'
+import { sortBySuggestions } from '../lib/recommend'
 
 // Browsable catalog of the well-known titles per platform. Parents tap
 // to add instead of typing; anything already owned carries the green
@@ -36,6 +38,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   )
   const [category, setCategory] = useState('all')
   const [query, setQuery] = useState('')
+  const [sort, setSort] = useState('popular')
   const [message, setMessage] = useState('')
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -110,6 +113,19 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     () => ownedKeysForBucket(mine, childSel || null),
     [mine, childSel]
   )
+  // Platforms of the players the selected bucket owns — feeds
+  // the "Suggested" sort. (A hook, so it lives up here with the
+  // others, above the loading early-return.)
+  const bucketDevicePlatforms = useMemo(() => {
+    const platforms = new Set()
+    for (const i of mine) {
+      if (i.list_type !== 'have') continue
+      if (i.child_id && i.child_id !== (childSel || null)) continue
+      const twin = catalogIndex.byKey.get(itemKey(i.platform, i.title))
+      if (twin?.item_type === 'device') platforms.add(twin.platform)
+    }
+    return platforms
+  }, [mine, childSel, catalogIndex])
 
   async function add(entry, listType) {
     setMessage('')
@@ -235,7 +251,28 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
       (!qWords.length || matchesQuery(c))
   )
-  const byPlatform = visible.reduce((acc, c) => {
+
+  // Sort orders. "Popular" is the catalog's own order — stores
+  // list their best-sellers first and the ingest kept that, and
+  // the books were ingested in ranked order. "Suggested" floats
+  // up what fits the selected child: content for players they
+  // own, their interests, age-fit books (lib/recommend.js).
+  const selectedKid = kids.find((k) => k.id === childSel) ?? null
+  const sortedVisible =
+    sort === 'az'
+      ? [...visible].sort((a, b) => a.title.localeCompare(b.title))
+      : sort === 'za'
+        ? [...visible].sort((a, b) => b.title.localeCompare(a.title))
+        : sort === 'suggested'
+          ? sortBySuggestions(visible, {
+              child: selectedKid,
+              ownedPlatforms: bucketDevicePlatforms,
+            })
+          : [...visible].sort(
+              (a, b) =>
+                (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.title.localeCompare(b.title)
+            )
+  const byPlatform = sortedVisible.reduce((acc, c) => {
     ;(acc[c.platform] ??= []).push(c)
     return acc
   }, {})
@@ -323,6 +360,17 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
+      <label className="sort-pick">
+        Sort
+        <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
+          <option value="popular">🔥 Popular</option>
+          <option value="suggested">
+            ✨ Suggested{selectedKid ? ` for ${selectedKid.name}` : ''}
+          </option>
+          <option value="az">Name A–Z</option>
+          <option value="za">Name Z–A</option>
+        </select>
+      </label>
       {message && <p className="notice">{message}</p>}
 
       {visible.length === 0 && (

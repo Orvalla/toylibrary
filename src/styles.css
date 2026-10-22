@@ -25,6 +25,13 @@ body {
   background-size: 22px 22px;
 }
 
+/* The page must never scroll sideways: the layout is designed
+   fluid, and any stray wide element gets clipped at the viewport
+   edge rather than pushing the whole page right (the phone
+   complaint that prompted this). Real fixes for the known wide
+   elements live with their components below. */
+html, body { overflow-x: hidden; overflow-x: clip; }
+
 h1, h2, h3, .logo, .btn {
   font-family: 'Fredoka', 'Nunito', system-ui, sans-serif;
   letter-spacing: 0.01em;
@@ -38,6 +45,8 @@ a { color: var(--accent-dark); }
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   padding: 14px 22px;
   border-bottom: 3px solid var(--line);
   background: var(--soft);
@@ -48,8 +57,19 @@ a { color: var(--accent-dark); }
 }
 .logo-mark { width: 31px; height: 31px; }
 .hero-logo { width: 74px; height: 74px; margin-bottom: 6px; }
-.header nav { display: flex; gap: 16px; align-items: center; }
+.header nav { display: flex; gap: 8px 16px; align-items: center; flex-wrap: wrap; }
 .header nav a { text-decoration: none; font-weight: 800; }
+
+/* Phones: the full nav (five entries signed-in) can't share one
+   line with the logo, so it wraps onto its own line, all in view,
+   instead of running off the right edge. */
+@media (max-width: 600px) {
+  .header { padding: 10px 14px; }
+  .header .logo { font-size: 20px; }
+  .logo-mark { width: 27px; height: 27px; }
+  .header nav { gap: 6px 13px; font-size: 15px; }
+  .page { padding: 22px 14px 40px; }
+}
 
 .page { max-width: 880px; margin: 0 auto; padding: 28px 20px 48px; }
 .page.narrow { max-width: 560px; }
@@ -104,9 +124,10 @@ a { color: var(--accent-dark); }
 .empty { color: var(--ink-faint); font-style: italic; }
 
 .share-box {
-  display: flex; justify-content: space-between; gap: 16px; align-items: flex-start;
+  display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap;
   background: var(--soft); border: 2px solid var(--line); border-radius: 18px; padding: 16px;
 }
+.share-box > div { min-width: 0; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .chip {
   border: 2px solid var(--line); background: #fff; color: var(--ink);
@@ -197,6 +218,8 @@ a { color: var(--accent-dark); }
 .verdict.safe { color: var(--good); }
 
 .filter-input { width: 100%; padding: 10px 12px; border: 2px solid var(--input-line); border-radius: 12px; font: inherit; margin: 6px 0 4px; }
+.sort-pick { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; margin: 2px 0 6px; }
+.sort-pick select { padding: 8px 10px; border: 2px solid var(--input-line); border-radius: 12px; font: inherit; background: #fff; }
 .claimed-badge { font-weight: 800; color: var(--ink-faint); white-space: nowrap; }
 .claimed-badge.mine { color: var(--good); }
 .claim-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
@@ -272,3 +295,16 @@ a { color: var(--accent-dark); }
 .cart-row-body { display: grid; gap: 4px; }
 .cart-buy-all { width: 100%; margin-top: 6px; }
 .cart-note { color: var(--ink-faint); font-size: 14px; margin-top: 12px; }
+
+/* Photo scan review list (dashboard "Add from a photo") */
+.scan-card { margin: 18px 0; }
+.scan-list { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 10px; }
+.scan-row {
+  display: flex; gap: 10px; align-items: center;
+  background: #fff; border: 1.5px solid var(--line); border-radius: 14px; padding: 8px 10px;
+}
+.scan-row input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
+.scan-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 10px; flex: none; }
+.scan-emoji { display: flex; align-items: center; justify-content: center; font-size: 26px; background: var(--soft); }
+.scan-text { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.file-pick .notes { overflow-wrap: anywhere; }

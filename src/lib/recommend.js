@@ -28,6 +28,39 @@ function bookAgeFit(details, age) {
   return d.includes('chapter')
 }
 
+// Suggestion score for SORTING the catalog (not a filtered
+// recommendation list): everything stays visible, the most
+// relevant floats up. Same signals as recommendForChild, plus
+// a platform-fit term — content for a player the child owns
+// (or the always-playable books/projector) outranks content
+// for players they don't have.
+export function suggestionScore(entry, { child, ownedPlatforms, today = new Date() } = {}) {
+  const allowed = new Set([...(ownedPlatforms ?? []), 'books', 'projector'])
+  const age = ageYears(child?.birth_date, today)
+  const interests = INTERESTS.filter((i) => (child?.interests ?? []).includes(i.key))
+  const text = `${entry.title} ${entry.details ?? ''}`
+  let score = 0
+  if (allowed.has(entry.platform)) score += 4
+  for (const interest of interests) {
+    if (interest.keywords.some((kw) => keywordHit(text, kw))) score += 3
+  }
+  if (entry.platform === 'books' && bookAgeFit(entry.details, age)) score += 2
+  if (entry.is_bundle) score += 1
+  return score
+}
+
+export function sortBySuggestions(entries, ctx) {
+  return [...(entries ?? [])]
+    .map((entry) => ({ entry, score: suggestionScore(entry, ctx) }))
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (a.entry.sort_order ?? 0) - (b.entry.sort_order ?? 0) ||
+        a.entry.title.localeCompare(b.entry.title)
+    )
+    .map((s) => s.entry)
+}
+
 export function recommendForChild({
   catalog,
   child,
