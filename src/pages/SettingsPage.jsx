@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { formatOccasionLine } from '../lib/occasions'
 import { normalizeShareSlug, validateShareSlug } from '../lib/slug'
 import { GENDERS, INTERESTS } from '../lib/onboarding'
+import { giftMessage, instagramLink, messengerLink, normalizeHandle } from '../lib/giftCircle'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -17,6 +18,10 @@ export default function SettingsPage() {
   const [newKidName, setNewKidName] = useState('')
   const [occasions, setOccasions] = useState([])
   const [occForms, setOccForms] = useState({}) // child id -> { label, date }
+  const [relatives, setRelatives] = useState([])
+  const [relLinks, setRelLinks] = useState({}) // relative id -> [child id]
+  const [relForm, setRelForm] = useState({ name: '', email: '', instagram: '', facebook: '', kidIds: [] })
+  const [copiedRelId, setCopiedRelId] = useState('')
   const [message, setMessage] = useState('')
   const [slugInput, setSlugInput] = useState('')
   const [confirmRegen, setConfirmRegen] = useState(false)
@@ -33,7 +38,9 @@ export default function SettingsPage() {
         .order('name'),
       // RLS scopes occasions to children the signed-in parent owns.
       supabase.from('occasions').select('*').order('month').order('day'),
-    ]).then(([{ data }, { data: childRows }, { data: occRows }]) => {
+      supabase.from('relatives').select('*').eq('owner_id', user.id).order('created_at'),
+      supabase.from('relative_children').select('*'),
+    ]).then(([{ data }, { data: childRows }, { data: occRows }, { data: relRows }, { data: linkRows }]) => {
       setProfile(data)
       setDisplayName(data?.display_name ?? '')
       setChildName(data?.child_name ?? '')
@@ -48,6 +55,12 @@ export default function SettingsPage() {
         )
       )
       setOccasions(occRows ?? [])
+      setRelatives(relRows ?? [])
+      const links = {}
+      for (const row of linkRows ?? []) {
+        links[row.relative_id] = [...(links[row.relative_id] ?? []), row.child_id]
+      }
+      setRelLinks(links)
       setLoading(false)
     })
   }, [user.id])
@@ -116,6 +129,97 @@ export default function SettingsPage() {
     }
     setKids((ks) => ks.filter((k) => k.id !== kid.id))
     setMessage(`${kid.name} removed. Their items are now under Family.`)
+  }
+
+  // ------------------------------------------------ gift circle
+  // Kids a relative hears about: their linked kids, or every kid
+  // when they have no links (the common case — grandparents gift
+  // the whole family).
+  function kidsLabelFor(rel) {
+    const linked = relLinks[rel.id] ?? []
+    if (linked.length === 0) return kids.map((k) => k.name).join(' and ') || 'your kids'
+    return kids
+      .filter((k) => linked.includes(k.id))
+      .map((k) => k.name)
+      .join(' and ')
+  }
+
+  async function addRelative(e) {
+    e.preventDefault()
+    const name = relForm.name.trim()
+    const email = relForm.email.trim()
+    if (!name) {
+      setMessage('Give this person a name first.')
+      return
+    }
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+      setMessage('That email doesn’t look complete — or clear it to add them without one.')
+      return
+    }
+    setMessage('')
+    const { data, error } = await supabase
+      .from('relatives')
+      .insert({
+        owner_id: user.id,
+        name,
+        email: email || null,
+        instagram: normalizeHandle(relForm.instagram) || null,
+        facebook: normalizeHandle(relForm.facebook) || null,
+      })
+      .select()
+      .single()
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+    if (relForm.kidIds.length > 0) {
+      const { error: linkError } = await supabase
+        .from('relative_children')
+        .insert(relForm.kidIds.map((child_id) => ({ relative_id: data.id, child_id })))
+      if (linkError) {
+        setMessage(linkError.message)
+        return
+      }
+      setRelLinks((l) => ({ ...l, [data.id]: [...relForm.kidIds] }))
+    }
+    setRelatives((rs) => [...rs, data])
+    setRelForm({ name: '', email: '', instagram: '', facebook: '', kidIds: [] })
+    setMessage(
+      email
+        ? `${name} added — they'll be emailed the wishlist before gift occasions.`
+        : `${name} added — use the chat buttons below to send them the wishlist.`
+    )
+  }
+
+  async function deleteRelative(rel) {
+    if (!window.confirm(`Remove ${rel.name} from your gift circle?`)) return
+    setMessage('')
+    const { error } = await supabase.from('relatives').delete().eq('id', rel.id)
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+    setRelatives((rs) => rs.filter((r) => r.id !== rel.id))
+    setMessage(`${rel.name} removed from your gift circle.`)
+  }
+
+  // Instagram and Messenger won't let an app send the first
+  // message to someone, so the flow is: copy the ready-made
+  // message, open the chat, paste. (See lib/giftCircle.js.)
+  async function copyGiftMessage(rel) {
+    const text = giftMessage({
+      relativeName: rel.name,
+      ownerName: displayName.trim(),
+      kidsLabel: kidsLabelFor(rel),
+      link: shareUrl,
+    })
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedRelId(rel.id)
+      setMessage(`Message for ${rel.name} copied — open their chat and paste it.`)
+    } catch {
+      setMessage(`Copy this message for ${rel.name}: ${text}`)
+    }
   }
 
   function occFormFor(kidId) {
@@ -474,7 +578,8 @@ export default function SettingsPage() {
         <h4>Occasion reminders</h4>
         <p>
           Before a birthday or holiday on a child's list, we'll email you the
-          wishlist link so you can forward it to family before they shop.
+          wishlist link — and gift-circle family below who've given an email
+          get it directly, so nobody has to remember to forward it.
         </p>
         <label className="toggle">
           <input
@@ -484,6 +589,144 @@ export default function SettingsPage() {
           />{' '}
           Email me before gift occasions
         </label>
+      </section>
+
+      <section className="card">
+        <h3>Gift circle</h3>
+        <p>
+          The family and friends who gift your kids. Add their{' '}
+          <strong>email</strong> and we'll email them the wishlist ahead of
+          each birthday or holiday — no account needed, and every email has an
+          unsubscribe link. Turning off occasion reminders above pauses
+          family emails too.
+        </p>
+        <p>
+          For <strong>Instagram or Facebook</strong>: those apps don't let
+          anyone send a first message for you, so each person below gets
+          one-tap buttons instead — <em>Copy message</em> puts a ready-made
+          wishlist note on your clipboard, then open their chat and paste.
+        </p>
+        {relatives.length === 0 ? (
+          <p className="notes">Nobody in your gift circle yet — add the grandparents below.</p>
+        ) : (
+          <ul className="item-list">
+            {relatives.map((rel) => {
+              const mLink = messengerLink(rel.facebook)
+              const igLink = instagramLink(rel.instagram)
+              const linked = relLinks[rel.id] ?? []
+              return (
+                <li key={rel.id} className="item child-block">
+                  <div className="child-row-main">
+                    <strong>{rel.name}</strong>
+                    <span className="item-actions">
+                      <button className="linklike danger" onClick={() => deleteRelative(rel)}>
+                        Remove
+                      </button>
+                    </span>
+                  </div>
+                  <p className="notes" style={{ margin: 0 }}>
+                    {rel.email ? (
+                      rel.notify_email ? (
+                        <>✉️ {rel.email} — emailed before occasions</>
+                      ) : (
+                        <>✉️ {rel.email} — unsubscribed from emails</>
+                      )
+                    ) : (
+                      <>No email — reach them by chat</>
+                    )}
+                    {rel.instagram && <> · 📷 @{rel.instagram}</>}
+                    {rel.facebook && <> · 💬 {rel.facebook}</>}
+                    <br />
+                    Hears about: {linked.length === 0 ? 'all your kids' : kidsLabelFor(rel)}
+                  </p>
+                  <p style={{ margin: 0, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button className="btn btn-small" onClick={() => copyGiftMessage(rel)}>
+                      {copiedRelId === rel.id ? '✓ Copied' : '📋 Copy message'}
+                    </button>
+                    {mLink && (
+                      <a className="btn btn-small btn-ghost" href={mLink} target="_blank" rel="noreferrer">
+                        💬 Messenger
+                      </a>
+                    )}
+                    {igLink && (
+                      <a className="btn btn-small btn-ghost" href={igLink} target="_blank" rel="noreferrer">
+                        📷 Instagram
+                      </a>
+                    )}
+                  </p>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        <form onSubmit={addRelative} className="form">
+          <label>
+            Name
+            <input
+              value={relForm.name}
+              onChange={(e) => setRelForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Aunt Jen"
+            />
+          </label>
+          <label>
+            Email (optional — needed for automatic holiday emails)
+            <input
+              type="email"
+              value={relForm.email}
+              onChange={(e) => setRelForm((f) => ({ ...f, email: e.target.value }))}
+              placeholder="jen@example.com"
+            />
+          </label>
+          <label>
+            Instagram handle (optional)
+            <input
+              value={relForm.instagram}
+              onChange={(e) => setRelForm((f) => ({ ...f, instagram: e.target.value }))}
+              placeholder="@aunt.jen"
+            />
+          </label>
+          <label>
+            Facebook username (optional)
+            <input
+              value={relForm.facebook}
+              onChange={(e) => setRelForm((f) => ({ ...f, facebook: e.target.value }))}
+              placeholder="aunt.jen"
+            />
+          </label>
+          {kids.length > 1 && (
+            <>
+              <p className="field-help" style={{ margin: 0 }}>
+                Only notify them about specific kids? Tap to pick — none
+                picked means all of them.
+              </p>
+              <div className="chip-row" style={{ margin: 0 }}>
+                {kids.map((kid) => {
+                  const on = relForm.kidIds.includes(kid.id)
+                  return (
+                    <button
+                      type="button"
+                      key={kid.id}
+                      className={on ? 'chip small on' : 'chip small'}
+                      onClick={() =>
+                        setRelForm((f) => ({
+                          ...f,
+                          kidIds: on ? f.kidIds.filter((id) => id !== kid.id) : [...f.kidIds, kid.id],
+                        }))
+                      }
+                    >
+                      {kid.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+          <p>
+            <button type="submit" className="btn btn-small">
+              Add to gift circle
+            </button>
+          </p>
+        </form>
       </section>
 
       {message && <p className="notice">{message}</p>}
