@@ -53,8 +53,10 @@ describe('CatalogPage', () => {
       </AuthProvider>
     )
 
-    // Owned title: checkmark text, no "We have it" action.
+    // Owned title: checkmark text, no "We have it" action — but a
+    // clearly labeled way to take it back off the list.
     expect(await screen.findByText('✓ On your have list')).toBeInTheDocument()
+    expect(screen.getByText('✕ Remove from have list')).toBeInTheDocument()
     // Unowned title: both add actions offered.
     expect(screen.getByText('＋ We have it')).toBeInTheDocument()
     expect(screen.getByText('☆ Add to wishlist')).toBeInTheDocument()

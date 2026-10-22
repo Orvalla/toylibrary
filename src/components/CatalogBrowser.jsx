@@ -43,7 +43,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const load = useCallback(async () => {
     const [{ data: cat }, { data: items }, { data: childRows }, { data: bundleRows }] = await Promise.all([
       supabase.from('catalog_items').select('*').order('sort_order').order('title'),
-      supabase.from('items').select('platform, title, list_type, child_id').eq('owner_id', user.id),
+      supabase.from('items').select('id, platform, title, list_type, child_id').eq('owner_id', user.id),
       supabase.from('children').select('*').eq('owner_id', user.id).order('sort_order').order('name'),
       supabase.from('bundle_contents').select('*'),
     ])
@@ -91,17 +91,21 @@ export default function CatalogBrowser({ devicesOnly = false }) {
 
   async function add(entry, listType) {
     setMessage('')
-    const { error } = await supabase.from('items').insert({
-      owner_id: user.id,
-      list_type: listType,
-      platform: entry.platform,
-      title: entry.title,
-      details: entry.details,
-      notes: '',
-      image_url: entry.image_url ?? '',
-      asin: entry.asin ?? null,
-      child_id: childSel || null,
-    })
+    const { data, error } = await supabase
+      .from('items')
+      .insert({
+        owner_id: user.id,
+        list_type: listType,
+        platform: entry.platform,
+        title: entry.title,
+        details: entry.details,
+        notes: '',
+        image_url: entry.image_url ?? '',
+        asin: entry.asin ?? null,
+        child_id: childSel || null,
+      })
+      .select('id, platform, title, list_type, child_id')
+      .single()
     if (error) {
       setMessage(
         error.code === '23505'
@@ -110,6 +114,9 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       )
       return
     }
+    // Local state updates instead of load(): the catalog page's
+    // full reload is what made dashboard mutations feel broken.
+    const appended = data ? [data] : []
     // Owning a bundle means owning everything inside it: the
     // mapped contents join the have list too.
     if (listType === 'have' && entry.is_bundle) {
@@ -123,8 +130,15 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       })
       let added = 0
       for (const row of rows) {
-        const { error: cerr } = await supabase.from('items').insert(row)
-        if (!cerr) added++
+        const { data: crow, error: cerr } = await supabase
+          .from('items')
+          .insert(row)
+          .select('id, platform, title, list_type, child_id')
+          .single()
+        if (!cerr) {
+          added++
+          if (crow) appended.push(crow)
+        }
       }
       if (added > 0) {
         setMessage(
@@ -132,7 +146,33 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         )
       }
     }
-    load()
+    if (appended.length) setMine((prev) => [...prev, ...appended])
+    else load()
+  }
+
+  // Removing from the catalog grid: until now the only way off a
+  // list was the dashboard's small Remove link, which nobody
+  // could find from here. The row removed is the one in the
+  // currently selected child's bucket — the same bucket the ✓
+  // and the add buttons refer to. Removing a bundle leaves its
+  // contents in place: they may be owned individually too.
+  async function remove(entry, listType) {
+    setMessage('')
+    const target = mine.find(
+      (i) =>
+        i.list_type === listType &&
+        key(i.child_id, i.platform, i.title) === key(childSel || null, entry.platform, entry.title)
+    )
+    if (!target?.id) {
+      load()
+      return
+    }
+    setMine((prev) => prev.filter((i) => i.id !== target.id))
+    const { error } = await supabase.from('items').delete().eq('id', target.id)
+    if (error) {
+      setMessage(`Couldn't remove “${entry.title}”: ${error.message}`)
+      load()
+    }
   }
 
   // A product added via "Grow the catalog" joins the grid at once,
@@ -299,7 +339,12 @@ export default function CatalogBrowser({ devicesOnly = false }) {
                         <span className="notes">📦 Bundle</span>
                       ))}
                     {owned ? (
-                      <span className="claimed-badge mine">✓ On your have list</span>
+                      <>
+                        <span className="claimed-badge mine">✓ On your have list</span>
+                        <button className="linklike danger" onClick={() => remove(entry, 'have')}>
+                          ✕ Remove from have list
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button className="linklike" onClick={() => add(entry, 'have')}>
@@ -310,7 +355,17 @@ export default function CatalogBrowser({ devicesOnly = false }) {
                             ☆ Add to wishlist
                           </button>
                         )}
-                        {wished && <span className="notes">Already on your wishlist</span>}
+                        {wished && (
+                          <>
+                            <span className="notes">Already on your wishlist</span>
+                            <button
+                              className="linklike danger"
+                              onClick={() => remove(entry, 'wishlist')}
+                            >
+                              ✕ Remove from wishlist
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
                     <AmazonLink item={entry} />
