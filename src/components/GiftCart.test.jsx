@@ -1,6 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import GiftCart from './GiftCart'
+import { supabase } from '../supabaseClient'
+
+// Claiming talks to Supabase RPCs; stub the client out.
+vi.mock('../supabaseClient', () => ({
+  supabase: { rpc: vi.fn(() => Promise.resolve({ data: { ok: true, token: 'tok-1' }, error: null })) },
+}))
 
 // The cart's "Open all" used to loop window.open over every
 // entry; browsers block all but the first popup per tap, so
@@ -43,5 +49,69 @@ describe('GiftCart open-all launch list', () => {
     fireEvent.click(screen.getByText(/Open all 1 on Amazon/))
     expect(window.open).toHaveBeenCalledTimes(1)
     expect(screen.queryByText(/of 1 opened/)).not.toBeInTheDocument()
+  })
+})
+
+// Claiming from inside the cart: the drawer receives each
+// item's live wishlist state (liveById) plus the slug, and
+// offers the same claim controls as the wishlist tiles.
+describe('GiftCart inline claiming', () => {
+  const onChanged = vi.fn()
+  const renderCart = (liveItems, cartEntries = entries) =>
+    render(
+      <GiftCart
+        entries={cartEntries}
+        slug="fam-x"
+        liveById={new Map(liveItems.map((i) => [i.id, i]))}
+        onChanged={onChanged}
+        onRemove={() => {}}
+        onClose={() => {}}
+      />
+    )
+  const live = (over) => ({ platform: 'books', claimed: false, claimed_by: '', ...over })
+
+  beforeEach(() => {
+    localStorage.clear()
+    onChanged.mockClear()
+    supabase.rpc.mockReset()
+    supabase.rpc.mockResolvedValue({ data: { ok: true, token: 'tok-1', expires_at: null }, error: null })
+  })
+
+  it('claims an unclaimed item inline and stores the token', async () => {
+    renderCart([live({ id: 'a', title: 'Bluey' }), live({ id: 'b', title: 'The Gruffalo' })])
+    const claimButtons = screen.getAllByText(/I'll get this — claim it/)
+    fireEvent.click(claimButtons[0])
+    fireEvent.click(screen.getByText('Confirm claim'))
+    await waitFor(() => expect(localStorage.getItem('claim:a')).toBe('tok-1'))
+    expect(supabase.rpc).toHaveBeenCalledWith('claim_wishlist_item', {
+      p_slug: 'fam-x',
+      p_item_id: 'a',
+      p_claimer_name: '',
+    })
+    expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('shows who claimed an item taken by someone else, with no claim button', () => {
+    renderCart([
+      live({ id: 'a', title: 'Bluey', claimed: true, claimed_by: 'Aunt Sarah' }),
+      live({ id: 'b', title: 'The Gruffalo' }),
+    ])
+    expect(screen.getByText(/Claimed by Aunt Sarah/)).toBeInTheDocument()
+    expect(screen.getAllByText(/I'll get this — claim it/)).toHaveLength(1)
+  })
+
+  it('recognises my own claim from the localStorage token and offers undo', () => {
+    localStorage.setItem('claim:a', 'some-token')
+    renderCart([
+      live({ id: 'a', title: 'Bluey', claimed: true, claimed_by: '' }),
+      live({ id: 'b', title: 'The Gruffalo' }),
+    ])
+    expect(screen.getByText(/You claimed this/)).toBeInTheDocument()
+    expect(screen.getByText('Undo claim')).toBeInTheDocument()
+  })
+
+  it('flags an entry whose item has left the wishlist', () => {
+    renderCart([live({ id: 'a', title: 'Bluey' })])
+    expect(screen.getByText(/No longer on the wishlist/)).toBeInTheDocument()
   })
 })

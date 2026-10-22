@@ -16,8 +16,9 @@ export default function PublicListPage() {
   const [data, setData] = useState(undefined) // undefined = loading, null = unavailable
   const [query, setQuery] = useState('')
   // The gift cart: a per-slug list in this browser's localStorage.
-  // Collecting items here changes nothing on the family's lists —
-  // claiming is still what holds an item against other gift-givers.
+  // Collecting items here changes nothing on the family's lists;
+  // the drawer also offers claiming inline, and claiming is what
+  // holds an item against other gift-givers.
   const [cart, setCart] = useState(() => loadCart(slug))
   const [cartOpen, setCartOpen] = useState(false)
 
@@ -26,6 +27,12 @@ export default function PublicListPage() {
   }, [slug, cart])
 
   const cartIds = useMemo(() => new Set(cart.map((e) => e.id)), [cart])
+  // Live wishlist state by item id, so the cart drawer can show
+  // (and change) each entry's claim state without a second fetch.
+  const liveById = useMemo(
+    () => new Map((data?.wishlist ?? []).map((i) => [i.id, i])),
+    [data]
+  )
   const toggleCart = (item) =>
     setCart((prev) => (cartHas(prev, item.id) ? removeFromCart(prev, item.id) : addToCart(prev, item)))
 
@@ -104,6 +111,9 @@ export default function PublicListPage() {
       {cartOpen && (
         <GiftCart
           entries={cart}
+          slug={slug}
+          liveById={liveById}
+          onChanged={load}
           onRemove={(id) => setCart((prev) => removeFromCart(prev, id))}
           onClose={() => setCartOpen(false)}
         />
