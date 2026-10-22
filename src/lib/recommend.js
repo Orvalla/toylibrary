@@ -15,6 +15,7 @@
 import { INTERESTS, ageYears } from './onboarding'
 import { itemKey } from './bundles'
 import { ageFits } from './ages'
+import { ALWAYS_PLAYABLE } from './platforms'
 
 function keywordHit(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -36,7 +37,7 @@ function bookAgeFit(details, age) {
 // (or the always-playable books/projector) outranks content
 // for players they don't have.
 export function suggestionScore(entry, { child, ownedPlatforms, today = new Date() } = {}) {
-  const allowed = new Set([...(ownedPlatforms ?? []), 'books', 'projector'])
+  const allowed = new Set([...(ownedPlatforms ?? []), ...ALWAYS_PLAYABLE])
   const age = ageYears(child?.birth_date, today)
   const interests = INTERESTS.filter((i) => (child?.interests ?? []).includes(i.key))
   const text = `${entry.title} ${entry.details ?? ''}`
@@ -75,7 +76,7 @@ export function recommendForChild({
   limit = 8,
   today = new Date(),
 }) {
-  const allowed = new Set([...(ownedPlatforms ?? []), 'books', 'projector'])
+  const allowed = new Set([...(ownedPlatforms ?? []), ...ALWAYS_PLAYABLE])
   const age = ageYears(child?.birth_date, today)
   const interests = INTERESTS.filter((i) => (child?.interests ?? []).includes(i.key))
 

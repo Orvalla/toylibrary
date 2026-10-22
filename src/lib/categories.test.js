@@ -32,6 +32,16 @@ describe('categoryOf', () => {
     expect(categoryOf({ platform: 'storypod', details: 'Picture Books' })).toBe('Books')
   })
 
+  it('files physical-toy platforms under Toys unless details say game or book', () => {
+    expect(categoryOf({ platform: 'magnatiles', details: 'Building set · 32 pieces' })).toBe('Toys')
+    expect(categoryOf({ platform: 'lovevery', details: 'Play kit' })).toBe('Toys')
+    expect(categoryOf({ platform: 'haba', details: 'Wooden pull toy' })).toBe('Toys')
+    expect(categoryOf({ platform: 'haba', details: 'Board game' })).toBe('Games')
+    expect(categoryOf({ platform: 'smartgames', details: 'Logic game · 1 player' })).toBe('Games')
+    // The fallback must not leak onto the audio platforms.
+    expect(categoryOf({ platform: 'yoto', details: 'Story collection' })).toBe('Audio & more')
+  })
+
   it('reads cards from the details text', () => {
     expect(categoryOf({ platform: 'yoto', details: 'Yoto Card' })).toBe('Cards')
     expect(categoryOf({ platform: 'storypod', details: 'Card Sets' })).toBe('Cards')
@@ -51,7 +61,7 @@ describe('categoryOf', () => {
     expect(categoryOf(null)).toBe('Audio & more')
   })
 
-  it('only ever returns one of the six categories', () => {
+  it('only ever returns one of the seven categories', () => {
     const samples = [
       { platform: 'tonies', item_type: 'device' },
       { platform: 'books' },
@@ -62,6 +72,6 @@ describe('categoryOf', () => {
       { platform: 'lunii', details: 'Story album' },
     ]
     for (const s of samples) expect(CATEGORIES).toContain(categoryOf(s))
-    expect(CATEGORIES).toHaveLength(6)
+    expect(CATEGORIES).toHaveLength(7)
   })
 })

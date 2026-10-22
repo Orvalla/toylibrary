@@ -7,7 +7,7 @@ import { amazonUrlFor } from '../lib/amazon'
 export default function AmazonLink({ item }) {
   return (
     <a
-      className="linklike"
+      className="linklike amazon-link"
       href={amazonUrlFor(item)}
       target="_blank"
       rel="sponsored nofollow noopener"

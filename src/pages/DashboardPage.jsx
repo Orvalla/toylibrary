@@ -621,8 +621,8 @@ export default function DashboardPage() {
                       <button className="linklike danger" onClick={() => removeItem(item)}>
                         Remove
                       </button>
-                      <AmazonLink item={item} />
                     </span>
+                    <AmazonLink item={item} />
                   </div>
                 </ItemTile>
               ))}

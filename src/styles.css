@@ -259,12 +259,20 @@ a { color: var(--accent-dark); }
 .tile-storypod .tile-art { background: linear-gradient(135deg, #99f2e3, #17bebb); }
 .tile-osmo .tile-art { background: linear-gradient(135deg, #c7d2fe, #6366f1); }
 .tile-lunii .tile-art { background: linear-gradient(135deg, #e9d5ff, #a855f7); }
+.tile-haba .tile-art { background: linear-gradient(135deg, #fde68a, #ea580c); }
+.tile-magnatiles .tile-art { background: linear-gradient(135deg, #bae6fd, #0284c7); }
+.tile-smartgames .tile-art { background: linear-gradient(135deg, #c4b5fd, #6d28d9); }
+.tile-lovevery .tile-art { background: linear-gradient(135deg, #fecdd3, #be123c); }
 .tile-other .tile-art { background: linear-gradient(135deg, #e2e8f0, #94a3b8); }
 .tile-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
 .tile-body .details { color: var(--ink-soft); font-size: 14px; }
 .tile-body .notes { color: var(--ink-faint); font-size: 13.5px; }
-.tile-actions { margin-top: 7px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
-.tile-actions .action-row { display: flex; gap: 14px; }
+.tile-actions { margin-top: 7px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; width: 100%; min-width: 0; }
+.tile-actions .action-row { display: flex; gap: 14px; flex-wrap: wrap; row-gap: 4px; }
+/* The Amazon link gets its own line in a tile (never share the
+   Edit/Remove row — in a ~160px tile the three across squeezed
+   it into a one-word-per-line column) and never wraps itself. */
+.tile-actions .amazon-link { white-space: nowrap; font-size: 13.5px; }
 .tile .claimed-badge { white-space: normal; }
 .owned-check {
   position: absolute; top: 8px; right: 8px; width: 30px; height: 30px;
