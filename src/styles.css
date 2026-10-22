@@ -335,6 +335,10 @@ a { color: var(--accent-dark); }
 .cart-row-body { display: grid; gap: 4px; }
 .cart-buy-all { width: 100%; margin-top: 6px; }
 .cart-note { color: var(--ink-faint); font-size: 14px; margin-top: 12px; }
+.cart-progress { margin: 12px 0 0; font-weight: 700; }
+.cart-row.opened { opacity: .6; }
+.cart-open-one { justify-self: start; text-decoration: none; padding: 8px 18px; }
+.cart-opened-tag { color: var(--teal); font-weight: 700; }
 
 /* Photo scan review list (dashboard "Add from a photo") */
 .scan-card { margin: 18px 0; }
