@@ -8,13 +8,19 @@
 //   +3 per interest keyword hit in the title/details
 //   +2 when a book's format fits the child's age band
 //   +1 for bundles (an easy one-box gift)
+//
+// One hard age rule on top of the scoring: an item whose
+// suggested range ends below the child's age is never
+// recommended — no baby toys for toddlers, however many
+// interest keywords they hit. Items aimed a bit ABOVE their
+// age stay eligible; they'll grow into them.
 // Ties break by catalog order. When nothing matches an interest,
 // the top-up is simply the front of the catalog for their
 // platforms — better a solid classic than an empty shelf.
 
 import { INTERESTS, ageYears } from './onboarding'
 import { itemKey } from './bundles'
-import { ageFits } from './ages'
+import { agedOutOf, ageFits } from './ages'
 import { ALWAYS_PLAYABLE } from './platforms'
 
 function keywordHit(text, keyword) {
@@ -52,6 +58,11 @@ export function suggestionScore(entry, { child, ownedPlatforms, today = new Date
   // every platform, not just books.
   if (ageFits(entry, age)) score += 2
   if (entry.is_bundle) score += 1
+  // A sort keeps everything visible (a parent may be hunting
+  // a specific title), but an aged-out item sinks below even
+  // the zero-score neutrals — it should never read as a
+  // suggestion for this child.
+  if (agedOutOf(entry, age)) score -= 10
   return score
 }
 
@@ -84,6 +95,9 @@ export function recommendForChild({
   for (const entry of catalog ?? []) {
     if (entry.item_type === 'device') continue
     if (!allowed.has(entry.platform)) continue
+    // Aged out is a hard exclusion here (unlike the catalog
+    // sort): a recommendations list must not contain it at all.
+    if (agedOutOf(entry, age)) continue
     const k = itemKey(entry.platform, entry.title)
     if (ownedKeys?.has(k) || wishlistKeys?.has(k)) continue
     const text = `${entry.title} ${entry.details ?? ''}`

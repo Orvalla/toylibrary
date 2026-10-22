@@ -42,6 +42,18 @@ export function ageFits(entry, ageYears) {
   return true
 }
 
+// Has this child aged OUT of the item — its suggested range
+// ends below their age, so it's a baby toy for a toddler?
+// Only a stated max can age a child out: "Ages 3+" items and
+// no-guidance items never do, and neither does an unknown age.
+// The mirror case (range starts above their age) is fine —
+// they'll grow into it.
+export function agedOutOf(entry, ageYears) {
+  if (ageYears == null) return false
+  const max = entry?.age_max_years
+  return max != null && ageYears > max
+}
+
 // Does the item's range overlap a filter band (AGE_BANDS keys)?
 export function inAgeBand(entry, bandKey) {
   const band = AGE_BANDS.find((b) => b.key === bandKey)

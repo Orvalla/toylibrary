@@ -13,7 +13,7 @@ const catalog = [
   { id: 'b2', platform: 'books', title: 'Goodnight Moon', details: 'Board book', sort_order: 101 },
   { id: 'b3', platform: 'books', title: 'The Dragonet Prophecy', details: 'Chapter book', sort_order: 102 },
 ]
-const child = { name: 'Alex', birth_date: '2021-06-01', interests: ['dinosaurs', 'space'] }
+const child = { name: 'Sam', birth_date: '2021-06-01', interests: ['dinosaurs', 'space'] }
 const base = {
   catalog,
   child,
@@ -50,6 +50,22 @@ describe('recommendForChild', () => {
     expect(ids.indexOf('b1')).toBeLessThan(ids.indexOf('b2'))
   })
 
+  it('never recommends an aged-out item, however well it matches', () => {
+    const agedCatalog = [
+      { id: 'baby', platform: 'books', title: 'Baby Dinosaurs Board Book', details: 'Board book', sort_order: 1, age_min_years: 0, age_max_years: 1 },
+      { id: 'older', platform: 'books', title: 'Dinosaur Atlas', details: 'Picture book', sort_order: 2, age_min_years: 6, age_max_years: 9 },
+      { id: 'fit', platform: 'books', title: 'Dinosaur Tales', details: 'Picture book', sort_order: 3, age_min_years: 3, age_max_years: 6 },
+    ]
+    const recs = recommendForChild({ ...base, catalog: agedCatalog, ownedPlatforms: new Set() })
+    const ids = recs.map((r) => r.id)
+    // Sam is 5: the 0–1 baby book is out entirely, even with
+    // the dinosaur interest hit. The 6–9 atlas stays — she'll
+    // grow into it.
+    expect(ids).not.toContain('baby')
+    expect(ids).toContain('older')
+    expect(ids).toContain('fit')
+  })
+
   it('respects the limit and falls back gracefully with no interests', () => {
     const recs = recommendForChild({ ...base, child: { ...child, interests: [] }, limit: 2 })
     expect(recs).toHaveLength(2)
@@ -74,6 +90,24 @@ describe('sortBySuggestions', () => {
     // tie. d1/t2/b2/b3: platform fit only (+4). y1: a space hit
     // (+3) but no Yoto player in the house.
     expect(sorted.map((r) => r.id)).toEqual(['b1', 't1', 't3', 'd1', 't2', 'b2', 'b3', 'y1'])
+  })
+
+  it('aged-out items sink below everything, slightly-older items stay put', () => {
+    const agedCatalog = [
+      { id: 'baby', platform: 'books', title: 'Baby Dinosaurs Board Book', details: 'Board book', sort_order: 1, age_min_years: 0, age_max_years: 1 },
+      { id: 'older', platform: 'books', title: 'Dinosaur Atlas', details: 'Picture book', sort_order: 2, age_min_years: 6, age_max_years: 9 },
+      { id: 'fit', platform: 'books', title: 'Dinosaur Tales', details: 'Picture book', sort_order: 3, age_min_years: 3, age_max_years: 6 },
+    ]
+    const sorted = sortBySuggestions(agedCatalog, {
+      child,
+      ownedPlatforms: new Set(),
+      today,
+    })
+    // Nothing is hidden by a sort, but the baby book — despite
+    // the interest hit — lands last, below the in-range and
+    // grow-into items.
+    expect(sorted).toHaveLength(3)
+    expect(sorted.map((r) => r.id)).toEqual(['fit', 'older', 'baby'])
   })
 
   it('with no child signals it falls back to catalog order', () => {

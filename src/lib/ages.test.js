@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ageFits, ageLabelFor, inAgeBand } from './ages'
+import { agedOutOf, ageFits, ageLabelFor, inAgeBand } from './ages'
 
 describe('ageLabelFor', () => {
   it('formats ranges, halves, and open ends', () => {
@@ -22,6 +22,19 @@ describe('ageFits', () => {
   it('no guidance or no age is not a fit', () => {
     expect(ageFits({}, 4)).toBe(false)
     expect(ageFits(entry, null)).toBe(false)
+  })
+})
+
+describe('agedOutOf', () => {
+  it('is true only when the range ends below the child\u2019s age', () => {
+    expect(agedOutOf({ age_min_years: 0, age_max_years: 1 }, 2)).toBe(true)
+    expect(agedOutOf({ age_min_years: 0, age_max_years: 2 }, 2)).toBe(false) // still in range
+    expect(agedOutOf({ age_min_years: 5, age_max_years: 8 }, 3)).toBe(false) // grows into it
+  })
+  it('open-ended and unknown ranges never age a child out', () => {
+    expect(agedOutOf({ age_min_years: 3, age_max_years: null }, 9)).toBe(false)
+    expect(agedOutOf({}, 9)).toBe(false)
+    expect(agedOutOf({ age_min_years: 0, age_max_years: 1 }, null)).toBe(false)
   })
 })
 
