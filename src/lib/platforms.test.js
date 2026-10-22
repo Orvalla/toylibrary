@@ -6,7 +6,7 @@ describe('platforms', () => {
     // Must stay in sync with the CHECK constraints in the migrations
     // (0001_init.sql as widened by 0006_yoto_platform.sql,
     // 0007_new_platforms.sql, 0021_new_toy_platforms.sql and
-    // 0022_more_toy_brands.sql).
+    // 0022_more_toy_brands.sql, 0023_littletikes_platform.sql).
     const dbKeys = [
       'tonies',
       'leapfrog',
@@ -28,6 +28,7 @@ describe('platforms', () => {
       'fatbrain',
       'lakeshore',
       'learningresources',
+      'littletikes',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {

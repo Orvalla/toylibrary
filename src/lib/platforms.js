@@ -21,6 +21,7 @@ export const PLATFORMS = [
   { key: 'fatbrain', label: 'Fat Brain', emoji: '🌀' },
   { key: 'lakeshore', label: 'Lakeshore', emoji: '🎒' },
   { key: 'learningresources', label: 'Learning Resources', emoji: '🔬' },
+  { key: 'littletikes', label: 'Little Tikes', emoji: '🚗' },
   { key: 'books', label: 'Books', emoji: '📚' },
   { key: 'other', label: 'Other', emoji: '🎁' },
 ]
@@ -42,6 +43,7 @@ export const ALWAYS_PLAYABLE = [
   'fatbrain',
   'lakeshore',
   'learningresources',
+  'littletikes',
 ]
 
 // Physical-toy platforms: filed under the Toys category unless
@@ -57,6 +59,7 @@ export const TOY_PLATFORMS = [
   'fatbrain',
   'lakeshore',
   'learningresources',
+  'littletikes',
 ]
 
 export const platformLabel = (key) =>
