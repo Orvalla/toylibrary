@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import ItemTile from './ItemTile'
 import AmazonLink from './AmazonLink'
+import BundleNote from './BundleNote'
 import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
 import { formatISODate } from '../lib/occasions'
 
@@ -90,6 +91,7 @@ function WishlistTile({ slug, item, onChanged }) {
       }
     >
       <div className="tile-actions">
+        <BundleNote info={item.bundle} name={item.child_name} platform={item.platform} />
         {item.claimed ? (
           mine ? (
             <>

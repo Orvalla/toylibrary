@@ -1,4 +1,5 @@
 import ItemTile from './ItemTile'
+import BundleNote from './BundleNote'
 import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
 
 // Read-only tile grid grouped by platform — used for the share page's
@@ -22,7 +23,9 @@ export default function ItemTiles({ items, emptyText }) {
           </h3>
           <div className="tile-grid">
             {byPlatform[platform].map((item) => (
-              <ItemTile key={item.id} item={item} />
+              <ItemTile key={item.id} item={item}>
+                <BundleNote info={item.bundle} name={item.child_name} platform={item.platform} />
+              </ItemTile>
             ))}
           </div>
         </section>
