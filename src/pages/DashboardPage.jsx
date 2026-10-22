@@ -19,6 +19,7 @@ import {
 } from '../lib/bundles'
 import { recommendForChild } from '../lib/recommend'
 import PhotoScan from '../components/PhotoScan'
+import ProposalInbox from '../components/ProposalInbox'
 import TourGuide from '../components/TourGuide'
 
 // The catalog is several thousand rows — page through it so the
@@ -514,6 +515,8 @@ export default function DashboardPage() {
         <button className="btn">Add to {tab === 'have' ? 'have list' : 'wishlist'}</button>
       </form>
       {message && <p className="notice">{message}</p>}
+
+      <ProposalInbox kids={kids} />
 
       <PhotoScan
         kids={kids}

@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import ItemTiles from '../components/ItemTiles'
 import ClaimableWishlist from '../components/ClaimableWishlist'
 import GiftCart from '../components/GiftCart'
+import SuggestGift, { ApprovedGifts } from '../components/SuggestGift'
 import { addToCart, cartHas, loadCart, removeFromCart, saveCart } from '../lib/cart'
 import { groupByChild } from '../lib/children'
 import { formatISODate, formatOccasionLine, occasionTitle, occasionWhen } from '../lib/occasions'
@@ -36,9 +37,16 @@ export default function PublicListPage() {
   const toggleCart = (item) =>
     setCart((prev) => (cartHas(prev, item.id) ? removeFromCart(prev, item.id) : addToCart(prev, item)))
 
+  // Approved gift proposals (0024): off-list gifts the parents
+  // already said yes to, shown so nobody buys them twice.
+  const [proposals, setProposals] = useState([])
+
   const load = useCallback(() => {
     supabase.rpc('get_shared_list', { p_slug: slug }).then(({ data, error }) => {
       setData(error ? null : data)
+    })
+    supabase.rpc('get_shared_proposals', { p_slug: slug }).then(({ data }) => {
+      setProposals(Array.isArray(data) ? data : [])
     })
   }, [slug])
 
@@ -176,6 +184,9 @@ export default function PublicListPage() {
       ) : (
         <ClaimableWishlist slug={slug} items={data.wishlist} onChanged={load} cartIds={cartIds} onToggleCart={toggleCart} />
       )}
+
+      <ApprovedGifts proposals={proposals} />
+      <SuggestGift slug={slug} kids={data.children ?? []} />
     </main>
   )
 }

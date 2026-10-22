@@ -63,6 +63,23 @@ a { color: var(--accent-dark); }
 /* Phones: the full nav (five entries signed-in) can't share one
    line with the logo, so it wraps onto its own line, all in view,
    instead of running off the right edge. */
+/* ---------- gift proposals (0024) ---------- */
+.proposal-public { margin-top: 30px; }
+.proposal-inbox { margin: 18px 0; }
+.count-badge {
+  background: var(--accent); color: #fff; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 800; padding: 3px 10px;
+  margin-left: 10px; vertical-align: middle; white-space: nowrap;
+}
+.proposal-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.proposal-row {
+  display: flex; gap: 12px; align-items: center;
+  background: #fff; border: 2px solid #EFEAF9; border-radius: 14px;
+  padding: 10px 12px;
+}
+.proposal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.proposal-actions { display: flex; gap: 8px; flex-wrap: wrap; flex: none; }
+
 @media (max-width: 600px) {
   .header { padding: 10px 14px; }
   .header .logo { font-size: 20px; }
