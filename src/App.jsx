@@ -3,6 +3,7 @@ import Header from './components/Header'
 import HomePage from './pages/HomePage'
 import { LoginPage, SignupPage } from './pages/AuthPages'
 import DashboardPage from './pages/DashboardPage'
+import WelcomePage from './pages/WelcomePage'
 import CatalogPage from './pages/CatalogPage'
 import DevicesPage from './pages/DevicesPage'
 import SettingsPage from './pages/SettingsPage'
@@ -25,6 +26,14 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route
+          path="/welcome"
+          element={
+            <Protected>
+              <WelcomePage />
+            </Protected>
+          }
+        />
         <Route
           path="/dashboard"
           element={

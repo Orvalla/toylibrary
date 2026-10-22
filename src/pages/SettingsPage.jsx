@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { formatOccasionLine } from '../lib/occasions'
 import { normalizeShareSlug, validateShareSlug } from '../lib/slug'
+import { GENDERS, INTERESTS } from '../lib/onboarding'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -11,6 +13,7 @@ export default function SettingsPage() {
   const [childName, setChildName] = useState('')
   const [kids, setKids] = useState([])
   const [kidEdits, setKidEdits] = useState({}) // child id -> edited name
+  const [kidProfiles, setKidProfiles] = useState({}) // child id -> { gender, birth_date, interests }
   const [newKidName, setNewKidName] = useState('')
   const [occasions, setOccasions] = useState([])
   const [occForms, setOccForms] = useState({}) // child id -> { label, date }
@@ -36,6 +39,14 @@ export default function SettingsPage() {
       setChildName(data?.child_name ?? '')
       setSlugInput(data?.share_slug ?? '')
       setKids(childRows ?? [])
+      setKidProfiles(
+        Object.fromEntries(
+          (childRows ?? []).map((k) => [
+            k.id,
+            { gender: k.gender ?? '', birth_date: k.birth_date ?? '', interests: k.interests ?? [] },
+          ])
+        )
+      )
       setOccasions(occRows ?? [])
       setLoading(false)
     })
@@ -44,14 +55,34 @@ export default function SettingsPage() {
   async function renameKid(kid) {
     const name = (kidEdits[kid.id] ?? kid.name).trim()
     if (!name) return
+    const prof = kidProfiles[kid.id] ?? { gender: '', birth_date: '', interests: [] }
+    const fields = {
+      name,
+      gender: prof.gender ?? '',
+      birth_date: prof.birth_date || null,
+      interests: prof.interests ?? [],
+    }
     setMessage('')
-    const { error } = await supabase.from('children').update({ name }).eq('id', kid.id)
+    const { error } = await supabase.from('children').update(fields).eq('id', kid.id)
     if (error) {
       setMessage(error.message)
       return
     }
-    setKids((ks) => ks.map((k) => (k.id === kid.id ? { ...k, name } : k)))
-    setMessage(`Renamed to ${name}.`)
+    setKids((ks) => ks.map((k) => (k.id === kid.id ? { ...k, ...fields } : k)))
+    setMessage(`${name}'s profile saved.`)
+  }
+
+  function setKidProfile(kidId, patch) {
+    setKidProfiles((p) => ({
+      ...p,
+      [kidId]: {
+        gender: '',
+        birth_date: '',
+        interests: [],
+        ...(p[kidId] ?? {}),
+        ...patch,
+      },
+    }))
   }
 
   async function addKid(e) {
@@ -221,27 +252,78 @@ export default function SettingsPage() {
           Each child gets their own have-list and wishlist. Anything not
           tied to one child lives under <strong>Family</strong> — shared by
           everyone. Removing a child moves their toys to Family; nothing
-          is ever deleted.
+          is ever deleted. Birthday, gender and interests steer the gift
+          ideas on your library page — or{' '}
+          <Link to="/welcome">run the setup questions</Link> to do it the fun way.
         </p>
         {kids.length === 0 && <p className="notes">No children yet — add the first one below.</p>}
         <ul className="item-list">
-          {kids.map((kid) => (
-            <li key={kid.id} className="item child-row">
-              <input
-                value={kidEdits[kid.id] ?? kid.name}
-                onChange={(e) => setKidEdits((ed) => ({ ...ed, [kid.id]: e.target.value }))}
-                aria-label={`Name for ${kid.name}`}
-              />
-              <span className="item-actions">
-                <button className="linklike" onClick={() => renameKid(kid)}>
-                  Save
-                </button>
-                <button className="linklike danger" onClick={() => deleteKid(kid)}>
-                  Remove
-                </button>
-              </span>
-            </li>
-          ))}
+          {kids.map((kid) => {
+            const prof = kidProfiles[kid.id] ?? { gender: '', birth_date: '', interests: [] }
+            return (
+              <li key={kid.id} className="item child-row child-block">
+                <div className="child-row-main">
+                  <input
+                    value={kidEdits[kid.id] ?? kid.name}
+                    onChange={(e) => setKidEdits((ed) => ({ ...ed, [kid.id]: e.target.value }))}
+                    aria-label={`Name for ${kid.name}`}
+                  />
+                  <span className="item-actions">
+                    <button className="linklike" onClick={() => renameKid(kid)}>
+                      Save
+                    </button>
+                    <button className="linklike danger" onClick={() => deleteKid(kid)}>
+                      Remove
+                    </button>
+                  </span>
+                </div>
+                <div className="child-profile">
+                  <label>
+                    Birthday
+                    <input
+                      type="date"
+                      value={prof.birth_date ?? ''}
+                      onChange={(e) => setKidProfile(kid.id, { birth_date: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Gender
+                    <select
+                      value={prof.gender ?? ''}
+                      onChange={(e) => setKidProfile(kid.id, { gender: e.target.value })}
+                    >
+                      {GENDERS.map((g) => (
+                        <option key={g.label} value={g.value}>
+                          {g.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="chip-row">
+                  {INTERESTS.map((i) => {
+                    const on = (prof.interests ?? []).includes(i.key)
+                    return (
+                      <button
+                        type="button"
+                        key={i.key}
+                        className={on ? 'chip small on' : 'chip small'}
+                        onClick={() =>
+                          setKidProfile(kid.id, {
+                            interests: on
+                              ? prof.interests.filter((k) => k !== i.key)
+                              : [...(prof.interests ?? []), i.key],
+                          })
+                        }
+                      >
+                        {i.emoji} {i.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </li>
+            )
+          })}
         </ul>
         <form onSubmit={addKid} className="claim-form">
           <input

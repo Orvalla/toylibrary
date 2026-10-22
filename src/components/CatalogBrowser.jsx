@@ -6,6 +6,15 @@ import AmazonLink from './AmazonLink'
 import GrowCatalog from './GrowCatalog'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import { CATEGORIES, categoryOf } from '../lib/categories'
+import BundleNote from './BundleNote'
+import {
+  bundleInfoFor,
+  cascadeContentRows,
+  indexCatalog,
+  indexContents,
+  ownedKeysForBucket,
+  platformNoun,
+} from '../lib/bundles'
 
 // Browsable catalog of the well-known titles per platform. Parents tap
 // to add instead of typing; anything already owned carries the green
@@ -21,21 +30,27 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const [mine, setMine] = useState([])
   const [kids, setKids] = useState([])
   const [childSel, setChildSel] = useState('') // '' = Family, else a child id
-  const [platform, setPlatform] = useState('all')
+  // The setup wizard links here per shelf (/catalog?platform=tonies).
+  const [platform, setPlatform] = useState(
+    () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
+  )
   const [category, setCategory] = useState('all')
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
+  const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const [{ data: cat }, { data: items }, { data: childRows }] = await Promise.all([
+    const [{ data: cat }, { data: items }, { data: childRows }, { data: bundleRows }] = await Promise.all([
       supabase.from('catalog_items').select('*').order('sort_order').order('title'),
       supabase.from('items').select('platform, title, list_type, child_id').eq('owner_id', user.id),
       supabase.from('children').select('*').eq('owner_id', user.id).order('sort_order').order('name'),
+      supabase.from('bundle_contents').select('*'),
     ])
     setCatalog(cat ?? [])
     setMine(items ?? [])
     setKids(childRows ?? [])
+    setBundleRows(bundleRows ?? [])
     // Default to the first child once children are known (Family if none).
     if (childRows?.length) setChildSel((prev) => prev || childRows[0].id)
     setLoading(false)
@@ -67,6 +82,13 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     [mine]
   )
 
+  const contentsByBundle = useMemo(() => indexContents(bundleRows), [bundleRows])
+  const catalogIndex = useMemo(() => indexCatalog(catalog), [catalog])
+  const bucketKeys = useMemo(
+    () => ownedKeysForBucket(mine, childSel || null),
+    [mine, childSel]
+  )
+
   async function add(entry, listType) {
     setMessage('')
     const { error } = await supabase.from('items').insert({
@@ -87,6 +109,28 @@ export default function CatalogBrowser({ devicesOnly = false }) {
           : error.message
       )
       return
+    }
+    // Owning a bundle means owning everything inside it: the
+    // mapped contents join the have list too.
+    if (listType === 'have' && entry.is_bundle) {
+      const rows = cascadeContentRows({
+        entry,
+        contentsByBundle,
+        catalogById: catalogIndex.byId,
+        ownedKeys: bucketKeys,
+        ownerId: user.id,
+        childId: childSel || null,
+      })
+      let added = 0
+      for (const row of rows) {
+        const { error: cerr } = await supabase.from('items').insert(row)
+        if (!cerr) added++
+      }
+      if (added > 0) {
+        setMessage(
+          `Added “${entry.title}” — and the ${added} ${platformNoun(entry.platform)} inside it — to the have list.`
+        )
+      }
     }
     load()
   }
@@ -239,6 +283,21 @@ export default function CatalogBrowser({ devicesOnly = false }) {
                   }
                 >
                   <div className="tile-actions">
+                    {entry.is_bundle &&
+                      (contentsByBundle.get(entry.id)?.length ? (
+                        <BundleNote
+                          info={bundleInfoFor({
+                            twin: entry,
+                            contentsByBundle,
+                            catalogById: catalogIndex.byId,
+                            ownedKeys: bucketKeys,
+                          })}
+                          name={kids.find((k) => k.id === childSel)?.name ?? 'Family'}
+                          platform={entry.platform}
+                        />
+                      ) : (
+                        <span className="notes">📦 Bundle</span>
+                      ))}
                     {owned ? (
                       <span className="claimed-badge mine">✓ On your have list</span>
                     ) : (

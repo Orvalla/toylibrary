@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
@@ -7,12 +7,37 @@ import AmazonLink from '../components/AmazonLink'
 import { PLATFORMS, platformEmoji, platformLabel } from '../lib/platforms'
 import { childNameFor } from '../lib/children'
 import { formatOccasionLine, nearestOccasion } from '../lib/occasions'
+import BundleNote from '../components/BundleNote'
+import {
+  bundleInfoFor,
+  indexCatalog,
+  indexContents,
+  itemKey,
+  ownedKeysForBucket,
+} from '../lib/bundles'
+import { recommendForChild } from '../lib/recommend'
+
+// The catalog is several thousand rows — page through it so the
+// bundle lookup below sees every row, not just the first page.
+async function fetchCatalogIndex() {
+  const rows = []
+  for (let from = 0; ; from += 1000) {
+    const { data } = await supabase
+      .from('catalog_items')
+      .select('id, platform, title, details, image_url, asin, is_bundle, item_type, sort_order')
+      .range(from, from + 999)
+    rows.push(...(data ?? []))
+    if (!data || data.length < 1000) break
+  }
+  return rows
+}
 
 // child_id '' in a form means Family (stored as NULL in the database).
 const EMPTY_FORM = { platform: 'tonies', title: '', details: '', notes: '', image_url: '', child_id: '' }
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [items, setItems] = useState([])
   const [kids, setKids] = useState([])
@@ -27,10 +52,19 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState('')
   const [message, setMessage] = useState('')
   const [copied, setCopied] = useState(false)
+  const [catalogRows, setCatalogRows] = useState([])
+  const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const [{ data: prof }, { data: rows }, { data: childRows }, { data: occRows }] = await Promise.all([
+    const [
+      { data: prof },
+      { data: rows },
+      { data: childRows },
+      { data: occRows },
+      { data: bcRows },
+      catRows,
+    ] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase
         .from('items')
@@ -46,17 +80,26 @@ export default function DashboardPage() {
         .order('name'),
       // RLS scopes occasions to this parent's children.
       supabase.from('occasions').select('*'),
+      supabase.from('bundle_contents').select('*'),
+      fetchCatalogIndex(),
     ])
     setProfile(prof)
     setItems(rows ?? [])
     setKids(childRows ?? [])
     setOccasions(occRows ?? [])
+    setBundleRows(bcRows ?? [])
+    setCatalogRows(catRows ?? [])
     setLoading(false)
   }, [user.id])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // New families land in the setup questionnaire first.
+  useEffect(() => {
+    if (profile && !profile.onboarded_at) navigate('/welcome', { replace: true })
+  }, [profile, navigate])
 
   // Until the parent picks otherwise, new items default to the first
   // child (or Family when there are no children yet).
@@ -191,6 +234,9 @@ export default function DashboardPage() {
     load()
   }
 
+  const catalogIndex = useMemo(() => indexCatalog(catalogRows), [catalogRows])
+  const contentsByBundle = useMemo(() => indexContents(bundleRows), [bundleRows])
+
   if (loading) return <main className="page"><p>Loading your library…</p></main>
   if (!profile) return <main className="page"><p>We couldn't load your profile. Try refreshing.</p></main>
 
@@ -220,6 +266,57 @@ export default function DashboardPage() {
   const nextForKid = filteredKid
     ? nearestOccasion(occasions.filter((o) => o.child_id === filteredKid.id))
     : null
+
+  // Tailored gift ideas for the filtered child: content for the
+  // devices they have, matched to their interests and age.
+  const recs = filteredKid
+    ? recommendForChild({
+        catalog: catalogRows,
+        child: filteredKid,
+        ownedPlatforms: new Set(
+          items
+            .filter(
+              (i) =>
+                i.list_type === 'have' &&
+                (i.child_id === filteredKid.id || !i.child_id)
+            )
+            .map((i) => catalogIndex.byKey.get(itemKey(i.platform, i.title)))
+            .filter((t) => t?.item_type === 'device')
+            .map((t) => t.platform)
+        ),
+        ownedKeys: ownedKeysForBucket(items, filteredKid.id),
+        wishlistKeys: new Set(
+          items
+            .filter(
+              (i) =>
+                i.list_type === 'wishlist' &&
+                (i.child_id === filteredKid.id || !i.child_id)
+            )
+            .map((i) => itemKey(i.platform, i.title))
+        ),
+        limit: 8,
+      })
+    : []
+
+  async function addToWishlist(entry) {
+    setMessage('')
+    const { error } = await supabase.from('items').insert({
+      owner_id: user.id,
+      list_type: 'wishlist',
+      platform: entry.platform,
+      title: entry.title,
+      details: entry.details ?? '',
+      notes: '',
+      image_url: entry.image_url ?? '',
+      asin: entry.asin ?? null,
+      child_id: filteredKid.id,
+    })
+    if (error) {
+      setMessage(error.code === '23505' ? `“${entry.title}” is already on a list.` : error.message)
+      return
+    }
+    load()
+  }
 
   return (
     <main className="page">
@@ -288,6 +385,28 @@ export default function DashboardPage() {
         <p className="occasion-line">
           🎂 {formatOccasionLine({ ...nextForKid, childName: filteredKid.name })}
         </p>
+      )}
+
+      {filteredKid && recs.length > 0 && (
+        <section className="card recs-card">
+          <h3>🎁 Gift ideas for {filteredKid.name}</h3>
+          <p className="field-help">
+            Based on the players {filteredKid.name} has and what they're into. Add one to
+            the wishlist and it shows up on the gift-giver page.
+          </p>
+          <div className="tile-grid">
+            {recs.map((entry) => (
+              <ItemTile key={entry.id} item={entry}>
+                <div className="tile-actions">
+                  <button className="linklike" onClick={() => addToWishlist(entry)}>
+                    ☆ Add to wishlist
+                  </button>
+                  <AmazonLink item={entry} />
+                </div>
+              </ItemTile>
+            ))}
+          </div>
+        </section>
       )}
 
       <form onSubmit={addItem} className="form inline-form">
@@ -414,6 +533,21 @@ export default function DashboardPage() {
             <div className="tile-grid">
               {byPlatform[platform].map((item) => (
                 <ItemTile key={item.id} item={item}>
+                  <BundleNote
+                    info={(() => {
+                      const twin = catalogIndex.byKey.get(itemKey(item.platform, item.title))
+                      return twin
+                        ? bundleInfoFor({
+                            twin,
+                            contentsByBundle,
+                            catalogById: catalogIndex.byId,
+                            ownedKeys: ownedKeysForBucket(items, item.child_id ?? null),
+                          })
+                        : null
+                    })()}
+                    name={childNameFor(item, kids)}
+                    platform={item.platform}
+                  />
                   <div className="tile-actions">
                     {childFilter === 'all' && kids.length > 0 && (
                       <span className="badge">
