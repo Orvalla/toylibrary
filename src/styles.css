@@ -499,6 +499,24 @@ h2 .plat-badge img, h3 .plat-badge img { max-width: 24px; max-height: 24px; }
   .welcome-card h1 { font-size: 25px; }
 }
 
+/* Ethos: the five promises, one shared list rendered on the
+   landing page and the welcome wizard's opening screen. */
+.ethos-band {
+  margin: 26px 0 4px; padding: 20px 22px 10px;
+  background: #fff; border: 2px solid var(--line); border-radius: 20px;
+}
+.ethos-band h2 { margin: 0 0 6px; font-size: 23px; }
+.ethos-list { list-style: none; margin: 0; padding: 0; }
+.ethos-row { display: flex; gap: 12px; align-items: flex-start; padding: 9px 0; }
+.ethos-row + .ethos-row { border-top: 1.5px dashed var(--line); }
+.ethos-icon {
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px;
+  background: var(--soft); display: inline-flex; align-items: center;
+  justify-content: center; font-size: 19px;
+}
+.ethos-text { font-size: 15.5px; line-height: 1.45; padding-top: 7px; }
+.ethos-text strong { color: var(--ink); }
+
 /* Guided tour: a bottom card + a sunny ring on the element
    being introduced. The overlay itself never blocks taps. */
 .tour-overlay { position: fixed; inset: 0; z-index: 80; pointer-events: none; }
@@ -513,6 +531,10 @@ h2 .plat-badge img, h3 .plat-badge img { max-width: 24px; max-height: 24px; }
 .tour-count { font-size: 12.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-dark); }
 .tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .tour-nav { display: inline-flex; gap: 8px; }
+.tour-dots { display: flex; gap: 6px; margin: 0 0 12px; }
+.tdot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.tdot.on { background: var(--accent); transform: scale(1.25); }
+.tdot.done { background: var(--teal); }
 .tour-highlight {
   box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--sun) !important;
   border-radius: 14px;

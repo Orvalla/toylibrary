@@ -46,7 +46,7 @@ export default function ProposalInbox({ kids = [] }) {
   const decided = visible.filter((p) => p.status !== 'pending').slice(0, 10)
 
   return (
-    <section className="card proposal-inbox">
+    <section className="card proposal-inbox" data-tour="proposals">
       <h2>
         🎁 Gift proposals
         {waiting.length > 0 && <span className="count-badge">{waiting.length} waiting</span>}

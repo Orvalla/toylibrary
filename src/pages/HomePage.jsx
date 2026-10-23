@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { PLATFORMS } from '../lib/platforms'
 import PlatformMark from '../components/PlatformMark'
+import Ethos from '../components/Ethos'
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -21,6 +22,11 @@ export default function HomePage() {
         birthdays and holidays, and gift-givers can check it in ten seconds —
         no account needed on their end.
       </p>
+
+      <section className="ethos-band">
+        <h2>Why we built it this way</h2>
+        <Ethos />
+      </section>
 
       <div className="brand-strip" aria-label="Platforms Toy Library tracks">
         <span className="brand-strip-label">One library for all of them:</span>

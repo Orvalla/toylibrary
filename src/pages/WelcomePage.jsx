@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { GENDERS, HOLIDAYS, INTERESTS, ageLabel } from '../lib/onboarding'
 import { platformLabel } from '../lib/platforms'
 import { platformNoun } from '../lib/bundles'
+import Ethos from '../components/Ethos'
 
 const STEP_TITLES = ['About your child', 'Gift occasions', 'Their devices', 'Interests', 'Fill the shelves', 'You’re all set']
 
@@ -24,6 +25,10 @@ export default function WelcomePage() {
   const [devices, setDevices] = useState([])
   const [mine, setMine] = useState([])
   const [occasions, setOccasions] = useState([])
+  // The ethos screen comes before the questionnaire, but only
+  // for a family that hasn't onboarded yet (no stamp) — anyone
+  // returning to edit a profile lands on the steps directly.
+  const [intro, setIntro] = useState(false)
   const [step, setStep] = useState(0)
   const [message, setMessage] = useState('')
 
@@ -45,6 +50,7 @@ export default function WelcomePage() {
       supabase.from('occasions').select('*'),
     ]).then(([{ data: prof }, { data: childRows }, { data: deviceRows }, { data: itemRows }, { data: occRows }]) => {
       setProfile(prof)
+      setIntro(!prof?.onboarded_at)
       setKids(childRows ?? [])
       setDevices(deviceRows ?? [])
       setMine(itemRows ?? [])
@@ -188,6 +194,33 @@ export default function WelcomePage() {
   }, [devices, pickedDevices])
 
   if (loading) return <main className="page"><p>Getting things ready…</p></main>
+
+  if (intro) {
+    return (
+      <main className="welcome-shell">
+        <div className="welcome-card">
+          <div className="welcome-brand">
+            <img src="/logo.svg" alt="" />
+            <span>Toy Library</span>
+          </div>
+          <h1>Why Toy Library exists</h1>
+          <p className="lede">
+            Thirty seconds of why — then about a minute of setup, and the duplicate
+            gifts stop.
+          </p>
+          <Ethos />
+          <p className="finale-actions" style={{ justifyContent: 'flex-start' }}>
+            <button className="btn" onClick={() => setIntro(false)}>
+              Set up my library →
+            </button>
+            <button className="btn btn-ghost" onClick={() => finish(false)}>
+              Skip the setup for now
+            </button>
+          </p>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="welcome-shell">
