@@ -63,6 +63,10 @@ export default function HomePage() {
           <h3>🔗 Share one link</h3>
           <p>Family sees the lists read-only. The duplicate check is built in — the database itself refuses the same title twice.</p>
         </div>
+        <div className="card">
+          <h3>📸 Add from a photo</h3>
+          <p>Snap a bookshelf or a game closet — the scan reads what's there and checks it off against your lists.</p>
+        </div>
       </div>
 
       {user ? (
