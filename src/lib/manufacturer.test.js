@@ -1,40 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { manufacturerSiteFor, manufacturerUrlFor } from './manufacturer'
+import { manufacturerUrlFor } from './manufacturer'
 
-// Direct manufacturer links: the item's own product page when
-// the catalog knows it, else the maker's official store, else
-// nothing. Books have no single maker site — no link beats a
-// wrong one.
+// Direct manufacturer links are product pages or nothing
+// (owner's ruling 2026-10-22): no storefront/catalog fallback,
+// so an item whose exact page is unknown — mostly stock the
+// maker's store no longer lists — shows no manufacturer link
+// rather than a generic one.
 
 describe('manufacturerUrlFor', () => {
-  it('prefers the exact product page', () => {
+  it('returns the exact product page when known', () => {
     expect(
       manufacturerUrlFor({ platform: 'tonies', product_url: 'https://us.tonies.com/products/x' })
     ).toBe('https://us.tonies.com/products/x')
-  })
-
-  it('falls back to the platform store', () => {
-    expect(manufacturerUrlFor({ platform: 'haba', product_url: null })).toBe(
-      'https://www.habausa.com'
-    )
-    expect(manufacturerUrlFor({ platform: 'littletikes' })).toBe(
-      'https://www.littletikes.com'
-    )
-  })
-
-  it('splits the projector platform by brand', () => {
     expect(
-      manufacturerSiteFor({ platform: 'projector', title: 'Moonlite Single Story — Frozen' })
-    ).toBe('https://www.mymoonlite.com')
-    expect(
-      manufacturerSiteFor({
+      manufacturerUrlFor({
         platform: 'projector',
-        title: 'Story Dream Machine — The Very Hungry Caterpillar',
+        product_url: 'https://www.mymoonlite.com/products/reel',
       })
-    ).toBe('https://www.littletikes.com')
+    ).toBe('https://www.mymoonlite.com/products/reel')
   })
 
-  it('returns null where no maker site exists', () => {
+  it('returns null when the exact page is unknown — no catalog fallback', () => {
+    expect(manufacturerUrlFor({ platform: 'haba', product_url: null })).toBeNull()
+    expect(manufacturerUrlFor({ platform: 'tonies' })).toBeNull()
+    expect(manufacturerUrlFor({ platform: 'littletikes', product_url: '' })).toBeNull()
+  })
+
+  it('returns null for books, other, and missing items', () => {
     expect(manufacturerUrlFor({ platform: 'books', title: 'The Gruffalo' })).toBeNull()
     expect(manufacturerUrlFor({ platform: 'other', title: 'Thing' })).toBeNull()
     expect(manufacturerUrlFor(null)).toBeNull()
