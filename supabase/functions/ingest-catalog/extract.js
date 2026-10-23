@@ -113,6 +113,105 @@ export function isSafeFetchUrl(rawUrl) {
   return true
 }
 
+// ---------------------------------------------------------- content guard
+
+// This is a kids' catalog (owner request 2026-10-22): pasted
+// links are screened before anything is fetched or stored.
+// Two signals, host first (highest precision): known adult
+// retailers / adult TLDs are refused outright, and product
+// titles are screened for explicit terms. Matching is
+// word-boundary on tokenised text, so innocent substrings
+// never trip it ("Middlesex", "Essex", a breast pump, a police
+// costume's accessories all pass). The clinical vocabulary of
+// ordinary puberty/anatomy books is deliberately NOT screened.
+const ADULT_TLDS = new Set(['xxx', 'adult', 'porn', 'sex', 'tube', 'fans'])
+
+const ADULT_HOSTS = [
+  'adamandeve.com',
+  'lovehoney.com',
+  'lovehoney.co.uk',
+  'lelo.com',
+  'fleshlight.com',
+  'tenga.co',
+  'babeland.com',
+  'goodvibes.com',
+  'hustlerhollywood.com',
+  'loverslane.com',
+  'bellesa.co',
+  'womanizer.com',
+  'we-vibe.com',
+  'satisfyer.com',
+  'docjohnson.com',
+  'pornhub.com',
+  'xvideos.com',
+  'xhamster.com',
+  'onlyfans.com',
+]
+
+const ADULT_TERMS = [
+  'dildo',
+  'dildos',
+  'vibrator',
+  'vibrators',
+  'masturbator',
+  'masturbation',
+  'fleshlight',
+  'butt plug',
+  'butt plugs',
+  'anal',
+  'bdsm',
+  'bondage',
+  'fetish',
+  'erotic',
+  'erotica',
+  'porn',
+  'pornographic',
+  'pornography',
+  'hentai',
+  'sex toy',
+  'sex toys',
+  'sextoy',
+  'sextoys',
+  'strap on',
+  'strapon',
+  'orgasm',
+  'condom',
+  'condoms',
+  'aphrodisiac',
+  'dominatrix',
+  'edible underwear',
+  'love doll',
+  'blow up doll',
+]
+
+export function isBlockedHost(rawUrl) {
+  let url
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    return false
+  }
+  const host = url.hostname.toLowerCase().replace(/^www\./, '')
+  const tld = host.split('.').pop() ?? ''
+  if (ADULT_TLDS.has(tld)) return true
+  return ADULT_HOSTS.some((d) => host === d || host.endsWith(`.${d}`))
+}
+
+// True when the text carries an explicit adult term as a whole
+// word or phrase. Tokenising first (non-alphanumerics become
+// spaces) is what keeps the check honest: "sex" inside
+// "Middlesex" is part of a longer token and never matches.
+export function screenText(raw) {
+  const norm = ` ${String(raw ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')} `
+  return ADULT_TERMS.some((term) => norm.includes(` ${term} `) || norm.includes(` ${term}s `))
+}
+
+export function isBlockedTitle(title) {
+  return screenText(title)
+}
+
 // -------------------------------------------------------------- text tidy
 
 const ENTITIES = {
@@ -575,6 +674,7 @@ export function planCollectionImport(products, existingTitles, platform, origin 
   const toAdd = []
   let alreadyPresent = 0
   let skippedFiltered = 0
+  let blockedContent = 0
   for (const product of products ?? []) {
     // No keep/drop rules on this path (see "product facts"
     // above): everything on the page is planned. skippedFiltered
@@ -585,6 +685,10 @@ export function planCollectionImport(products, existingTitles, platform, origin 
       continue
     }
     const row = applyCollectionTitleRules(platform, { ...normalised })
+    if (isBlockedTitle(row.title)) {
+      blockedContent++
+      continue
+    }
     const key = row.title.toLowerCase()
     if (existing.has(key) || seen.has(key)) {
       alreadyPresent++
@@ -595,7 +699,7 @@ export function planCollectionImport(products, existingTitles, platform, origin 
     if (!row.source_url && product.url) row.source_url = product.url
     toAdd.push(row)
   }
-  return { toAdd, alreadyPresent, skippedFiltered }
+  return { toAdd, alreadyPresent, skippedFiltered, blockedContent }
 }
 
 // ---------------------------------------------------- listing pages
@@ -658,9 +762,14 @@ export function planRowImport(rows, existingTitles, platform) {
   const seen = new Set()
   const toAdd = []
   let alreadyPresent = 0
+  let blockedContent = 0
   for (const raw of rows ?? []) {
     const title = cleanText(raw?.title)
     if (!title) continue
+    if (isBlockedTitle(title)) {
+      blockedContent++
+      continue
+    }
     const row = applyCollectionTitleRules(platform, {
       title,
       details: cleanText(raw.details ?? ''),
@@ -680,5 +789,5 @@ export function planRowImport(rows, existingTitles, platform) {
     seen.add(key)
     toAdd.push(row)
   }
-  return { toAdd, alreadyPresent, skippedFiltered: 0 }
+  return { toAdd, alreadyPresent, skippedFiltered: 0, blockedContent }
 }

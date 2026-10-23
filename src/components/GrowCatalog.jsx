@@ -203,6 +203,8 @@ export default function GrowCatalog({ onAdded }) {
               {outcome.already_present} already in the catalog
               {outcome.skipped_filtered > 0 &&
                 ` · ${outcome.skipped_filtered} couldn't be read`}
+              {outcome.blocked_content > 0 &&
+                ` · ${outcome.blocked_content} not added (not kids' products)`}
             </p>
           )}
 

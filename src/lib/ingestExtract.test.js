@@ -17,6 +17,8 @@ import {
   platformForProduct,
   planRowImport,
   platformForUrl,
+  isBlockedHost,
+  isBlockedTitle,
 } from '../../supabase/functions/ingest-catalog/extract.js'
 
 // The ingest-catalog Edge Function's pure helpers. The function itself
@@ -559,6 +561,7 @@ describe('planCollectionImport', () => {
       toAdd: [],
       alreadyPresent: 0,
       skippedFiltered: 0,
+      blockedContent: 0,
     })
     expect(planCollectionImport(null, null, 'tonies').toAdd).toEqual([])
   })
@@ -649,7 +652,12 @@ describe('planRowImport', () => {
   })
 
   it('handles empty inputs', () => {
-    expect(planRowImport([], [], 'tonies')).toEqual({ toAdd: [], alreadyPresent: 0, skippedFiltered: 0 })
+    expect(planRowImport([], [], 'tonies')).toEqual({
+      toAdd: [],
+      alreadyPresent: 0,
+      skippedFiltered: 0,
+      blockedContent: 0,
+    })
     expect(planRowImport(null, null, 'tonies').toAdd).toEqual([])
   })
 })
@@ -706,5 +714,49 @@ describe('platformForProduct', () => {
   it('leaves every other platform alone', () => {
     expect(platformForProduct('tonies', { title: 'Story Dream Machine' })).toBe('tonies')
     expect(platformForProduct('projector', { title: 'Anything' })).toBe('projector')
+  })
+})
+
+describe('content guard', () => {
+  const img = [{ src: 'https://cdn.shopify.com/x.jpg' }]
+
+  it('blocks adult retailer hosts, subdomains and adult TLDs', () => {
+    expect(isBlockedHost('https://www.adamandeve.com/products/x')).toBe(true)
+    expect(isBlockedHost('https://shop.lovehoney.com/x')).toBe(true)
+    expect(isBlockedHost('https://gifts.example.xxx/x')).toBe(true)
+    expect(isBlockedHost('https://notadamandeve.com/x')).toBe(false)
+    expect(isBlockedHost('https://us.tonies.com/products/x')).toBe(false)
+  })
+
+  it('screens explicit titles on word boundaries only', () => {
+    expect(isBlockedTitle('Deluxe Vibrator X2000')).toBe(true)
+    expect(isBlockedTitle("Couples' Sex Toy Kit")).toBe(true)
+    expect(isBlockedTitle('Middlesex County Puzzle')).toBe(false)
+    expect(isBlockedTitle('Essex Steam Train Set')).toBe(false)
+    expect(isBlockedTitle('Electric Breast Pump')).toBe(false)
+    expect(isBlockedTitle('Police Costume with Handcuffs')).toBe(false)
+  })
+
+  it('drops screened products from a collection plan and counts them', () => {
+    const products = [
+      { title: 'Wooden Tricycle', product_type: 'Toy', handle: 'trike', images: img, tags: [] },
+      { title: 'Deluxe Vibrator X2000', product_type: 'Toy', handle: 'vib', images: img, tags: [] },
+    ]
+    const plan = planCollectionImport(products, [], 'other', 'https://shop.example.com')
+    expect(plan.toAdd.map((r) => r.title)).toEqual(['Wooden Tricycle'])
+    expect(plan.blockedContent).toBe(1)
+  })
+
+  it('drops screened rows from a page-row plan and counts them', () => {
+    const plan = planRowImport(
+      [
+        { title: 'Building Blocks', image_url: '', source_url: '' },
+        { title: 'Erotic Board Game', image_url: '', source_url: '' },
+      ],
+      [],
+      'other'
+    )
+    expect(plan.toAdd.map((r) => r.title)).toEqual(['Building Blocks'])
+    expect(plan.blockedContent).toBe(1)
   })
 })

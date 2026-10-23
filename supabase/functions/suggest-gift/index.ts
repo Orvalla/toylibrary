@@ -26,6 +26,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   cleanText,
   extractProductFacts,
+  isBlockedHost,
+  isBlockedTitle,
   isSafeFetchUrl,
   normalizeGiftUrl,
 } from './extract.js'
@@ -194,6 +196,12 @@ async function handleSuggest(admin: ReturnType<typeof createClient>, body: any) 
   if (!url || !isSafeFetchUrl(url)) {
     throw new HttpError(400, "That link doesn't look like a public product page.")
   }
+  if (isBlockedHost(url)) {
+    throw new HttpError(
+      422,
+      "That link doesn't look like a kids' gift — suggestions have to be toys, games or books for the kids.",
+    )
+  }
   const urlKey = normalizeGiftUrl(url)
 
   // Already suggested? Say so instead of stacking duplicates.
@@ -238,6 +246,12 @@ async function handleSuggest(admin: ReturnType<typeof createClient>, body: any) 
     fallbackTitle = ''
   }
   const title = givenTitle || facts?.title || fallbackTitle || 'Gift idea'
+  if (isBlockedTitle(title)) {
+    throw new HttpError(
+      422,
+      "That doesn't look like a kids' gift — suggestions have to be toys, games or books for the kids.",
+    )
+  }
   const name = cleanText(typeof body.name === 'string' ? body.name : '').slice(0, 60)
   const note = cleanText(typeof body.note === 'string' ? body.note : '').slice(0, 300)
 

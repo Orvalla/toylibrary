@@ -42,6 +42,8 @@ import {
   extractFromOpenGraph,
   extractOgType,
   extractProductLinks,
+  isBlockedHost,
+  isBlockedTitle,
   isSafeFetchUrl,
   normalizeShopifyProduct,
   normalizeSuggestResult,
@@ -200,6 +202,12 @@ async function upsertCatalogItem(
     rating_count?: number | null
   },
 ): Promise<{ status: 'added' | 'exists'; item: Record<string, unknown> }> {
+  if (isBlockedTitle(row.title)) {
+    throw new HttpError(
+      422,
+      "That doesn't look like a kids' product, so it can't be added to the catalog.",
+    )
+  }
   const { data: existing, error: findError } = await admin
     .from('catalog_items')
     .select('*')
@@ -369,6 +377,12 @@ async function insertPlannedCollection(
 ): Promise<Record<string, unknown>> {
   const existingTitles = await loadExistingTitles(admin, platform)
   const plan = planCollectionImport(products, existingTitles, platform, origin)
+  if (plan.toAdd.length === 0 && plan.blockedContent > 0 && plan.alreadyPresent === 0) {
+    throw new HttpError(
+      422,
+      "Those products aren't kids' products, so they can't be added to the catalog.",
+    )
+  }
   await enrichRatings(plan.toAdd)
   const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
   return {
@@ -376,8 +390,9 @@ async function insertPlannedCollection(
     platform,
     total_found: products.length,
     added,
-    already_present: products.length - plan.skippedFiltered - added,
+    already_present: products.length - plan.skippedFiltered - plan.blockedContent - added,
     skipped_filtered: plan.skippedFiltered,
+    blocked_content: plan.blockedContent,
   }
 }
 
@@ -395,14 +410,21 @@ async function insertPlannedRows(
 ): Promise<Record<string, unknown>> {
   const existingTitles = await loadExistingTitles(admin, platform)
   const plan = planRowImport(rows, existingTitles, platform)
+  if (plan.toAdd.length === 0 && plan.blockedContent > 0 && plan.alreadyPresent === 0) {
+    throw new HttpError(
+      422,
+      "Those products aren't kids' products, so they can't be added to the catalog.",
+    )
+  }
   const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
   return {
     status: 'collection',
     platform,
     total_found: totalFound,
     added,
-    already_present: totalFound - skipped - added,
+    already_present: totalFound - skipped - plan.blockedContent - added,
     skipped_filtered: skipped,
+    blocked_content: plan.blockedContent,
   }
 }
 
@@ -480,6 +502,8 @@ async function importCollection(
         (merged.already_present as number) + (result.already_present as number)
       merged.skipped_filtered =
         (merged.skipped_filtered as number) + (result.skipped_filtered as number)
+      merged.blocked_content =
+        ((merged.blocked_content as number) ?? 0) + ((result.blocked_content as number) ?? 0)
     }
     if (groupProducts.length > biggest) {
       biggest = groupProducts.length
@@ -612,6 +636,12 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
   const url = typeof body.url === 'string' ? body.url.trim() : ''
   if (!url || !isSafeFetchUrl(url)) {
     throw new HttpError(400, "That link doesn't look like a public product page.")
+  }
+  if (isBlockedHost(url)) {
+    throw new HttpError(
+      422,
+      "That store isn't one we can add from — Toy Library only stocks kids' products.",
+    )
   }
   const platform = platformForUrl(url)
   const parsed = new URL(url)

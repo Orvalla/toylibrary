@@ -3,6 +3,8 @@ import {
   extractProductFacts,
   isSafeFetchUrl,
   normalizeGiftUrl,
+  isBlockedHost,
+  isBlockedTitle,
 } from '../../supabase/functions/suggest-gift/extract'
 
 // Pins for the suggest-gift function's pure helpers: the SSRF
@@ -76,5 +78,14 @@ describe('normalizeGiftUrl', () => {
     expect(normalizeGiftUrl('https://example.com/item?id=42')).toBe(
       'https://example.com/item?id=42'
     )
+  })
+})
+
+describe('content guard (suggest-gift copy)', () => {
+  it('blocks adult hosts and explicit titles', () => {
+    expect(isBlockedHost('https://www.adamandeve.com/')).toBe(true)
+    expect(isBlockedHost('https://www.littletikes.com/products/cozy-coupe')).toBe(false)
+    expect(isBlockedTitle('Fuzzy Dildo Deluxe')).toBe(true)
+    expect(isBlockedTitle('Wooden Tricycle')).toBe(false)
   })
 })
