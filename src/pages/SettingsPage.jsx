@@ -609,6 +609,12 @@ export default function SettingsPage() {
           the tag, and anyone who opens your list keeps it off in their
           browser from then on.
         </p>
+        <p>
+          <strong>Related to the site's owner?</strong> Please turn this on
+          for your family too. The commission goes to him, and gifts between
+          family shouldn't earn him anything — he'd much rather you just
+          bought the toy.
+        </p>
         <label className="toggle">
           <input
             type="checkbox"
