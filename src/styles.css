@@ -372,6 +372,8 @@ a { color: var(--accent-dark); }
    Edit/Remove row — in a ~160px tile the three across squeezed
    it into a one-word-per-line column) and never wraps itself. */
 .tile-actions .amazon-link { white-space: nowrap; font-size: 13.5px; }
+.used-links { display: block; font-size: 12.5px; color: var(--ink-soft, #6b6890); margin-top: 2px; }
+.used-links a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .tile .claimed-badge { white-space: normal; }
 .owned-check {
   position: absolute; top: 8px; right: 8px; width: 30px; height: 30px;
