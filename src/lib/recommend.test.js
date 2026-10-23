@@ -188,4 +188,51 @@ describe('grow-into window', () => {
     expect(titles).toContain('Near Future Read') // 7 = 4 + 3, inside the window
     expect(titles).not.toContain('Teen Novel')
   })
+
+  it('honors the per-child setting from Settings (children.grow_into_years)', () => {
+    const catalog = [
+      { platform: 'books', title: 'Right Now Read', details: 'Picture book', age_min_years: 4, age_max_years: 6, sort_order: 1 },
+      { platform: 'books', title: 'Next Year Read', details: 'Chapter book', age_min_years: 5, age_max_years: 7, sort_order: 2 },
+      { platform: 'books', title: 'Way Ahead Read', details: 'Chapter book', age_min_years: 8, age_max_years: 10, sort_order: 3 },
+    ]
+    const base = {
+      catalog,
+      ownedPlatforms: new Set(),
+      ownedKeys: new Set(),
+      wishlistKeys: new Set(),
+      today: new Date(2026, 0, 1),
+    }
+    // Window 0: strictly their age right now.
+    const strict = recommendForChild({
+      ...base,
+      child: { birth_date: '2022-01-01', interests: [], grow_into_years: 0 },
+    }).map((r) => r.title)
+    expect(strict).toEqual(['Right Now Read'])
+    // Window 1: one year ahead joins, +4 stays out.
+    const oneYear = recommendForChild({
+      ...base,
+      child: { birth_date: '2022-01-01', interests: [], grow_into_years: 1 },
+    }).map((r) => r.title)
+    expect(oneYear).toContain('Next Year Read')
+    expect(oneYear).not.toContain('Way Ahead Read')
+    // Window 5: everything here is in range.
+    const five = recommendForChild({
+      ...base,
+      child: { birth_date: '2022-01-01', interests: [], grow_into_years: 5 },
+    }).map((r) => r.title)
+    expect(five).toContain('Way Ahead Read')
+  })
+
+  it('sinks beyond-window items in the catalog Suggested sort', () => {
+    const entries = [
+      { platform: 'books', title: 'Far Ahead', details: 'Young adult', age_min_years: 12, age_max_years: 18, sort_order: 1 },
+      { platform: 'books', title: 'Right Now', details: 'Picture book', age_min_years: 4, age_max_years: 6, sort_order: 2 },
+    ]
+    const sorted = sortBySuggestions(entries, {
+      child: { birth_date: '2022-01-01', interests: [], grow_into_years: 0 },
+      ownedPlatforms: new Set(),
+      today: new Date(2026, 0, 1),
+    })
+    expect(sorted.map((e) => e.title)).toEqual(['Right Now', 'Far Ahead'])
+  })
 })

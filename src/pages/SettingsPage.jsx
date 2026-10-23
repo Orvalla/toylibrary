@@ -50,7 +50,12 @@ export default function SettingsPage() {
         Object.fromEntries(
           (childRows ?? []).map((k) => [
             k.id,
-            { gender: k.gender ?? '', birth_date: k.birth_date ?? '', interests: k.interests ?? [] },
+            {
+              gender: k.gender ?? '',
+              birth_date: k.birth_date ?? '',
+              interests: k.interests ?? [],
+              grow_into_years: k.grow_into_years ?? null,
+            },
           ])
         )
       )
@@ -68,12 +73,13 @@ export default function SettingsPage() {
   async function renameKid(kid) {
     const name = (kidEdits[kid.id] ?? kid.name).trim()
     if (!name) return
-    const prof = kidProfiles[kid.id] ?? { gender: '', birth_date: '', interests: [] }
+    const prof = kidProfiles[kid.id] ?? { gender: '', birth_date: '', interests: [], grow_into_years: null }
     const fields = {
       name,
       gender: prof.gender ?? '',
       birth_date: prof.birth_date || null,
       interests: prof.interests ?? [],
+      grow_into_years: prof.grow_into_years ?? null,
     }
     setMessage('')
     const { error } = await supabase.from('children').update(fields).eq('id', kid.id)
@@ -92,6 +98,7 @@ export default function SettingsPage() {
         gender: '',
         birth_date: '',
         interests: [],
+        grow_into_years: null,
         ...(p[kidId] ?? {}),
         ...patch,
       },
@@ -428,7 +435,27 @@ export default function SettingsPage() {
                       ))}
                     </select>
                   </label>
+                  <label>
+                    Gift ideas may aim ahead
+                    <select
+                      value={prof.grow_into_years ?? 3}
+                      onChange={(e) =>
+                        setKidProfile(kid.id, { grow_into_years: Number(e.target.value) })
+                      }
+                    >
+                      <option value={0}>Only their age right now</option>
+                      <option value={1}>Up to 1 year older</option>
+                      <option value={2}>Up to 2 years older</option>
+                      <option value={3}>Up to 3 years older</option>
+                      <option value={5}>Up to 5 years older</option>
+                    </select>
+                  </label>
                 </div>
+                <p className="field-help" style={{ marginTop: 0 }}>
+                  Gift suggestions usually include a few things {kid.name} will grow
+                  into. “Only their age right now” keeps ideas strictly for the age
+                  they are today.
+                </p>
                 <div className="chip-row">
                   {INTERESTS.map((i) => {
                     const on = (prof.interests ?? []).includes(i.key)

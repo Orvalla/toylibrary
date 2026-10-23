@@ -103,6 +103,16 @@ export function suggestionScore(
   // the zero-score neutrals — it should never read as a
   // suggestion for this child.
   if (agedOutOf(entry, age)) score -= 10
+  // The family's grow-into window (Settings, per child):
+  // anything aimed further above their age than the window
+  // sinks the same way — visible when browsed for on purpose,
+  // never floated as a suggestion.
+  if (
+    age != null &&
+    entry.age_min_years != null &&
+    entry.age_min_years > age + growIntoYearsFor(child)
+  )
+    score -= 10
   return score
 }
 
@@ -118,6 +128,20 @@ export function sortBySuggestions(entries, ctx) {
     .map((s) => s.entry)
 }
 
+// How far above a child's age suggestions may aim before an
+// item stops counting as "they'll grow into it". Set per
+// child in Settings (children.grow_into_years, migration
+// 0029); unset means the long-standing default of 3. 0 means
+// only items for the child's age right now.
+export const DEFAULT_GROW_INTO_YEARS = 3
+
+export function growIntoYearsFor(child) {
+  const v = child?.grow_into_years
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0
+    ? v
+    : DEFAULT_GROW_INTO_YEARS
+}
+
 export function recommendForChild({
   catalog,
   child,
@@ -127,8 +151,11 @@ export function recommendForChild({
   affinity,
   limit = 8,
   today = new Date(),
-  growIntoYears = 3,
+  growIntoYears,
 }) {
+  // An explicit argument wins (tests, one-off callers); the
+  // child's own setting is next; then the default.
+  const windowYears = growIntoYears ?? growIntoYearsFor(child)
   const allowed = new Set([...(ownedPlatforms ?? []), ...ALWAYS_PLAYABLE])
   const age = ageYears(child?.birth_date, today)
   const interests = INTERESTS.filter((i) => (child?.interests ?? []).includes(i.key))
@@ -143,10 +170,12 @@ export function recommendForChild({
     // Grow-into window: items aimed a little above the child's
     // age stay eligible (they'll age into them), but a
     // recommendation list is gift advice — a YA novel for a
-    // toddler is not "a little above". More than growIntoYears
-    // over their age is out. (The catalog sort keeps
-    // everything visible; this only shapes the shortlist.)
-    if (age != null && entry.age_min_years != null && entry.age_min_years > age + growIntoYears)
+    // toddler is not "a little above". More than the family's
+    // window over their age is out; a window of 0 keeps only
+    // items for their age right now. (The catalog sort keeps
+    // everything visible but sinks beyond-window items; this
+    // exclusion shapes the shortlist.)
+    if (age != null && entry.age_min_years != null && entry.age_min_years > age + windowYears)
       continue
     const k = itemKey(entry.platform, entry.title)
     if (ownedKeys?.has(k) || wishlistKeys?.has(k)) continue
