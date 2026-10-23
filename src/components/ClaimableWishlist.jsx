@@ -1,5 +1,6 @@
 import ItemTile from './ItemTile'
 import AmazonLink from './AmazonLink'
+import ManufacturerLink from './ManufacturerLink'
 import BundleNote from './BundleNote'
 import PlatformGrid from './PlatformGrid'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
@@ -65,6 +66,7 @@ function WishlistTile({ slug, item, onChanged, inCart, onToggleCart }) {
           </button>
         )}
         <AmazonLink item={item} />
+        <ManufacturerLink item={item} />
       </div>
     </ItemTile>
   )

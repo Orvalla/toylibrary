@@ -164,6 +164,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
             notes: '',
             image_url: r.match.entry.image_url ?? '',
             asin: r.match.entry.asin ?? null,
+            product_url: r.match.entry.product_url ?? null,
             child_id: targetChild || null,
           }
         : {

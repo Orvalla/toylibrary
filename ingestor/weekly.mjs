@@ -96,6 +96,7 @@ async function main() {
       details: row.details ?? '',
       image_url: row.image_url ?? '',
       source_url: row.source_url ?? '',
+      product_url: row.source_url || null,
       item_type: 'content',
       sort_order: sort,
       ...ageForRow(row),

@@ -223,6 +223,7 @@ async function upsertCatalogItem(
         age_max_years: row.age_max_years ?? null,
         rating: row.rating ?? null,
         rating_count: row.rating_count ?? null,
+        product_url: row.source_url ?? null,
         source_url: row.source_url,
         added_by: userId,
       },
@@ -305,6 +306,7 @@ async function insertCatalogRows(
       age_max_years: row.age_max_years ?? null,
       rating: row.rating ?? null,
       rating_count: row.rating_count ?? null,
+      product_url: row.source_url ?? sourceUrl ?? null,
       source_url: row.source_url ?? sourceUrl,
       added_by: userId,
     }))

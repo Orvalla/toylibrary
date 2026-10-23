@@ -29,6 +29,7 @@ describe('cart entries', () => {
       details: 'Tonie figure',
       image_url: 'https://example.com/blippi.jpg',
       asin: 'B0EXAMPLE1',
+      product_url: null,
       child_name: 'Sam',
     })
   })

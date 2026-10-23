@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
 import AmazonLink from '../components/AmazonLink'
+import ManufacturerLink from '../components/ManufacturerLink'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from '../components/PlatformMark'
 import { childNameFor } from '../lib/children'
@@ -29,7 +30,7 @@ async function fetchCatalogIndex() {
   for (let from = 0; ; from += 1000) {
     const { data } = await supabase
       .from('catalog_items')
-      .select('id, platform, title, details, image_url, asin, is_bundle, item_type, sort_order, age_min_years, age_max_years, rating, rating_count')
+      .select('id, platform, title, details, image_url, asin, product_url, is_bundle, item_type, sort_order, age_min_years, age_max_years, rating, rating_count')
       .range(from, from + 999)
     rows.push(...(data ?? []))
     if (!data || data.length < 1000) break
@@ -355,6 +356,7 @@ export default function DashboardPage() {
         notes: '',
         image_url: entry.image_url ?? '',
         asin: entry.asin ?? null,
+        product_url: entry.product_url ?? null,
         child_id: filteredKid.id,
       })
       .select()
@@ -450,6 +452,7 @@ export default function DashboardPage() {
                     ☆ Add to wishlist
                   </button>
                   <AmazonLink item={entry} />
+                  <ManufacturerLink item={entry} />
                 </div>
               </ItemTile>
             ))}
@@ -628,6 +631,7 @@ export default function DashboardPage() {
                       </button>
                     </span>
                     <AmazonLink item={item} />
+                    <ManufacturerLink item={item} />
                   </div>
                 </ItemTile>
               )}

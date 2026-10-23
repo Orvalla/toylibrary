@@ -592,6 +592,7 @@ export function planCollectionImport(products, existingTitles, platform, origin 
     }
     seen.add(key)
     if (origin && product.handle) row.source_url = `${origin}/products/${product.handle}`
+    if (!row.source_url && product.url) row.source_url = product.url
     toAdd.push(row)
   }
   return { toAdd, alreadyPresent, skippedFiltered }

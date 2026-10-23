@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import AmazonLink from './AmazonLink'
+import ManufacturerLink from './ManufacturerLink'
 import { amazonUrlFor } from '../lib/amazon'
 import PlatformMark from './PlatformMark'
 import { useClaim } from './useClaim'
@@ -152,6 +153,7 @@ export default function GiftCart({ entries, slug, liveById, onChanged, onRemove,
                       <span className="action-row">
                         <span className="cart-opened-tag">✓ Opened</span>
                         <AmazonLink item={entry} />
+                        <ManufacturerLink item={entry} />
                       </span>
                     ) : (
                       <a
@@ -203,6 +205,7 @@ export default function GiftCart({ entries, slug, liveById, onChanged, onRemove,
                     {claimFor(entry)}
                     <span className="action-row">
                       <AmazonLink item={entry} />
+                        <ManufacturerLink item={entry} />
                       <button className="linklike danger" onClick={() => onRemove(entry.id)}>
                         Remove
                       </button>

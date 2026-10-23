@@ -19,6 +19,7 @@ export function cartEntryFor(item) {
     details: item.details ?? '',
     image_url: item.image_url ?? '',
     asin: item.asin ?? null,
+    product_url: item.product_url ?? null,
     child_name: item.child_name ?? null,
   }
 }

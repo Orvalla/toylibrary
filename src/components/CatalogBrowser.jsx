@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import ItemTile, { OwnedBadge } from './ItemTile'
 import AmazonLink from './AmazonLink'
+import ManufacturerLink from './ManufacturerLink'
 import GrowCatalog from './GrowCatalog'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
@@ -162,6 +163,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         notes: '',
         image_url: entry.image_url ?? '',
         asin: entry.asin ?? null,
+        product_url: entry.product_url ?? null,
         child_id: childSel || null,
       })
       .select('id, platform, title, list_type, child_id')
@@ -580,6 +582,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
                       </>
                     )}
                     <AmazonLink item={entry} />
+                    <ManufacturerLink item={entry} />
                   </div>
                 </ItemTile>
               )
