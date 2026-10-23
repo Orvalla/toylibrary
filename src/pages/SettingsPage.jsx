@@ -10,6 +10,8 @@ import { giftMessage, instagramLink, messengerLink, normalizeHandle } from '../l
 export default function SettingsPage() {
   const { user } = useAuth()
   const [profile, setProfile] = useState(null)
+  const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
+  const [pwBusy, setPwBusy] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [childName, setChildName] = useState('')
   const [kids, setKids] = useState([])
@@ -351,6 +353,41 @@ export default function SettingsPage() {
     }
   }
 
+  // Change password: prove the current one by signing in with
+  // it (works whatever the project's secure-change settings
+  // are, and it's the check a person expects), then set the new
+  // one on the live session.
+  async function changePassword(e) {
+    e.preventDefault()
+    setMessage('')
+    if (pw.next.length < 8) {
+      setMessage('Your new password needs at least 8 characters.')
+      return
+    }
+    if (pw.next !== pw.confirm) {
+      setMessage("The new passwords don't match.")
+      return
+    }
+    setPwBusy(true)
+    const { error: checkError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: pw.current,
+    })
+    if (checkError) {
+      setPwBusy(false)
+      setMessage("Your current password doesn't match — nothing was changed.")
+      return
+    }
+    const { error } = await supabase.auth.updateUser({ password: pw.next })
+    setPwBusy(false)
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+    setPw({ current: '', next: '', confirm: '' })
+    setMessage('Password changed.')
+  }
+
   async function toggleFamilyScope(on) {
     setProfile((p) => ({ ...p, subscriber_family_scope: on }))
     const { error } = await supabase
@@ -662,6 +699,49 @@ export default function SettingsPage() {
           />{' '}
           No affiliate links for my family
         </label>
+      </section>
+
+      <section className="card">
+        <h3>Password</h3>
+        <form onSubmit={changePassword} className="form">
+          <label>
+            Current password
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={pw.current}
+              onChange={(e) => setPw((p) => ({ ...p, current: e.target.value }))}
+            />
+          </label>
+          <label>
+            New password (at least 8 characters)
+            <input
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={pw.next}
+              onChange={(e) => setPw((p) => ({ ...p, next: e.target.value }))}
+            />
+          </label>
+          <label>
+            New password again
+            <input
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={pw.confirm}
+              onChange={(e) => setPw((p) => ({ ...p, confirm: e.target.value }))}
+            />
+          </label>
+          <p>
+            <button type="submit" className="btn btn-small" disabled={pwBusy}>
+              {pwBusy ? 'Changing…' : 'Change password'}
+            </button>
+          </p>
+        </form>
       </section>
 
       <section className="card">
