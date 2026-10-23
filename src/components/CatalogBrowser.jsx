@@ -23,6 +23,7 @@ import {
 import { sortBySuggestions } from '../lib/recommend'
 import { PAGE_SIZES, pageNumbers, pageSlice } from '../lib/paging'
 import { AGE_BANDS, inAgeBand } from '../lib/ages'
+import { BOOK_STAGES, bookInStage } from '../lib/books'
 
 // Browsable catalog of the well-known titles per platform. Parents tap
 // to add instead of typing; anything already owned carries the green
@@ -46,8 +47,17 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Sub-category inside the projector platform: Moonlite vs Dream
   // Machine (lib/projector.js). Reset whenever the platform changes.
   const [subBrand, setSubBrand] = useState('all')
-  const [ageBand, setAgeBand] = useState('all')
-  const [query, setQuery] = useState('')
+  const [ageBand, setAgeBand] = useState(
+    () => new URLSearchParams(window.location.search).get('age') ?? 'all'
+  )
+  const [query, setQuery] = useState(
+    () => new URLSearchParams(window.location.search).get('q') ?? ''
+  )
+  // Reading stage, for the books platform only (lib/books) —
+  // seeded by the Books page's stage tiles (?stage=ya).
+  const [stage, setStage] = useState(
+    () => new URLSearchParams(window.location.search).get('stage') ?? 'all'
+  )
   const [sort, setSort] = useState('popular')
   // Paging (lib/paging): the catalog is 6,000+ tiles — render a
   // page at a time, with a Show-N-per-page selector.
@@ -106,7 +116,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Any change to what could be visible starts back at page 1.
   useEffect(() => {
     setPage(1)
-  }, [platform, category, ageBand, query, sort, childSel, subBrand, perPage, devicesOnly])
+  }, [platform, category, ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Sam having Bluey doesn't
@@ -278,6 +288,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
+      (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
   )
 
@@ -465,6 +476,23 @@ export default function CatalogBrowser({ devicesOnly = false }) {
               onClick={() => setCategory(cat)}
             >
               {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {platform === 'books' && (
+        <div className="tabs" aria-label="Reading stage">
+          <button className={stage === 'all' ? 'active' : ''} onClick={() => setStage('all')}>
+            All books
+          </button>
+          {BOOK_STAGES.map((s) => (
+            <button
+              key={s.key}
+              className={stage === s.key ? 'active' : ''}
+              onClick={() => setStage(s.key)}
+            >
+              {s.emoji} {s.label}
             </button>
           ))}
         </div>

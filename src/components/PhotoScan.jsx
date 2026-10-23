@@ -6,7 +6,7 @@ import PlatformMark from './PlatformMark'
 import { itemKey } from '../lib/bundles'
 import { bestMatch } from '../lib/photoMatch'
 import { fileToDataUrl } from '../lib/photoImage'
-import { createProductImageFetcher } from '../lib/productImage'
+import { createBookResolver, createProductImageFetcher } from '../lib/productImage'
 
 // "Add from a photo": a parent photographs a shelf or a pile of
 // Tonies, the identify-items Edge Function (vision model) lists
@@ -47,6 +47,18 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
       }),
     []
   )
+  const resolveBook = useMemo(
+    () =>
+      createBookResolver({
+        fetchJson: async (url) => {
+          const res = await fetch(url)
+          if (!res.ok) throw new Error('book lookup failed')
+          return res.json()
+        },
+      }),
+    []
+  )
+  const bookLookups = useRef(new Map())
   const imageLookups = useRef(new Map())
   const lookupKey = (d) => `${d.platform}|${String(d.title ?? '').trim().toLowerCase()}`
 
@@ -118,13 +130,38 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
       const owned = match
         ? ownedHaveKeys.has(itemKey(match.entry.platform, match.entry.title))
         : ownedHaveKeys.has(itemKey(detection.platform, detection.title))
-      return { detection, match, owned, include: !owned, fetchedImage: '' }
+      return { detection, match, owned, include: !owned, fetchedImage: '', resolution: null }
     })
-    setRows(built)
+    // Multi-shelf: review rows accumulate across scans, so a
+    // whole bookcase can be worked through photo by photo.
+    // A title already in the review list isn't added twice.
+    setRows((prev) => {
+      const seen = new Set(prev.map((r) => lookupKey(r.detection)))
+      return [...prev, ...built.filter((r) => !seen.has(lookupKey(r.detection)))]
+    })
     // Start the product-picture hunt for unmatched detections
     // right away; results patch into the review rows as they land.
     for (const row of built) {
       if (row.match) continue
+      if (row.detection.platform === 'books') {
+        // Books resolve to a real Open Library work (title,
+        // author, cover) — enough to add the book to the
+        // catalog itself when it's confirmed.
+        const bp = resolveBook(row.detection)
+        bookLookups.current.set(lookupKey(row.detection), bp)
+        bp.then((resolution) => {
+          if (resolution) {
+            setRows((prev) =>
+              prev.map((r) =>
+                r.detection === row.detection
+                  ? { ...r, resolution, fetchedImage: resolution.image_url }
+                  : r
+              )
+            )
+          }
+        }).catch(() => {})
+        continue
+      }
       const p = fetchProductImage(row.detection)
       imageLookups.current.set(lookupKey(row.detection), p)
       p.then((url) => {
@@ -154,17 +191,45 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
         const pending = imageLookups.current.get(lookupKey(r.detection))
         if (pending) fetchedImage = (await pending.catch(() => '')) || ''
       }
-      const payload = r.match
+      // A resolved book that isn't in the catalog yet gets
+      // catalogued first (through the ingest function's
+      // guarded add), so the have-list entry is a real catalog
+      // item — cover, Open Library link and all. Any failure
+      // falls back to the plain unmatched add below.
+      let resolution = r.resolution
+      if (!r.match && !resolution && r.detection.platform === 'books') {
+        const pendingBook = bookLookups.current.get(lookupKey(r.detection))
+        if (pendingBook) resolution = (await pendingBook.catch(() => null)) || null
+      }
+      let catalogEntry = r.match?.entry ?? null
+      if (!catalogEntry && resolution) {
+        const { data: addData } = await supabase.functions
+          .invoke('ingest-catalog', {
+            body: {
+              mode: 'add',
+              candidate: {
+                platform: 'books',
+                title: resolution.title,
+                details: '',
+                image_url: resolution.image_url,
+                source_url: resolution.work_url,
+              },
+            },
+          })
+          .catch(() => ({ data: null }))
+        if (addData?.item) catalogEntry = addData.item
+      }
+      const payload = catalogEntry
         ? {
             owner_id: user.id,
             list_type: 'have',
-            platform: r.match.entry.platform,
-            title: r.match.entry.title,
-            details: r.match.entry.details ?? '',
+            platform: catalogEntry.platform,
+            title: catalogEntry.title,
+            details: catalogEntry.details ?? '',
             notes: '',
-            image_url: r.match.entry.image_url ?? '',
-            asin: r.match.entry.asin ?? null,
-            product_url: r.match.entry.product_url ?? null,
+            image_url: catalogEntry.image_url ?? '',
+            asin: catalogEntry.asin ?? null,
+            product_url: catalogEntry.product_url ?? null,
             child_id: targetChild || null,
           }
         : {
@@ -201,8 +266,10 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
     <section className="card scan-card" data-tour="photo">
       <h3>📸 Add from a photo</h3>
       <p className="field-help">
-        Photograph a shelf or a pile of Tonies — we’ll spot the story toys in it and add
-        the ones you confirm to the have list. Up to 10 photo scans a day.
+        Photograph a bookshelf or a pile of Tonies — we’ll read the spines and spot the
+        story toys, then add the ones you confirm to the have list. Books we don’t know
+        yet get looked up and added to the catalog too, and you can scan shelf after
+        shelf before confirming. Up to 10 photo scans a day.
       </p>
       <div className="claim-form">
         <label className="file-pick">
@@ -211,9 +278,9 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
             type="file"
             accept="image/*"
             onChange={(e) => {
+              // Picking another photo must NOT clear the review
+              // list — multi-shelf scanning accumulates into it.
               setFile(e.target.files?.[0] ?? null)
-              setPhase('idle')
-              setRows([])
               setNote('')
               setError('')
             }}
@@ -282,9 +349,11 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
                       {platformLabel(platform)}
                       {r.match
                         ? ' · found in the catalog'
-                        : r.fetchedImage
-                          ? ' · not in the catalog — product picture found'
-                          : ' · not in the catalog'}
+                        : r.resolution
+                          ? ' · new to the catalog — will be added there too'
+                          : r.fetchedImage
+                            ? ' · not in the catalog — product picture found'
+                            : ' · not in the catalog'}
                       {r.detection.confidence
                         ? ` · ${Math.round(r.detection.confidence * 100)}% sure`
                         : ''}

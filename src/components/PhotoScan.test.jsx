@@ -175,3 +175,118 @@ describe('PhotoScan', () => {
     expect(screen.getByRole('button', { name: /Add 0 to/ })).toBeDisabled()
   })
 })
+
+describe('PhotoScan — bookshelf upgrade', () => {
+  it('resolves an unknown book on Open Library and catalogues it when added', async () => {
+    inserted.length = 0
+    const addCalls = []
+    invoke.mockImplementation((name, opts) => {
+      if (name === 'identify-items') {
+        return Promise.resolve({
+          data: {
+            configured: true,
+            items: [
+              { title: 'The Wild Robot', author: 'Peter Brown', platform: 'books', confidence: 0.9 },
+            ],
+            scansLeft: 9,
+          },
+          error: null,
+        })
+      }
+      if (name === 'ingest-catalog' && opts?.body?.mode === 'add') {
+        addCalls.push(opts.body.candidate)
+        return Promise.resolve({
+          data: {
+            status: 'added',
+            item: {
+              id: 'c9',
+              platform: 'books',
+              title: 'The Wild Robot',
+              details: '',
+              image_url: 'https://covers.openlibrary.org/b/id/111-M.jpg',
+              asin: null,
+              product_url: 'https://openlibrary.org/works/OL1W',
+            },
+          },
+          error: null,
+        })
+      }
+      return Promise.resolve({ data: { results: [] }, error: null })
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          docs: [
+            {
+              title: 'The Wild Robot',
+              author_name: ['Peter Brown'],
+              cover_i: 111,
+              key: '/works/OL1W',
+            },
+          ],
+        }),
+      }))
+    )
+    const { container } = render(
+      <AuthProvider>
+        <Harness {...baseProps} />
+      </AuthProvider>
+    )
+    await pickPhotoAndScan(container)
+    expect(await screen.findByText(/new to the catalog/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Add 1 to/ }))
+    expect(await screen.findByText(/Added 1 item to Sam/)).toBeInTheDocument()
+    // The book was catalogued through the guarded add first…
+    expect(addCalls).toHaveLength(1)
+    expect(addCalls[0].title).toBe('The Wild Robot')
+    // …and the have-list entry carries the catalog identity.
+    expect(inserted[0].image_url).toBe('https://covers.openlibrary.org/b/id/111-M.jpg')
+    expect(inserted[0].product_url).toBe('https://openlibrary.org/works/OL1W')
+    vi.unstubAllGlobals()
+  })
+
+  it('accumulates review rows across shelf scans without duplicating', async () => {
+    inserted.length = 0
+    let identifyCalls = 0
+    invoke.mockImplementation((name) => {
+      if (name === 'identify-items') {
+        identifyCalls++
+        return Promise.resolve({
+          data: {
+            configured: true,
+            items:
+              identifyCalls === 1
+                ? [{ title: 'Bluey', platform: 'tonies', confidence: 0.95 }]
+                : [
+                    { title: 'Bluey', platform: 'tonies', confidence: 0.95 },
+                    { title: 'Hatchet', author: 'Gary Paulsen', platform: 'books', confidence: 0.8 },
+                  ],
+            scansLeft: 8,
+          },
+          error: null,
+        })
+      }
+      return Promise.resolve({ data: { results: [] }, error: null })
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ docs: [] }) }))
+    )
+    const { container } = render(
+      <AuthProvider>
+        <Harness {...baseProps} />
+      </AuthProvider>
+    )
+    await pickPhotoAndScan(container)
+    expect(await screen.findByText('Bluey')).toBeInTheDocument()
+    expect(container.querySelectorAll('.scan-row')).toHaveLength(1)
+    // Second shelf: Bluey again (already listed — must not
+    // duplicate) plus a new book.
+    await pickPhotoAndScan(container)
+    expect(await screen.findByText('Hatchet')).toBeInTheDocument()
+    expect(container.querySelectorAll('.scan-row')).toHaveLength(2)
+    vi.unstubAllGlobals()
+  })
+})

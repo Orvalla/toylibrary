@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage'
 import WelcomePage from './pages/WelcomePage'
 import CatalogPage from './pages/CatalogPage'
 import DevicesPage from './pages/DevicesPage'
+import BooksPage from './pages/BooksPage'
 import SettingsPage from './pages/SettingsPage'
 import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/PasswordPages'
 import PublicListPage from './pages/PublicListPage'
@@ -48,6 +49,14 @@ export default function App() {
           element={
             <Protected>
               <CatalogPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/books"
+          element={
+            <Protected>
+              <BooksPage />
             </Protected>
           }
         />

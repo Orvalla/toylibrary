@@ -63,6 +63,43 @@ a { color: var(--accent-dark); }
 /* Phones: the full nav (five entries signed-in) can't share one
    line with the logo, so it wraps onto its own line, all in view,
    instead of running off the right edge. */
+/* ---------- the Book Library (/books) ---------- */
+.books-hero {
+  background: linear-gradient(135deg, #F4F1FF 0%, #FFE9EC 100%);
+  border: 2px solid #EFEAF9;
+  border-radius: 18px;
+  padding: 26px 22px;
+  margin: 10px 0 22px;
+  box-shadow: 0 4px 0 var(--accent-dark);
+}
+.books-hero h1, .books-hero h2 { margin-top: 0; }
+.home-books { text-align: left; }
+.books-search { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.books-search input { flex: 1; min-width: 220px; }
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 0 0 26px;
+}
+.stage-card {
+  display: flex; flex-direction: column; gap: 4px;
+  background: #fff; border: 2px solid #EFEAF9; border-radius: 16px;
+  padding: 16px; text-decoration: none; color: inherit;
+  box-shadow: 0 3px 0 #EFEAF9;
+}
+.stage-card:hover { border-color: var(--accent); }
+.stage-emoji { font-size: 1.7rem; }
+.stage-count { font-weight: 800; color: var(--accent-dark); margin-top: 6px; }
+.shelf-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 190px;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 6px 2px 14px;
+}
+
 /* ---------- gift proposals (0024) ---------- */
 .proposal-public { margin-top: 30px; }
 .proposal-inbox { margin: 18px 0; }

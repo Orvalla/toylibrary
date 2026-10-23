@@ -44,7 +44,7 @@ describe('inAgeBand', () => {
     expect(inAgeBand(wide, '3-4')).toBe(true)
     expect(inAgeBand(wide, '7-9')).toBe(true)
     expect(inAgeBand(wide, '0-2')).toBe(false)
-    expect(inAgeBand(wide, '10+')).toBe(false)
+    expect(inAgeBand(wide, '13+')).toBe(false)
   })
   it('unknown band matches everything; no age data matches no band', () => {
     expect(inAgeBand({ age_min_years: 3, age_max_years: 6 }, 'nope')).toBe(true)

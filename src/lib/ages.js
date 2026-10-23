@@ -10,7 +10,8 @@ export const AGE_BANDS = [
   { key: '3-4', label: 'Ages 3–4', min: 3, max: 4.99 },
   { key: '5-6', label: 'Ages 5–6', min: 5, max: 6.99 },
   { key: '7-9', label: 'Ages 7–9', min: 7, max: 9.99 },
-  { key: '10+', label: 'Ages 10+', min: 10, max: 99 },
+  { key: '10-12', label: 'Ages 10–12', min: 10, max: 12.99 },
+  { key: '13+', label: 'Ages 13+', min: 13, max: 99 },
 ]
 
 const fmtAge = (y) => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createProductImageFetcher, openLibraryCover, storeImageFor } from './productImage'
+import {
+  createBookResolver,
+  createProductImageFetcher,
+  openLibraryCover,
+  openLibraryResolution,
+  storeImageFor,
+} from './productImage'
 
 // Unmatched photo-scan detections borrow the product's real
 // picture (store photo / book cover) — never the parent's
@@ -64,5 +70,76 @@ describe('createProductImageFetcher', () => {
     })
     await expect(fetchProductImage({ title: 'X', platform: 'tonies' })).resolves.toBe('')
     await expect(fetchProductImage({ title: 'X', platform: 'books' })).resolves.toBe('')
+  })
+})
+
+describe('openLibraryResolution', () => {
+  const docs = [
+    { title: 'The Wild Robot', author_name: ['Peter Brown'], cover_i: 111, key: '/works/OL1W' },
+    { title: 'The Wild Robot Escapes', author_name: ['Peter Brown'], cover_i: 222, key: '/works/OL2W' },
+    { title: 'The Wild Robot', author_name: ['Someone Else'], cover_i: 333, key: '/works/OL3W' },
+  ]
+
+  it('resolves title + author to the full work identity', () => {
+    const r = openLibraryResolution(docs, {
+      title: 'The Wild Robot',
+      author: 'Peter Brown',
+      platform: 'books',
+    })
+    expect(r.title).toBe('The Wild Robot')
+    expect(r.author).toBe('Peter Brown')
+    expect(r.image_url).toBe('https://covers.openlibrary.org/b/id/111-M.jpg')
+    expect(r.work_url).toBe('https://openlibrary.org/works/OL1W')
+  })
+
+  it('lets the author disambiguate a weaker title read', () => {
+    // Spine read dropped a word; the author surname carries it.
+    const r = openLibraryResolution(docs, {
+      title: 'Wild Robot',
+      author: 'Brown',
+      platform: 'books',
+    })
+    expect(r?.work_url).toBe('https://openlibrary.org/works/OL1W')
+  })
+
+  it('returns null when nothing is close, or only coverless docs match', () => {
+    expect(
+      openLibraryResolution(docs, { title: 'Completely Different', platform: 'books' })
+    ).toBeNull()
+    expect(
+      openLibraryResolution([{ title: 'The Wild Robot', key: '/works/OL9W' }], {
+        title: 'The Wild Robot',
+        platform: 'books',
+      })
+    ).toBeNull()
+  })
+})
+
+describe('createBookResolver', () => {
+  it('searches Open Library by title and author', async () => {
+    const seen = []
+    const resolveBook = createBookResolver({
+      fetchJson: async (url) => {
+        seen.push(url)
+        return {
+          docs: [
+            { title: 'Hatchet', author_name: ['Gary Paulsen'], cover_i: 7, key: '/works/OL7W' },
+          ],
+        }
+      },
+    })
+    const r = await resolveBook({ title: 'Hatchet', author: 'Gary Paulsen', platform: 'books' })
+    expect(r.title).toBe('Hatchet')
+    expect(seen[0]).toContain('title=Hatchet')
+    expect(seen[0]).toContain('author=Gary+Paulsen')
+  })
+
+  it('never throws — a failed lookup resolves to null', async () => {
+    const resolveBook = createBookResolver({
+      fetchJson: async () => {
+        throw new Error('offline')
+      },
+    })
+    expect(await resolveBook({ title: 'Hatchet', platform: 'books' })).toBeNull()
   })
 })

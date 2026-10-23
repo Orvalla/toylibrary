@@ -28,7 +28,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? ''
 const SCAN_LIMIT = 10
 const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000
-const MODEL = Deno.env.get('VISION_MODEL') ?? 'gpt-4o-mini'
+const MODEL = Deno.env.get('VISION_MODEL') ?? 'gpt-4o'
 // The client downscales to ≤1024px JPEG (~a few hundred KB); this
 // cap is headroom, not an invitation.
 const MAX_IMAGE_CHARS = 4_500_000
@@ -60,19 +60,25 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
-const PROMPT = `You are helping a parent catalogue a child's story toys from a photo. List every DISTINCT physical story-toy product you can identify in the image:
+const PROMPT = `You are helping a parent catalogue a child's books and story toys from a photo — often a bookshelf. List every DISTINCT physical product you can identify in the image:
+
+BOOKS (usually the bulk of a shelf photo): work systematically — shelf by shelf, left to right, reading every spine and cover you can.
+- title: exactly as printed on the spine or cover. If only part is legible, give the legible part and lower your confidence — a partial title beats skipping the book.
+- author: the author's name as printed, whenever it is visible. This matters: it disambiguates series and sequels. Use "" when no author is visible.
+- A run of books from one series still counts book by book — list each distinct title once.
+
+STORY TOYS:
 - Tonie or Creative Tonie figures — title is the character or franchise shown, e.g. "Paw Patrol — Chase", "Blippi"
 - Yoto cards — use the card's printed title
 - Little Tikes Story Dream Machine story cartridges/books — use the story title
 - LeapFrog / LeapPad books and cartridges — use the printed title
 - Storypod audio figures and cards, Lunii story packs, Osmo games
-- Printed picture books — use the book's title
 
-Rules: one entry per physical product (a product appearing twice is listed once); use the title as printed when legible, otherwise the character/franchise name; do not list generic toys, furniture, people, or the storage/shelf itself; if you cannot identify any story-toy products, return an empty list.
+Rules: one entry per physical product (a product appearing twice is listed once); use the title as printed when legible, otherwise the character/franchise name; do not list generic toys, furniture, people, or the storage/shelf itself; if you cannot identify any products, return an empty list.
 
 Respond with JSON only, no other text:
-{"items": [{"title": "...", "platform": "tonies", "confidence": 0.9}]}
-platform is one of: tonies, yoto, leapfrog, projector, storypod, lunii, osmo, books, vtech, other. confidence is 0 to 1 — how sure you are of that identification.`
+{"items": [{"title": "...", "author": "...", "platform": "books", "confidence": 0.9}]}
+platform is one of: tonies, yoto, leapfrog, projector, storypod, lunii, osmo, books, vtech, other. author is only for books — omit it, or use "", for anything else. confidence is 0 to 1 — how sure you are of that identification.`
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })

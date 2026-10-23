@@ -31,6 +31,19 @@ export default function HomePage() {
         ))}
       </div>
 
+      <section className="books-hero home-books">
+        <h2>📚 Now with a proper book library</h2>
+        <p>
+          Thousands of books from first picture books through middle grade to
+          Young Adult — browse by reading stage, see what's already on your
+          shelves, and let family gift the next volume instead of a second
+          copy of the first.
+        </p>
+        <Link to="/books" className="btn">
+          Explore the Book Library
+        </Link>
+      </section>
+
       <div className="card-grid">
         <div className="card">
           <h3>📚 Track what you have</h3>

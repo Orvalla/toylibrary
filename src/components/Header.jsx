@@ -16,6 +16,7 @@ export default function Header() {
           <>
             <Link to="/dashboard">My lists</Link>
             <Link to="/catalog">Catalog</Link>
+            <Link to="/books">Books</Link>
             <Link to="/devices">Devices</Link>
             <Link to="/settings">Settings</Link>
             <button className="linklike" onClick={() => supabase.auth.signOut()}>
