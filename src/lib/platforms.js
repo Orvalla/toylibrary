@@ -22,6 +22,10 @@ export const PLATFORMS = [
   { key: 'lakeshore', label: 'Lakeshore', emoji: '🎒' },
   { key: 'learningresources', label: 'Learning Resources', emoji: '🔬' },
   { key: 'littletikes', label: 'Little Tikes', emoji: '🚗' },
+  { key: 'thamesandkosmos', label: 'Thames & Kosmos', emoji: '🧪' },
+  { key: 'thinkfun', label: 'ThinkFun', emoji: '🤔' },
+  { key: 'ravensburger', label: 'Ravensburger', emoji: '♟️' },
+  { key: 'kiwico', label: 'KiwiCo', emoji: '🥝' },
   { key: 'books', label: 'Books', emoji: '📚' },
   { key: 'other', label: 'Other', emoji: '🎁' },
 ]
@@ -44,6 +48,10 @@ export const ALWAYS_PLAYABLE = [
   'lakeshore',
   'learningresources',
   'littletikes',
+  'thamesandkosmos',
+  'thinkfun',
+  'ravensburger',
+  'kiwico',
 ]
 
 // Physical-toy platforms: filed under the Toys category unless
@@ -60,6 +68,10 @@ export const TOY_PLATFORMS = [
   'lakeshore',
   'learningresources',
   'littletikes',
+  'thamesandkosmos',
+  'thinkfun',
+  'ravensburger',
+  'kiwico',
 ]
 
 export const platformLabel = (key) =>
