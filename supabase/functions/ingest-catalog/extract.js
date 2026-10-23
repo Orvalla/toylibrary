@@ -39,6 +39,22 @@ const HOST_PLATFORMS = [
   ['www.lunii.com', 'lunii'],
 ]
 
+// The store's favicon, via the same public favicon service
+// the client falls back to (src/lib/logo.js mirrors this):
+// stamped into catalog_items.logo_url so a user-added item
+// carries its store's mark even where the platform has no
+// logo of its own.
+export function faviconUrlFor(rawUrl) {
+  let host
+  try {
+    host = new URL(rawUrl).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+  if (!host) return null
+  return `https://www.google.com/s2/favicons?domain=${host}&sz=128`
+}
+
 export function platformForUrl(rawUrl) {
   let url
   try {

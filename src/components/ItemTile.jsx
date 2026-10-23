@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { platformEmoji } from '../lib/platforms'
+import { platformEmoji, platformLogo } from '../lib/platforms'
+import { storeLogoUrlFor } from '../lib/logo'
 import { ageLabelFor } from '../lib/ages'
 
 // One item as a tile: photo on top (or platform art when there's no
@@ -28,6 +29,20 @@ export default function ItemTile({ item, badge, children }) {
           </div>
         )}
         {badge}
+        {/* Store mark for items whose platform has no logo of
+            its own — chiefly ones a parent added from a store
+            we don't carry: the favicon of the site it links
+            to, stamped at ingest or derived from the product
+            page (lib/logo.js). */}
+        {!platformLogo(item.platform) && storeLogoUrlFor(item) && (
+          <img
+            className="tile-store-mark"
+            src={storeLogoUrlFor(item)}
+            alt=""
+            loading="lazy"
+            aria-hidden="true"
+          />
+        )}
       </div>
       <div className="tile-body">
         <strong>{item.title}</strong>

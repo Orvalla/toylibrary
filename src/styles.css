@@ -385,6 +385,11 @@ a { color: var(--accent-dark); }
   position: absolute; left: 8px; bottom: 8px; background: rgba(46, 42, 85, 0.82);
   color: #fff; padding: 3px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 800;
 }
+.tile-store-mark {
+  position: absolute; right: 8px; bottom: 8px; width: 24px; height: 24px;
+  border-radius: 7px; background: #fff; padding: 2px; object-fit: contain;
+  border: 1px solid var(--line); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
 .catalog-cta { background: var(--soft); border: 2px solid var(--line); border-radius: 14px; padding: 10px 14px; }
 .grow-catalog { margin-top: 40px; border-top: 2px solid var(--line); padding-top: 10px; }
 .grow-catalog .notes { color: var(--ink-faint); font-size: 14px; }

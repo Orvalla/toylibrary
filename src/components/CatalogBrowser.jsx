@@ -249,6 +249,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         image_url: entry.image_url ?? '',
         asin: entry.asin ?? null,
         product_url: entry.product_url ?? null,
+        logo_url: entry.logo_url ?? null,
         child_id: childSel || null,
       })
       .select('id, platform, title, list_type, child_id')

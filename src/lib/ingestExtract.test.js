@@ -16,6 +16,7 @@ import {
   planCollectionImport,
   platformForProduct,
   planRowImport,
+  faviconUrlFor,
   platformForUrl,
   isBlockedHost,
   isBlockedTitle,
@@ -758,5 +759,15 @@ describe('content guard', () => {
     )
     expect(plan.toAdd.map((r) => r.title)).toEqual(['Building Blocks'])
     expect(plan.blockedContent).toBe(1)
+  })
+})
+
+describe('faviconUrlFor (ingest)', () => {
+  it('stamps the source store favicon onto user-added rows', () => {
+    expect(faviconUrlFor('https://www.somenichetoys.com/products/x')).toBe(
+      'https://www.google.com/s2/favicons?domain=www.somenichetoys.com&sz=128'
+    )
+    expect(faviconUrlFor('not a url')).toBeNull()
+    expect(faviconUrlFor(null)).toBeNull()
   })
 })

@@ -5,9 +5,15 @@ import { PLATFORMS } from '../lib/platforms'
 // logos/), on a brand-color badge when the logo itself is
 // white/monochrome, and the platform emoji as the fallback
 // for the generic shelves (books, projector, other).
-export default function PlatformMark({ platform, className = '' }) {
+export default function PlatformMark({ platform, logoUrl, className = '' }) {
   const entry = PLATFORMS.find((p) => p.key === platform)
   if (!entry) return null
+  // A per-item store favicon (user-added items on logo-less
+  // platforms) stands in for the platform mark when the
+  // platform itself has no logo of its own.
+  if (!entry.logo && logoUrl) {
+    return <img className={`plat-logo ${className}`} src={logoUrl} alt="" loading="lazy" aria-hidden="true" />
+  }
   if (entry.logo && entry.logoBg) {
     return (
       <span className={`plat-badge ${className}`} style={{ background: entry.logoBg }} aria-hidden="true">

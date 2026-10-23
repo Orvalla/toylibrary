@@ -51,6 +51,7 @@ import {
   planCollectionImport,
   planRowImport,
   platformForProduct,
+  faviconUrlFor,
   platformForUrl,
 } from './extract.js'
 
@@ -255,6 +256,7 @@ async function upsertCatalogItem(
         rating_count: row.rating_count ?? null,
         product_url: row.source_url ?? null,
         source_url: row.source_url,
+        logo_url: faviconUrlFor(row.source_url),
         added_by: userId,
       },
       { onConflict: 'platform,title', ignoreDuplicates: true },
@@ -339,6 +341,7 @@ async function insertCatalogRows(
       rating_count: row.rating_count ?? null,
       product_url: row.source_url ?? sourceUrl ?? null,
       source_url: row.source_url ?? sourceUrl,
+      logo_url: faviconUrlFor(row.source_url ?? sourceUrl),
       added_by: userId,
     }))
     const { data, error } = await admin
