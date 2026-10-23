@@ -26,6 +26,9 @@ export const PLATFORMS = [
   { key: 'thinkfun', label: 'ThinkFun', emoji: '🤔' },
   { key: 'ravensburger', label: 'Ravensburger', emoji: '♟️' },
   { key: 'kiwico', label: 'KiwiCo', emoji: '🥝' },
+  { key: 'eeboo', label: 'eeBoo', emoji: '🌈' },
+  { key: 'mudpuppy', label: 'Mudpuppy', emoji: '🐶' },
+  { key: 'sphero', label: 'Sphero', emoji: '🤖' },
   { key: 'books', label: 'Books', emoji: '📚' },
   { key: 'other', label: 'Other', emoji: '🎁' },
 ]
@@ -52,6 +55,9 @@ export const ALWAYS_PLAYABLE = [
   'thinkfun',
   'ravensburger',
   'kiwico',
+  'eeboo',
+  'mudpuppy',
+  'sphero',
 ]
 
 // Physical-toy platforms: filed under the Toys category unless
@@ -72,6 +78,9 @@ export const TOY_PLATFORMS = [
   'thinkfun',
   'ravensburger',
   'kiwico',
+  'eeboo',
+  'mudpuppy',
+  'sphero',
 ]
 
 export const platformLabel = (key) =>

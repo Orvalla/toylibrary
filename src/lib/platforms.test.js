@@ -7,7 +7,8 @@ describe('platforms', () => {
     // (0001_init.sql as widened by 0006_yoto_platform.sql,
     // 0007_new_platforms.sql, 0021_new_toy_platforms.sql and
     // 0022_more_toy_brands.sql, 0023_littletikes_platform.sql,
-    // 0027_older_kids_platforms.sql).
+    // 0027_older_kids_platforms.sql,
+    // 0028_round3_platforms.sql).
     const dbKeys = [
       'tonies',
       'leapfrog',
@@ -34,6 +35,9 @@ describe('platforms', () => {
       'thinkfun',
       'ravensburger',
       'kiwico',
+      'eeboo',
+      'mudpuppy',
+      'sphero',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {
