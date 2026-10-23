@@ -67,6 +67,24 @@ const PLATFORM_KEYS = [
   'eeboo',
   'mudpuppy',
   'sphero',
+  // Board game publishers (2026-10-23): game-night shelves and
+  // closet stacks — the box lid or spine usually prints the
+  // publisher's name/logo, which is what decides the platform.
+  'asmodee',
+  'pandasaurus',
+  'renegade',
+  'floodgate',
+  'catan',
+  'blueorange',
+  'iello',
+  'capstone',
+  'explodingkittens',
+  'hachette',
+  'goliath',
+  'relatable',
+  'buffalogames',
+  'spinmaster',
+  'devir',
 ]
 
 const CORS = {
@@ -90,6 +108,7 @@ BOOKS (usually the bulk of a shelf photo): work systematically — shelf by shel
 - A run of books from one series still counts book by book — list each distinct title once.
 
 PHYSICAL TOYS & GAMES: branded game boxes, construction sets, science kits, puzzles and coding robots — use the product's printed name and set platform to the brand: haba, magnatiles, smartgames, lovevery, melissaanddoug, littlepeople, brio, fatbrain, lakeshore, learningresources, littletikes, thamesandkosmos, thinkfun, ravensburger, kiwico, eeboo, mudpuppy, sphero. A Ravensburger game or GraviTrax box is "ravensburger" (a ThinkFun-branded game is "thinkfun"); a Thames & Kosmos kit is "thamesandkosmos".
+BOARD GAMES: a board game collection photo shows box lids and spines stacked on shelves or in a closet — read each box's printed title and set platform to the publisher printed on the box: asmodee (incl. Ticket to Ride, CATAN studio editions, Zombicide, Arkham Horror, Spot It!/Dobble), pandasaurus, renegade, floodgate, catan (any CATAN-branded box), blueorange (Kingdomino, Gobblet), iello (King of Tokyo), capstone, explodingkittens (Exploding Kittens, Throw Throw Burrito), hachette (Gigamic, Scorpion Masqué and other Hachette Board Games studios), goliath (Sequence, Rummikub, Pressman games), relatable (family editions only), buffalogames, spinmaster (Spin Master Games line), devir. A HABA, Ravensburger, ThinkFun or SmartGames box stays haba / ravensburger / thinkfun / smartgames. If no publisher is legible, use the game title alone with platform "other".
 
 STORY TOYS:
 - Tonie or Creative Tonie figures — title is the character or franchise shown, e.g. "Paw Patrol — Chase", "Blippi"
@@ -102,7 +121,7 @@ Rules: one entry per physical product (a product appearing twice is listed once)
 
 Respond with JSON only, no other text:
 {"items": [{"title": "...", "author": "...", "platform": "books", "confidence": 0.9}]}
-platform is one of: tonies, yoto, leapfrog, projector, storypod, lunii, osmo, books, vtech, haba, magnatiles, smartgames, lovevery, melissaanddoug, littlepeople, brio, fatbrain, lakeshore, learningresources, littletikes, thamesandkosmos, thinkfun, ravensburger, kiwico, eeboo, mudpuppy, sphero, other. author is only for books — omit it, or use "", for anything else. confidence is 0 to 1 — how sure you are of that identification.`
+platform is one of: tonies, yoto, leapfrog, projector, storypod, lunii, osmo, books, vtech, haba, magnatiles, smartgames, lovevery, melissaanddoug, littlepeople, brio, fatbrain, lakeshore, learningresources, littletikes, thamesandkosmos, thinkfun, ravensburger, kiwico, eeboo, mudpuppy, sphero, asmodee, pandasaurus, renegade, floodgate, catan, blueorange, iello, capstone, explodingkittens, hachette, goliath, relatable, buffalogames, spinmaster, devir, other. author is only for books — omit it, or use "", for anything else. confidence is 0 to 1 — how sure you are of that identification.`
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
