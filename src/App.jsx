@@ -8,6 +8,7 @@ import CatalogPage from './pages/CatalogPage'
 import DevicesPage from './pages/DevicesPage'
 import BooksPage from './pages/BooksPage'
 import SettingsPage from './pages/SettingsPage'
+import AdminPage from './pages/AdminPage'
 import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/PasswordPages'
 import PublicListPage from './pages/PublicListPage'
 import UnsubscribePage from './pages/UnsubscribePage'
@@ -73,6 +74,14 @@ export default function App() {
           element={
             <Protected>
               <SettingsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <Protected>
+              <AdminPage />
             </Protected>
           }
         />

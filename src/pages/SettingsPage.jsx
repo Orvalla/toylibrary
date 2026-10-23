@@ -790,6 +790,21 @@ export default function SettingsPage() {
         </form>
       </section>
 
+      {profile.is_admin && (
+        <section className="card">
+          <h2>🛡️ Site admin</h2>
+          <p>
+            You run the place. Review what parents have added to the catalog, remove
+            anything that doesn't belong, or make an addition private to its owner.
+          </p>
+          <p>
+            <Link to="/admin" className="btn btn-small">
+              Open the admin page
+            </Link>
+          </p>
+        </section>
+      )}
+
       {message && <p className="notice">{message}</p>}
     </main>
   )

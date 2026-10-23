@@ -12,7 +12,9 @@ describe('usedBookLinksFor', () => {
     const links = usedBookLinksFor({ platform: 'books', title: "Charlotte's Web" })
     expect(links.map((l) => l.key)).toEqual(BOOK_SELLERS.map((s) => s.key))
     for (const l of links) {
-      expect(l.href).toContain('Charlotte%27s%20Web')
+      // encodeURIComponent escapes the space; the apostrophe rides
+      // along raw, which the sellers' search pages accept fine.
+      expect(l.href).toContain("Charlotte's%20Web")
       expect(l.href).toMatch(/^https:\/\//)
     }
     expect(links[0].href).toContain('thriftbooks.com')

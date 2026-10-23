@@ -184,6 +184,27 @@ async function fetchTextCapped(
   throw new HttpError(502, 'That link redirects too many times to follow safely.')
 }
 
+// Moderation (migration 0031): when the content screen stops an
+// add, log the attempt and flag EVERY addition by this account
+// for the owner's review — one blocked paste is a reason to
+// sweep their whole history. Best-effort: a flagging failure
+// must never change the outcome of the add itself.
+async function flagForReview(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  detail: string,
+): Promise<void> {
+  try {
+    await admin.from('moderation_flags').insert({ user_id: userId, detail })
+    await admin
+      .from('catalog_additions')
+      .update({ needs_review: true })
+      .eq('user_id', userId)
+  } catch {
+    // The screen's verdict stands either way.
+  }
+}
+
 // Insert a catalog row unless (platform, title) already exists, and
 // report which happened. Only a genuine insert is logged — the
 // additions log is a record of who grew the catalog, not of attempts.
@@ -203,6 +224,7 @@ async function upsertCatalogItem(
   },
 ): Promise<{ status: 'added' | 'exists'; item: Record<string, unknown> }> {
   if (isBlockedTitle(row.title)) {
+    await flagForReview(admin, userId, 'Blocked title on add: "' + row.title + '" (' + row.platform + ')')
     throw new HttpError(
       422,
       "That doesn't look like a kids' product, so it can't be added to the catalog.",
@@ -257,6 +279,7 @@ async function upsertCatalogItem(
     platform: row.platform,
     title: row.title,
     source_url: row.source_url,
+    catalog_item_id: inserted.id,
   })
   return { status: 'added', item: inserted }
 }
@@ -332,6 +355,7 @@ async function insertCatalogRows(
         platform: r.platform,
         title: r.title,
         source_url: sourceUrl,
+        catalog_item_id: r.id,
       })),
     )
   }
@@ -377,6 +401,13 @@ async function insertPlannedCollection(
 ): Promise<Record<string, unknown>> {
   const existingTitles = await loadExistingTitles(admin, platform)
   const plan = planCollectionImport(products, existingTitles, platform, origin)
+  if (plan.blockedContent > 0) {
+    await flagForReview(
+      admin,
+      userId,
+      'Collection add screened out ' + plan.blockedContent + ' inappropriate item(s) (' + platform + ', ' + sourceUrl + ')',
+    )
+  }
   if (plan.toAdd.length === 0 && plan.blockedContent > 0 && plan.alreadyPresent === 0) {
     throw new HttpError(
       422,
@@ -410,6 +441,13 @@ async function insertPlannedRows(
 ): Promise<Record<string, unknown>> {
   const existingTitles = await loadExistingTitles(admin, platform)
   const plan = planRowImport(rows, existingTitles, platform)
+  if (plan.blockedContent > 0) {
+    await flagForReview(
+      admin,
+      userId,
+      'Collection add screened out ' + plan.blockedContent + ' inappropriate item(s) (' + platform + ', ' + sourceUrl + ')',
+    )
+  }
   if (plan.toAdd.length === 0 && plan.blockedContent > 0 && plan.alreadyPresent === 0) {
     throw new HttpError(
       422,
@@ -638,6 +676,7 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
     throw new HttpError(400, "That link doesn't look like a public product page.")
   }
   if (isBlockedHost(url)) {
+    await flagForReview(admin, userId, 'Blocked store on add: ' + url)
     throw new HttpError(
       422,
       "That store isn't one we can add from — Toy Library only stocks kids' products.",
