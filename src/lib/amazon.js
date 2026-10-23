@@ -10,6 +10,15 @@
 // The affiliate tag comes from VITE_AMAZON_TAG (a build-time env var,
 // like the Supabase keys). With no tag configured the links still
 // work — they just don't carry attribution.
+//
+// No-affiliate browsers (owner request 2026-10-22): a family can
+// opt its share list out of affiliate links (profiles.no_affiliate,
+// migration 0026). Anyone who opens such a list gets a permanent
+// flag in this browser, and every Amazon link rendered here
+// afterwards drops the tag — gifts for those kids shouldn't earn
+// the family a commission. The flag lives in localStorage (the
+// static host sets no cookies) and lasts until the browser's
+// site data is cleared.
 
 const BRAND_BY_PLATFORM = {
   tonies: 'Tonies',
@@ -31,7 +40,35 @@ const BRAND_BY_PLATFORM = {
 
 const ASIN_RE = /^[A-Z0-9]{10}$/
 
-export function amazonUrlFor(item, tag = import.meta.env?.VITE_AMAZON_TAG) {
+export const NO_AFFILIATE_KEY = 'tl-no-affiliate'
+
+export function affiliateSuppressed(storage = globalThis.localStorage) {
+  try {
+    return storage?.getItem(NO_AFFILIATE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function suppressAffiliate(storage = globalThis.localStorage) {
+  try {
+    storage?.setItem(NO_AFFILIATE_KEY, '1')
+  } catch {
+    // Storage blocked — links just keep the tag in this browser.
+  }
+}
+
+// Called by the share page on load: an opted-out family's list
+// turns the tag off in this browser, permanently.
+export function noteSharePageVisit(data, storage = globalThis.localStorage) {
+  if (data?.no_affiliate) suppressAffiliate(storage)
+}
+
+export function effectiveTag(tag = import.meta.env?.VITE_AMAZON_TAG) {
+  return affiliateSuppressed() ? undefined : tag
+}
+
+export function amazonUrlFor(item, tag = effectiveTag()) {
   const asin = typeof item?.asin === 'string' ? item.asin.trim().toUpperCase() : ''
   if (ASIN_RE.test(asin)) {
     return tag

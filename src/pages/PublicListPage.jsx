@@ -6,6 +6,7 @@ import ClaimableWishlist from '../components/ClaimableWishlist'
 import GiftCart from '../components/GiftCart'
 import SuggestGift, { ApprovedGifts } from '../components/SuggestGift'
 import { addToCart, cartHas, loadCart, removeFromCart, saveCart } from '../lib/cart'
+import { noteSharePageVisit } from '../lib/amazon'
 import { groupByChild } from '../lib/children'
 import { formatISODate, formatOccasionLine, occasionTitle, occasionWhen } from '../lib/occasions'
 
@@ -43,6 +44,9 @@ export default function PublicListPage() {
 
   const load = useCallback(() => {
     supabase.rpc('get_shared_list', { p_slug: slug }).then(({ data, error }) => {
+      // An affiliate-opted-out family's list turns the tag off
+      // in this browser for good (lib/amazon).
+      if (!error) noteSharePageVisit(data)
       setData(error ? null : data)
     })
     supabase.rpc('get_shared_proposals', { p_slug: slug }).then(({ data }) => {

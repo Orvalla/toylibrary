@@ -344,6 +344,18 @@ export default function SettingsPage() {
     }
   }
 
+  async function toggleNoAffiliate(on) {
+    setProfile((p) => ({ ...p, no_affiliate: on }))
+    const { error } = await supabase
+      .from('profiles')
+      .update({ no_affiliate: on })
+      .eq('id', user.id)
+    if (error) {
+      setMessage(error.message)
+      setProfile((p) => ({ ...p, no_affiliate: !on }))
+    }
+  }
+
   const shareUrl = `${window.location.origin}/s/${profile.share_slug}`
 
   return (
@@ -588,6 +600,22 @@ export default function SettingsPage() {
             onChange={(e) => toggleReminders(e.target.checked)}
           />{' '}
           Email me before gift occasions
+        </label>
+        <h4>Affiliate links</h4>
+        <p>
+          Item links normally carry a small affiliate tag, which earns a
+          commission when someone buys through them. If you'd rather gifts
+          for your kids earned nothing, turn this on: your share page drops
+          the tag, and anyone who opens your list keeps it off in their
+          browser from then on.
+        </p>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={profile.no_affiliate === true}
+            onChange={(e) => toggleNoAffiliate(e.target.checked)}
+          />{' '}
+          No affiliate links for my family
         </label>
       </section>
 

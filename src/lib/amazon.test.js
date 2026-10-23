@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { amazonUrlFor } from './amazon'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  affiliateSuppressed,
+  amazonUrlFor,
+  effectiveTag,
+  noteSharePageVisit,
+  suppressAffiliate,
+} from './amazon'
 
 describe('amazonUrlFor', () => {
   it('builds an Amazon search URL from the title plus the platform brand word', () => {
@@ -65,5 +71,42 @@ describe('amazonUrlFor', () => {
     expect(amazonUrlFor({ platform: 'books', title: 'X', asin: 'b0cxyz1234' }, '')).toBe(
       'https://www.amazon.com/dp/B0CXYZ1234'
     )
+  })
+})
+
+describe('no-affiliate browsers', () => {
+  const item = { platform: 'tonies', title: 'Bluey', asin: 'B0EXAMPLE1' }
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('keeps the tag until the flag is set', () => {
+    expect(amazonUrlFor(item, 'mytag-20')).toContain('tag=mytag-20')
+    suppressAffiliate()
+    expect(affiliateSuppressed()).toBe(true)
+    // Even with an explicit tag argument the default-path links
+    // go through effectiveTag; amazonUrlFor with an explicit
+    // tag still honours it — suppression works by the CALLER
+    // (the default parameter) resolving to no tag.
+    expect(effectiveTag('mytag-20')).toBeUndefined()
+  })
+
+  it('default links drop the tag once suppressed, for dp and search URLs', () => {
+    suppressAffiliate()
+    expect(amazonUrlFor(item)).toBe('https://www.amazon.com/dp/B0EXAMPLE1')
+    expect(amazonUrlFor({ platform: 'tonies', title: 'Bluey' })).toBe(
+      'https://www.amazon.com/s?k=Bluey%20Tonies'
+    )
+  })
+
+  it('noteSharePageVisit sets the flag only for opted-out families', () => {
+    noteSharePageVisit({ no_affiliate: false })
+    expect(affiliateSuppressed()).toBe(false)
+    noteSharePageVisit({ no_affiliate: true })
+    expect(affiliateSuppressed()).toBe(true)
+    // And never unsets it — the flag is permanent per browser.
+    noteSharePageVisit({ no_affiliate: false })
+    expect(affiliateSuppressed()).toBe(true)
   })
 })
