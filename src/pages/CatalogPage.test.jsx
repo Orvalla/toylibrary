@@ -19,7 +19,7 @@ const CATALOG = [
 ]
 const MINE = [{ platform: 'tonies', title: 'Bluey', list_type: 'have', child_id: null }]
 // No children in this stub: ownership matching runs against Family.
-const KIDS = []
+let KIDS = []
 
 function fakeQuery(table) {
   const q = {
@@ -92,5 +92,43 @@ describe('CatalogPage sorting', () => {
     const labels = [...select.options].map((o) => o.textContent)
     expect(labels[0]).toContain('Popular')
     expect(labels[1]).toContain('Suggested')
+  })
+})
+
+describe('CatalogPage — filter sections + child default sort', () => {
+  it('starts the platform section folded when scoped to books, with stage + age up front', async () => {
+    window.history.pushState({}, '', '/catalog?platform=books')
+    try {
+      render(
+        <AuthProvider>
+          <Harness />
+        </AuthProvider>
+      )
+      // Stage + age chips are visible immediately…
+      expect(await screen.findByText('📕 Young adult')).toBeInTheDocument()
+      expect(screen.getByText('Ages 13+')).toBeInTheDocument()
+      // …the platform chips are folded away behind the header…
+      expect(screen.queryByText(/Tonies \/ Toniebox/)).not.toBeInTheDocument()
+      // …and one tap on the header brings them back.
+      fireEvent.click(screen.getByRole('button', { name: /Platform/ }))
+      expect(await screen.findByText(/Tonies \/ Toniebox/)).toBeInTheDocument()
+    } finally {
+      window.history.pushState({}, '', '/')
+    }
+  })
+
+  it('defaults to the Suggested sort when a child is selected', async () => {
+    KIDS = [{ id: 'k1', name: 'Sam', birth_date: '2020-01-01', interests: [] }]
+    try {
+      render(
+        <AuthProvider>
+          <Harness />
+        </AuthProvider>
+      )
+      expect(await screen.findByText('Bluey')).toBeInTheDocument()
+      await vi.waitFor(() => expect(screen.getByLabelText('Sort').value).toBe('suggested'))
+    } finally {
+      KIDS = []
+    }
   })
 })

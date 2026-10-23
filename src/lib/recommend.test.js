@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { recommendForChild, sortBySuggestions } from './recommend'
+import {
+  affinityFromItems,
+  affinityScore,
+  recommendForChild,
+  sortBySuggestions,
+} from './recommend'
 import { itemKey } from './bundles'
 
 const today = new Date(2026, 9, 21)
@@ -120,5 +125,67 @@ describe('sortBySuggestions', () => {
     // the fit term, so books lead in sort order, then the rest
     // by sort order.
     expect(sorted.map((r) => r.id)).toEqual(['b1', 'b2', 'b3', 'd1', 'y1', 't2', 't1', 't3'])
+  })
+})
+
+describe('library affinity (owner request 2026-10-22)', () => {
+  const library = [
+    { platform: 'books', title: 'Percy Jackson and the Lightning Thief', list_type: 'have' },
+    { platform: 'ravensburger', title: 'GraviTrax Starter Set', list_type: 'have' },
+    { platform: 'ravensburger', title: 'GraviTrax Expansion Bridges', list_type: 'have' },
+    { platform: 'ravensburger', title: 'GraviTrax Expansion Tunnels', list_type: 'have' },
+  ]
+  const affinity = affinityFromItems(library)
+
+  it('rewards same-series titles strongly and ignores owned ones', () => {
+    const nextBook = { platform: 'books', title: 'Percy Jackson and the Sea of Monsters' }
+    expect(affinityScore(nextBook, affinity, new Set())).toBeGreaterThanOrEqual(4)
+    const owned = { platform: 'books', title: 'Percy Jackson and the Lightning Thief' }
+    expect(
+      affinityScore(owned, affinity, new Set([itemKey(owned.platform, owned.title)]))
+    ).toBe(0)
+  })
+
+  it('adds a collecting-platform bonus at 3+ owned', () => {
+    // 'Labyrinth' shares no words with the library, but the
+    // child collects Ravensburger (3 items) → +1.
+    expect(affinityScore({ platform: 'ravensburger', title: 'Labyrinth' }, affinity, new Set())).toBe(1)
+    expect(affinityScore({ platform: 'tonies', title: 'Labyrinth' }, affinity, new Set())).toBe(0)
+  })
+
+  it('floats the next series book to the top of recommendations', () => {
+    const catalog = [
+      { platform: 'books', title: 'A Totally Unrelated Novel', details: 'Chapter book', sort_order: 1 },
+      { platform: 'books', title: 'Percy Jackson and the Sea of Monsters', details: 'Chapter book', sort_order: 2 },
+    ]
+    const recs = recommendForChild({
+      catalog,
+      child: { birth_date: '2016-06-01', interests: [] },
+      ownedPlatforms: new Set(),
+      ownedKeys: new Set([itemKey('books', 'Percy Jackson and the Lightning Thief')]),
+      wishlistKeys: new Set(),
+      affinity,
+    })
+    expect(recs[0].title).toBe('Percy Jackson and the Sea of Monsters')
+  })
+})
+
+describe('grow-into window', () => {
+  it('keeps slightly-older items, drops far-older ones from recommendations', () => {
+    const catalog = [
+      { platform: 'books', title: 'Near Future Read', details: 'Chapter book', age_min_years: 7, age_max_years: 9, sort_order: 1 },
+      { platform: 'books', title: 'Teen Novel', details: 'Young adult', age_min_years: 12, age_max_years: 18, sort_order: 2 },
+    ]
+    const recs = recommendForChild({
+      catalog,
+      child: { birth_date: '2022-01-01', interests: [] }, // age 4 at the fixed test "today" below
+      ownedPlatforms: new Set(),
+      ownedKeys: new Set(),
+      wishlistKeys: new Set(),
+      today: new Date(2026, 0, 1), // local constructor — age exactly 4
+    })
+    const titles = recs.map((r) => r.title)
+    expect(titles).toContain('Near Future Read') // 7 = 4 + 3, inside the window
+    expect(titles).not.toContain('Teen Novel')
   })
 })

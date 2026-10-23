@@ -18,7 +18,7 @@ import {
   itemKey,
   ownedKeysForBucket,
 } from '../lib/bundles'
-import { recommendForChild } from '../lib/recommend'
+import { affinityFromItems, recommendForChild } from '../lib/recommend'
 import PhotoScan from '../components/PhotoScan'
 import ProposalInbox from '../components/ProposalInbox'
 import TourGuide from '../components/TourGuide'
@@ -330,6 +330,13 @@ export default function DashboardPage() {
             .map((t) => t.platform)
         ),
         ownedKeys: ownedKeysForBucket(items, filteredKid.id),
+        affinity: affinityFromItems(
+          items.filter(
+            (i) =>
+              i.list_type === 'have' &&
+              (i.child_id === filteredKid.id || !i.child_id)
+          )
+        ),
         wishlistKeys: new Set(
           items
             .filter(

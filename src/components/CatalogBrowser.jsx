@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import ItemTile, { OwnedBadge } from './ItemTile'
@@ -20,7 +20,7 @@ import {
   ownedKeysForBucket,
   platformNoun,
 } from '../lib/bundles'
-import { sortBySuggestions } from '../lib/recommend'
+import { affinityFromItems, sortBySuggestions } from '../lib/recommend'
 import { PAGE_SIZES, pageNumbers, pageSlice } from '../lib/paging'
 import { AGE_BANDS, inAgeBand } from '../lib/ages'
 import { BOOK_STAGES, bookInStage } from '../lib/books'
@@ -33,6 +33,31 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // category chips — figures, books, cards, games, devices, audio) and
 // /devices shows just the players themselves (catalog rows with
 // item_type 'device', seeded by migration 0010).
+// One collapsible filter group: a header row (group name +
+// the current selection as a one-line summary + a chevron)
+// and the chip row when open. The summary keeps a folded
+// section informative — "Platform · Books" still says where
+// you are.
+function FilterSection({ id, label, summary, open, onToggle, children }) {
+  return (
+    <div className="filter-section">
+      <button
+        type="button"
+        className="filter-section-head"
+        aria-expanded={open}
+        onClick={() => onToggle(id)}
+      >
+        <span className="filter-section-label">{label}</span>
+        <span className="filter-section-summary">{summary}</span>
+        <span className="filter-section-chevron" aria-hidden="true">
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
+      {open && <div className="filter-section-body">{children}</div>}
+    </div>
+  )
+}
+
 export default function CatalogBrowser({ devicesOnly = false }) {
   const { user } = useAuth()
   const [catalog, setCatalog] = useState([])
@@ -64,6 +89,42 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(48)
   const [message, setMessage] = useState('')
+  // Collapsible filter sections (owner request 2026-10-22):
+  // with 25 platforms the chip rows swamped the page, so each
+  // filter group lives in a section that starts open only when
+  // it's relevant to the current scope — pick a platform and
+  // the platform row folds away to a one-line summary, while
+  // the age (and reading-stage / brand) filters stay up. A
+  // manual toggle always wins over the scope default.
+  const [sectionOpen, setSectionOpen] = useState({})
+  const sectionDefaultOpen = (id) => {
+    switch (id) {
+      case 'platform':
+        return platform === 'all'
+      case 'stage':
+        return platform === 'books'
+      case 'brand':
+        return platform === 'projector'
+      case 'age':
+        return true
+      case 'category':
+        return platform === 'all'
+      default:
+        return false
+    }
+  }
+  const isSectionOpen = (id) => sectionOpen[id] ?? sectionDefaultOpen(id)
+  const toggleSection = (id) =>
+    setSectionOpen((prev) => ({ ...prev, [id]: !isSectionOpen(id) }))
+  // Default sort (owner request 2026-10-22): in a child's
+  // view the Suggested sort — derived from that child's own
+  // library — is the starting sort. Once the parent picks a
+  // sort themselves, their choice sticks.
+  const sortTouched = useRef(false)
+  useEffect(() => {
+    if (devicesOnly || sortTouched.current) return
+    setSort(childSel ? 'suggested' : 'popular')
+  }, [childSel, devicesOnly])
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -159,6 +220,20 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     }
     return platforms
   }, [mine, childSel, catalogIndex])
+
+  // Affinity from the bucket's own library — the series and
+  // platforms this child already collects drive the Suggested
+  // sort (lib/recommend.js).
+  const bucketAffinity = useMemo(
+    () =>
+      affinityFromItems(
+        mine.filter(
+          (i) =>
+            i.list_type === 'have' && (!i.child_id || i.child_id === (childSel || null))
+        )
+      ),
+    [mine, childSel]
+  )
 
   async function add(entry, listType) {
     setMessage('')
@@ -307,6 +382,8 @@ export default function CatalogBrowser({ devicesOnly = false }) {
           ? sortBySuggestions(visible, {
               child: selectedKid,
               ownedPlatforms: bucketDevicePlatforms,
+              affinity: bucketAffinity,
+              ownedKeys: bucketKeys,
             })
           : [...visible].sort(
               (a, b) =>
@@ -426,22 +503,41 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         </form>
       )}
 
-      <div className="tabs">
-        <button className={platform === 'all' ? 'active' : ''} onClick={() => setPlatform('all')}>
-          All
-        </button>
-        {PLATFORMS.filter((p) => base.some((c) => c.platform === p.key)).map((p) => (
-          <button
-            key={p.key}
-            className={platform === p.key ? 'active' : ''}
-            onClick={() => setPlatform(p.key)}
-          >
-            <PlatformMark platform={p.key} /> {p.label}
+      <FilterSection
+        id="platform"
+        label="Platform"
+        summary={platform === 'all' ? 'All platforms' : platformLabel(platform)}
+        open={isSectionOpen('platform')}
+        onToggle={toggleSection}
+      >
+        <div className="tabs">
+          <button className={platform === 'all' ? 'active' : ''} onClick={() => setPlatform('all')}>
+            All
           </button>
-        ))}
-      </div>
+          {PLATFORMS.filter((p) => base.some((c) => c.platform === p.key)).map((p) => (
+            <button
+              key={p.key}
+              className={platform === p.key ? 'active' : ''}
+              onClick={() => setPlatform(p.key)}
+            >
+              <PlatformMark platform={p.key} /> {p.label}
+            </button>
+          ))}
+        </div>
+      </FilterSection>
 
       {platform === 'projector' && (
+      <FilterSection
+        id="brand"
+        label="Projector type"
+        summary={
+          subBrand === 'all'
+            ? 'All projectors'
+            : (PROJECTOR_BRANDS.find((b) => b.key === subBrand)?.label ?? 'All projectors')
+        }
+        open={isSectionOpen('brand')}
+        onToggle={toggleSection}
+      >
         <div className="tabs" aria-label="Projector type">
           <button
             className={subBrand === 'all' ? 'active' : ''}
@@ -459,9 +555,17 @@ export default function CatalogBrowser({ devicesOnly = false }) {
             </button>
           ))}
         </div>
+      </FilterSection>
       )}
 
       {!devicesOnly && (
+      <FilterSection
+        id="category"
+        label="Category"
+        summary={category === 'all' ? 'All categories' : category}
+        open={isSectionOpen('category')}
+        onToggle={toggleSection}
+      >
         <div className="tabs" aria-label="Category">
           <button
             className={category === 'all' ? 'active' : ''}
@@ -479,9 +583,21 @@ export default function CatalogBrowser({ devicesOnly = false }) {
             </button>
           ))}
         </div>
+      </FilterSection>
       )}
 
       {platform === 'books' && (
+      <FilterSection
+        id="stage"
+        label="Reading stage"
+        summary={
+          stage === 'all'
+            ? 'All books'
+            : (BOOK_STAGES.find((s) => s.key === stage)?.label ?? 'All books')
+        }
+        open={isSectionOpen('stage')}
+        onToggle={toggleSection}
+      >
         <div className="tabs" aria-label="Reading stage">
           <button className={stage === 'all' ? 'active' : ''} onClick={() => setStage('all')}>
             All books
@@ -496,8 +612,20 @@ export default function CatalogBrowser({ devicesOnly = false }) {
             </button>
           ))}
         </div>
+      </FilterSection>
       )}
 
+      <FilterSection
+        id="age"
+        label="Age"
+        summary={
+          ageBand === 'all'
+            ? 'All ages'
+            : (AGE_BANDS.find((b) => b.key === ageBand)?.label ?? 'All ages')
+        }
+        open={isSectionOpen('age')}
+        onToggle={toggleSection}
+      >
       <div className="tabs" aria-label="Age">
         <button className={ageBand === 'all' ? 'active' : ''} onClick={() => setAgeBand('all')}>
           All ages
@@ -512,6 +640,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
           </button>
         ))}
       </div>
+      </FilterSection>
 
       <input
         className="filter-input"
@@ -521,7 +650,14 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       />
       <label className="sort-pick">
         Sort
-        <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
+        <select
+          value={sort}
+          onChange={(e) => {
+            sortTouched.current = true
+            setSort(e.target.value)
+          }}
+          aria-label="Sort"
+        >
           <option value="popular">🔥 Popular</option>
           <option value="suggested">
             ✨ Suggested{selectedKid ? ` for ${selectedKid.name}` : ''}
