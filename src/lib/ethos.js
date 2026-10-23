@@ -1,4 +1,4 @@
-// The site's ethos, in five short promises. One source of
+// The site's ethos, in six short promises. One source of
 // truth: the welcome wizard's opening screen and the landing
 // page's "why we built it this way" band both render from
 // here, so the words a family reads on day one are the words
@@ -23,6 +23,11 @@ export const ETHOS = [
     icon: '🏠',
     title: 'Your shelves stay private',
     text: 'Only people with your link see the lists. A photo you scan is never shown to anyone — gift-givers see tidy product pictures, not your living room.',
+  },
+  {
+    icon: '🛡️',
+    title: 'Quality parents can count on',
+    text: 'Every product in the catalog comes from a real maker or publisher we can name — pulled from their own shelves, never from marketplace listings. No white-label knockoffs, no dropship filler: if it’s listed here, it’s something we’d hand our own kids.',
   },
   {
     icon: '💛',
