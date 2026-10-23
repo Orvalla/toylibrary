@@ -9,6 +9,7 @@ import { addToCart, cartHas, loadCart, removeFromCart, saveCart } from '../lib/c
 import { noteSharePageVisit } from '../lib/amazon'
 import { groupByChild } from '../lib/children'
 import { formatISODate, formatOccasionLine, occasionTitle, occasionWhen } from '../lib/occasions'
+import { defaultChildId, subscribePayload, subscribeResultMessage } from '../lib/giftSubscribe'
 
 // The page gift-givers see. No login: the data comes from the
 // get_shared_list() RPC, which only exposes the two lists for this slug.
@@ -41,6 +42,45 @@ export default function PublicListPage() {
   // Approved gift proposals (0024): off-list gifts the parents
   // already said yes to, shown so nobody buys them twice.
   const [proposals, setProposals] = useState([])
+
+  // Gift-buyer reminder signups (0034): a visitor leaves an
+  // email and gets the wishlist link ahead of the child's
+  // occasions. Whether one signup covers the whole family is
+  // the parent's Settings choice — the page asks the RPC which
+  // form to render.
+  const [familyScope, setFamilyScope] = useState(false)
+  const [subEmail, setSubEmail] = useState('')
+  const [subChild, setSubChild] = useState(null)
+  const [subState, setSubState] = useState('idle') // idle | sending | done
+  const [subMsg, setSubMsg] = useState('')
+
+  useEffect(() => {
+    supabase.rpc('gift_list_family_scope', { p_slug: slug }).then(({ data }) => {
+      setFamilyScope(data === true)
+    })
+  }, [slug])
+
+  useEffect(() => {
+    if (subChild === null) setSubChild(defaultChildId(data?.children ?? []))
+  }, [data, subChild])
+
+  async function onSubscribe(e) {
+    e.preventDefault()
+    setSubState('sending')
+    setSubMsg('')
+    const { data, error } = await supabase.rpc(
+      'subscribe_gift_list',
+      subscribePayload({ slug, email: subEmail, familyScope, childId: subChild }),
+    )
+    const code = error ? 'error' : data
+    setSubMsg(
+      subscribeResultMessage(code, {
+        familyScope,
+        childName: (data?.children ?? []).find((k) => k.id === subChild)?.name,
+      }),
+    )
+    setSubState(code === 'ok' ? 'done' : 'idle')
+  }
 
   const load = useCallback(() => {
     supabase.rpc('get_shared_list', { p_slug: slug }).then(({ data, error }) => {
@@ -110,6 +150,44 @@ export default function PublicListPage() {
           🎂 Next up: {occasionTitle(next)} — {formatISODate(next.date)} ({occasionWhen(next.days_until)})
         </p>
       )}
+
+      {kids.length > 0 && subState !== 'done' && (
+        <section className="card subscribe-card">
+          <h2>📬 Never miss a birthday</h2>
+          <p>
+            Leave your email and we'll send you this wishlist a couple of weeks before{' '}
+            {familyScope ? "each child's birthday and holidays" : "the big days"} — the
+            link, a heads-up, nothing else. Unsubscribe any time.
+          </p>
+          <form onSubmit={onSubscribe} className="subscribe-form">
+            {!familyScope && kids.length > 1 && (
+              <label>
+                Remind me about{' '}
+                <select value={subChild ?? ''} onChange={(e) => setSubChild(e.target.value)}>
+                  {kids.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <input
+              type="email"
+              required
+              placeholder="you@example.com"
+              value={subEmail}
+              onChange={(e) => setSubEmail(e.target.value)}
+              aria-label="Your email"
+            />
+            <button className="btn btn-small" disabled={subState === 'sending'}>
+              {subState === 'sending' ? 'Signing up…' : 'Remind me'}
+            </button>
+          </form>
+          {subMsg && <p className="notice">{subMsg}</p>}
+        </section>
+      )}
+      {subState === 'done' && <p className="notice">📬 {subMsg}</p>}
 
       <p>
         <button className="btn btn-small" onClick={() => setCartOpen(true)}>

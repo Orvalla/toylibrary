@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 
-// Where the unsubscribe link in a gift-circle email lands
-// (migration 0020). The relative has no account — the token in
-// the link is the credential, checked by the
-// unsubscribe_relative RPC.
+// Where the unsubscribe link in a wishlist email lands. Two
+// kinds of recipients share this page: gift-circle relatives
+// (migration 0020) and gift-list subscribers (migration 0034).
+// Neither has an account — the token in the link is the
+// credential; each kind has its own RPC, and the tokens are
+// distinct, so we try both.
 export default function UnsubscribePage() {
   const [params] = useSearchParams()
   const [state, setState] = useState('working') // working | done | invalid
@@ -17,9 +19,16 @@ export default function UnsubscribePage() {
       return
     }
     let live = true
-    supabase.rpc('unsubscribe_relative', { p_token: token }).then(({ data, error }) => {
-      if (live) setState(!error && data ? 'done' : 'invalid')
-    })
+    ;(async () => {
+      const rel = await supabase.rpc('unsubscribe_relative', { p_token: token })
+      if (!live) return
+      if (!rel.error && rel.data) {
+        setState('done')
+        return
+      }
+      const sub = await supabase.rpc('unsubscribe_gift_subscriber', { p_token: token })
+      if (live) setState(!sub.error && sub.data ? 'done' : 'invalid')
+    })()
     return () => {
       live = false
     }

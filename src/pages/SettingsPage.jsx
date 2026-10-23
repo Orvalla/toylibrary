@@ -351,6 +351,18 @@ export default function SettingsPage() {
     }
   }
 
+  async function toggleFamilyScope(on) {
+    setProfile((p) => ({ ...p, subscriber_family_scope: on }))
+    const { error } = await supabase
+      .from('profiles')
+      .update({ subscriber_family_scope: on })
+      .eq('id', user.id)
+    if (error) {
+      setMessage(error.message)
+      setProfile((p) => ({ ...p, subscriber_family_scope: !on }))
+    }
+  }
+
   async function toggleNoAffiliate(on) {
     setProfile((p) => ({ ...p, no_affiliate: on }))
     const { error } = await supabase
@@ -660,6 +672,20 @@ export default function SettingsPage() {
           each birthday or holiday — no account needed, and every email has an
           unsubscribe link. Turning off occasion reminders above pauses
           family emails too.
+        </p>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={profile.subscriber_family_scope === true}
+            onChange={(e) => toggleFamilyScope(e.target.checked)}
+          />{' '}
+          One gift-list signup covers all our children
+        </label>
+        <p className="notes">
+          Visitors can leave an email at the top of your gift list to be reminded
+          before a child's birthday or holiday. Normally they pick one child;
+          turn this on and a single signup reminds them about every child's big
+          days. (Signups made before you flip this keep their original reach.)
         </p>
         <p>
           For <strong>Instagram or Facebook</strong>: those apps don't let

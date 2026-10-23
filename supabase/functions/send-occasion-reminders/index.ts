@@ -10,6 +10,12 @@
 //      email and hasn't unsubscribed — one email covering the
 //      occasions of the kids they're linked to (all the
 //      family's kids when they have no specific links).
+//   3. each gift-list subscriber (migration 0034) — a visitor
+//      who left their email on the public list. Their signup's
+//      scope decides the reach: one child, or the whole family
+//      when the parent enabled family scope. An address that
+//      already got the gift-circle email for an occasion isn't
+//      sent a second copy as a subscriber.
 //
 // Every message carries the child's public wishlist link.
 // Relatives' emails end with a token unsubscribe link
@@ -95,12 +101,14 @@ Deno.serve(async (req) => {
       { data: sent },
       { data: relatives },
       { data: relLinks },
+      { data: subscribers },
     ] = await Promise.all([
       admin.from('profiles').select('id, display_name, share_slug, share_enabled, occasion_reminders'),
       admin.from('children').select('id, owner_id, name'),
       admin.from('occasions').select('id, child_id, label, month, day'),
-      admin.from('occasion_reminder_log').select('occasion_id, occurrence_date, relative_id'),
+      admin.from('occasion_reminder_log').select('occasion_id, occurrence_date, relative_id, subscriber_id'),
       admin.from('relatives').select('id, owner_id, name, email, notify_email, unsubscribe_token'),
+      admin.from('gift_subscribers').select('id, profile_id, child_id, email, scope, unsubscribe_token'),
       admin.from('relative_children').select('relative_id, child_id'),
     ])
 
@@ -124,6 +132,18 @@ Deno.serve(async (req) => {
     const relativesByOwner = new Map<string, any[]>()
     for (const rel of relatives ?? []) {
       relativesByOwner.set(rel.owner_id, [...(relativesByOwner.get(rel.owner_id) ?? []), rel])
+    }
+    const subscriberSent = new Set(
+      (sent ?? [])
+        .filter((r: any) => r.subscriber_id)
+        .map((r: any) => `${r.occasion_id}|${r.occurrence_date}|${r.subscriber_id}`)
+    )
+    const subscribersByProfile = new Map<string, any[]>()
+    for (const sub of subscribers ?? []) {
+      subscribersByProfile.set(sub.profile_id, [
+        ...(subscribersByProfile.get(sub.profile_id) ?? []),
+        sub,
+      ])
     }
 
     const now = new Date()
@@ -202,6 +222,7 @@ Deno.serve(async (req) => {
       }
 
       // --------------------------------------- relative emails
+      const emailedEmails = new Set<string>()
       for (const rel of relativesByOwner.get(profile.id) ?? []) {
         if (!rel.email || !rel.notify_email) continue
         const linked = linksByRelative.get(rel.id)
@@ -236,6 +257,7 @@ Deno.serve(async (req) => {
             ? `🎁 ${relEntries[0].kid.name}'s ${relEntries[0].occasion.label} is ${when(relEntries[0].daysAway)} — here's the wishlist`
             : `🎁 ${relEntries.length} gift occasions coming up — here are the wishlists`
 
+        emailedEmails.add(rel.email.toLowerCase())
         if (dry || !RESEND_API_KEY) {
           digests.push({
             channel: 'relative',
@@ -248,6 +270,7 @@ Deno.serve(async (req) => {
           continue
         }
         if (await sendViaResend(rel.email, subject, text, html)) {
+          emailedEmails.add(rel.email.toLowerCase())
           sentCount += 1
           await admin.from('occasion_reminder_log').insert(
             relEntries.map((e: any) => ({
@@ -255,6 +278,67 @@ Deno.serve(async (req) => {
               occasion_id: e.occasion.id,
               occurrence_date: dateKey(e.date),
               relative_id: rel.id,
+            }))
+          )
+        }
+      }
+
+      // ------------------------------------- subscriber emails
+      for (const sub of subscribersByProfile.get(profile.id) ?? []) {
+        const subEntries = allEntries
+          .filter((e) => sub.scope === 'family' || sub.child_id === e.kid.id)
+          .filter((e) => !subscriberSent.has(`${e.occasion.id}|${dateKey(e.date)}|${sub.id}`))
+          .sort((a: any, b: any) => a.date - b.date)
+        if (!subEntries.length) continue
+        // One copy per address per occasion: if the gift-circle
+        // email already went to this address, skip the duplicate.
+        if (emailedEmails.has(sub.email.toLowerCase())) continue
+        const lines = subEntries.map(entryLine)
+        const unsub = `${SITE}/unsubscribe?t=${sub.unsubscribe_token}`
+        const text = [
+          'Hi there,',
+          '',
+          `You asked for a heads-up before the big days on ${ownerName}'s Toy Library wishlist. Coming up:`,
+          ...lines,
+          '',
+          'See the wishlist — and claim anything you buy, so it is marked as taken for everyone else:',
+          link,
+          '',
+          '— Toy Library',
+          `Don't want these emails? Unsubscribe: ${unsub}`,
+        ].join('\n')
+        const html = `<div style="font-family:system-ui,sans-serif;color:#2E2A55;max-width:560px">
+        <h2 style="margin:0 0 8px">A gift occasion is coming up 🎁</h2>
+        <p style="margin:0 0 12px">You asked for a heads-up before the big days on ${ownerName}'s Toy Library wishlist. Coming up:</p>
+        <p style="margin:0 0 12px">${lines.join('<br>')}</p>
+        <p style="margin:0 0 16px"><a href="${link}" style="background:#FF5A5F;color:#fff;padding:11px 22px;border-radius:999px;text-decoration:none;font-weight:700">Open the wishlist</a></p>
+        <p style="color:#6f6a94;font-size:13px">Claim anything you buy on the list and it is marked as taken for everyone else. <a href="${unsub}">Unsubscribe</a>.</p>
+      </div>`
+        const subject =
+          subEntries.length === 1
+            ? `🎁 ${subEntries[0].kid.name}'s ${subEntries[0].occasion.label} is ${when(subEntries[0].daysAway)} — here's the wishlist`
+            : `🎁 ${subEntries.length} gift occasions coming up — here are the wishlists`
+
+        if (dry || !RESEND_API_KEY) {
+          digests.push({
+            channel: 'subscriber',
+            profile: profile.id,
+            subject,
+            entries: subEntries.length,
+            link,
+          })
+          emailedEmails.add(sub.email.toLowerCase())
+          continue
+        }
+        if (await sendViaResend(sub.email, subject, text, html)) {
+          emailedEmails.add(sub.email.toLowerCase())
+          sentCount += 1
+          await admin.from('occasion_reminder_log').insert(
+            subEntries.map((e: any) => ({
+              profile_id: profile.id,
+              occasion_id: e.occasion.id,
+              occurrence_date: dateKey(e.date),
+              subscriber_id: sub.id,
             }))
           )
         }

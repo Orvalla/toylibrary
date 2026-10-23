@@ -566,3 +566,9 @@ h2 .plat-badge img, h3 .plat-badge img { max-width: 24px; max-height: 24px; }
 .admin-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
 .badge-flag { background: #ffe1e1; color: #a11f26; }
 .btn-danger { background: #d92b30; color: #fff; }
+
+/* Gift-list subscribe card (0034) */
+.subscribe-card { margin: 14px 0; }
+.subscribe-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.subscribe-form input[type="email"] { flex: 1 1 220px; padding: 10px 12px; border-radius: 12px; border: 2px solid #ddd6f5; font: inherit; }
+.subscribe-form select { padding: 9px; border-radius: 10px; border: 2px solid #ddd6f5; font: inherit; }
