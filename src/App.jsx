@@ -45,30 +45,9 @@ export default function App() {
             </Protected>
           }
         />
-        <Route
-          path="/catalog"
-          element={
-            <Protected>
-              <CatalogPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/books"
-          element={
-            <Protected>
-              <BooksPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/devices"
-          element={
-            <Protected>
-              <DevicesPage />
-            </Protected>
-          }
-        />
+        <Route path="/catalog" element={<CatalogPage />} />
+        <Route path="/books" element={<BooksPage />} />
+        <Route path="/devices" element={<DevicesPage />} />
         <Route
           path="/settings"
           element={

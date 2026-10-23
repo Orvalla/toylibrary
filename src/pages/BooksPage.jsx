@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
 import AmazonLink from '../components/AmazonLink'
 import { BOOK_STAGES, bookInStage } from '../lib/books'
@@ -12,6 +13,7 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // catalog (where adding to lists lives); the top-rated shelf
 // is a taster of what's here.
 export default function BooksPage() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [ages, setAges] = useState(null) // [{age_min_years, age_max_years}]
   const [topRated, setTopRated] = useState([])
@@ -62,7 +64,9 @@ export default function BooksPage() {
           {ages == null
             ? 'Every book we know about, from first picture books to Young Adult.'
             : `${ages.length.toLocaleString()} books, from first picture books to Young Adult — ` +
-              'browse by reading stage, then add them to your lists.'}
+              (user
+                ? 'browse by reading stage, then add them to your lists.'
+                : 'browse by reading stage and shop the shelves — no account needed.')}
         </p>
         <form className="books-search" onSubmit={search}>
           <input

@@ -38,7 +38,7 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // and the chip row when open. The summary keeps a folded
 // section informative — "Platform · Books" still says where
 // you are.
-function FilterSection({ id, label, summary, open, onToggle, children }) {
+export function FilterSection({ id, label, summary, open, onToggle, children }) {
   return (
     <div className="filter-section">
       <button

@@ -25,6 +25,9 @@ export default function Header() {
           </>
         ) : (
           <>
+            <Link to="/catalog">Catalog</Link>
+            <Link to="/books">Books</Link>
+            <Link to="/devices">Devices</Link>
             <Link to="/login">Log in</Link>
             <Link to="/signup" className="btn btn-small">
               Sign up free
