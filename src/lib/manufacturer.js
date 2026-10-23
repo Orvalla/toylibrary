@@ -81,10 +81,14 @@ export function siteNameForUrl(rawUrl) {
     return null
   }
   if (SITE_NAMES[host]) return SITE_NAMES[host]
-  // Unknown host: name the site by its domain — strip one
-  // shop-style subdomain and the TLD, then capitalize.
-  const parts = host.replace(/^www\./, '').split('.')
-  const label = parts.length >= 3 ? parts[parts.length - 2] : parts[0]
+  // Unknown host: name the site by its registrable label —
+  // drop shop-style subdomains (www, shop, store, country
+  // codes) from the front, then capitalize what remains
+  // ('shop.example-store.co.uk' -> 'Example-store').
+  const NOISE = new Set(['www', 'shop', 'store', 'us', 'uk', 'en', 'www2'])
+  let parts = host.split('.')
+  while (parts.length > 2 && NOISE.has(parts[0])) parts = parts.slice(1)
+  const label = parts[0]
   if (!label) return null
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
