@@ -412,7 +412,7 @@ export default function SettingsPage() {
     }
   }
 
-  const shareUrl = `${window.location.origin}/s/${profile.share_slug}`
+  const shareUrl = `${window.location.origin}/${profile.share_slug}`
 
   return (
     <main className="page narrow">

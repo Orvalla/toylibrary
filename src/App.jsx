@@ -87,8 +87,13 @@ export default function App() {
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        {/* The gift-giver share page: public, read-only, no account needed. */}
+        {/* The gift-giver share page: public, read-only, no account
+            needed. Canonical form is /<slug>; /s/<slug> stays as a
+            permanent alias for links already shared. Route names
+            win over the slug route (static beats dynamic), and the
+            slug reserved list fences every route name off. */}
         <Route path="/s/:slug" element={<PublicListPage />} />
+        <Route path="/:slug" element={<PublicListPage />} />
         {/* Gift-circle email unsubscribe: public, token-checked by RPC. */}
         <Route path="/unsubscribe" element={<UnsubscribePage />} />
         <Route path="*" element={<NotFoundPage />} />

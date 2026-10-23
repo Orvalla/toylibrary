@@ -285,7 +285,7 @@ export default function DashboardPage() {
   if (loading) return <main className="page"><p>Loading your library…</p></main>
   if (!profile) return <main className="page"><p>We couldn't load your profile. Try refreshing.</p></main>
 
-  const shareUrl = `${window.location.origin}/s/${profile.share_slug}`
+  const shareUrl = `${window.location.origin}/${profile.share_slug}`
   const q = filter.trim().toLowerCase()
   const visible = items.filter(
     (i) =>

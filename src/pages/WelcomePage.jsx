@@ -82,7 +82,7 @@ export default function WelcomePage() {
   }, [user.id])
 
   const childName = name.trim() || 'your child'
-  const shareUrl = profile ? `${window.location.origin}/s/${profile.share_slug}` : ''
+  const shareUrl = profile ? `${window.location.origin}/${profile.share_slug}` : ''
 
   async function finish(withTour = false) {
     await supabase.from('profiles').update({ onboarded_at: new Date().toISOString() }).eq('id', user.id)

@@ -6,10 +6,11 @@
 // UI can clean up and vet a choice before the round-trip.
 
 export const RESERVED_SLUGS = new Set([
-  'admin', 'api', 'app', 'about', 'catalog', 'dashboard',
-  'devices', 'forgot-password', 'help', 'login', 'privacy',
-  'reset-password', 's', 'settings', 'share', 'signup',
-  'support', 'terms', 'toy-library', 'toylibrary', 'www',
+  'admin', 'api', 'app', 'about', 'books', 'brand', 'catalog',
+  'dashboard', 'devices', 'forgot-password', 'help', 'login',
+  'privacy', 'reset-password', 's', 'settings', 'share',
+  'signup', 'support', 'terms', 'toy-library', 'toylibrary',
+  'unsubscribe', 'welcome', 'www',
 ])
 
 // Turn whatever the parent typed ("The Millers!", "my_family")
