@@ -45,6 +45,28 @@ const PLATFORM_KEYS = [
   'storypod',
   'osmo',
   'lunii',
+  // Physical toys & games (catalog rounds 2026-10-22): a shelf
+  // photo today is as likely to hold game boxes and kits as
+  // story toys, and the catalog matcher's platform bonus only
+  // works if the vision pass can name the brand.
+  'haba',
+  'magnatiles',
+  'smartgames',
+  'lovevery',
+  'melissaanddoug',
+  'littlepeople',
+  'brio',
+  'fatbrain',
+  'lakeshore',
+  'learningresources',
+  'littletikes',
+  'thamesandkosmos',
+  'thinkfun',
+  'ravensburger',
+  'kiwico',
+  'eeboo',
+  'mudpuppy',
+  'sphero',
 ]
 
 const CORS = {
@@ -67,6 +89,8 @@ BOOKS (usually the bulk of a shelf photo): work systematically — shelf by shel
 - author: the author's name as printed, whenever it is visible. This matters: it disambiguates series and sequels. Use "" when no author is visible.
 - A run of books from one series still counts book by book — list each distinct title once.
 
+PHYSICAL TOYS & GAMES: branded game boxes, construction sets, science kits, puzzles and coding robots — use the product's printed name and set platform to the brand: haba, magnatiles, smartgames, lovevery, melissaanddoug, littlepeople, brio, fatbrain, lakeshore, learningresources, littletikes, thamesandkosmos, thinkfun, ravensburger, kiwico, eeboo, mudpuppy, sphero. A Ravensburger game or GraviTrax box is "ravensburger" (a ThinkFun-branded game is "thinkfun"); a Thames & Kosmos kit is "thamesandkosmos".
+
 STORY TOYS:
 - Tonie or Creative Tonie figures — title is the character or franchise shown, e.g. "Paw Patrol — Chase", "Blippi"
 - Yoto cards — use the card's printed title
@@ -78,7 +102,7 @@ Rules: one entry per physical product (a product appearing twice is listed once)
 
 Respond with JSON only, no other text:
 {"items": [{"title": "...", "author": "...", "platform": "books", "confidence": 0.9}]}
-platform is one of: tonies, yoto, leapfrog, projector, storypod, lunii, osmo, books, vtech, other. author is only for books — omit it, or use "", for anything else. confidence is 0 to 1 — how sure you are of that identification.`
+platform is one of: tonies, yoto, leapfrog, projector, storypod, lunii, osmo, books, vtech, haba, magnatiles, smartgames, lovevery, melissaanddoug, littlepeople, brio, fatbrain, lakeshore, learningresources, littletikes, thamesandkosmos, thinkfun, ravensburger, kiwico, eeboo, mudpuppy, sphero, other. author is only for books — omit it, or use "", for anything else. confidence is 0 to 1 — how sure you are of that identification.`
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
