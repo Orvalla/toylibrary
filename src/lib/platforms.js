@@ -44,6 +44,16 @@ export const PLATFORMS = [
   { key: 'buffalogames', label: 'Buffalo Games', emoji: '🦬' },
   { key: 'spinmaster', label: 'Spin Master Games', emoji: '🌪️' },
   { key: 'devir', label: 'Devir', emoji: '🗺️' },
+  { key: 'plantoys', label: 'PlanToys', emoji: '🌳' },
+  { key: 'hape', label: 'Hape', emoji: '🎨' },
+  { key: 'janod', label: 'Janod', emoji: '🐦' },
+  { key: 'letoyvan', label: 'Le Toy Van', emoji: '🚐' },
+  { key: 'tenderleaf', label: 'Tender Leaf Toys', emoji: '🍃' },
+  { key: 'greentoys', label: 'Green Toys', emoji: '♻️' },
+  { key: 'manhattantoy', label: 'Manhattan Toy', emoji: '🗽' },
+  { key: 'tegu', label: 'Tegu', emoji: '🧱' },
+  { key: 'guidecraft', label: 'Guidecraft', emoji: '🏫' },
+  { key: 'unclegoose', label: 'Uncle Goose', emoji: '🪿' },
   { key: 'books', label: 'Books', emoji: '📚' },
   { key: 'other', label: 'Other', emoji: '🎁' },
 ]
@@ -88,6 +98,16 @@ export const ALWAYS_PLAYABLE = [
   'buffalogames',
   'spinmaster',
   'devir',
+  'plantoys',
+  'hape',
+  'janod',
+  'letoyvan',
+  'tenderleaf',
+  'greentoys',
+  'manhattantoy',
+  'tegu',
+  'guidecraft',
+  'unclegoose',
 ]
 
 // Physical-toy platforms: filed under the Toys category unless
@@ -126,6 +146,16 @@ export const TOY_PLATFORMS = [
   'buffalogames',
   'spinmaster',
   'devir',
+  'plantoys',
+  'hape',
+  'janod',
+  'letoyvan',
+  'tenderleaf',
+  'greentoys',
+  'manhattantoy',
+  'tegu',
+  'guidecraft',
+  'unclegoose',
 ]
 
 export const platformLabel = (key) =>
