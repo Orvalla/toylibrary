@@ -26,6 +26,11 @@ describe('Turnstile component', () => {
     render(<Turnstile ref={ref} />)
     await waitFor(() => expect(fakeApi.render).toHaveBeenCalled())
     expect(fakeApi.lastOpts.sitekey).toBe('test-site-key')
+    // The widget is pinned to the light theme: Cloudflare's
+    // default ("auto") follows the visitor's device color
+    // scheme and renders a black box in our light forms on
+    // dark-mode phones.
+    expect(fakeApi.lastOpts.theme).toBe('light')
 
     // No token yet: consume() waits for the check to pass.
     const pending = ref.current.consume()

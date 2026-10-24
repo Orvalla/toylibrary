@@ -32,6 +32,12 @@ const Turnstile = forwardRef(function Turnstile(_props, ref) {
         apiRef.current = turnstile
         widgetIdRef.current = turnstile.render(boxRef.current, {
           sitekey: TURNSTILE_SITE_KEY,
+          // Cloudflare's default theme is "auto", which follows
+          // the visitor's phone/browser color scheme — on a
+          // dark-mode phone the widget renders black inside our
+          // light lavender forms. The site has no dark theme,
+          // so pin the widget to light to match the page.
+          theme: 'light',
           callback: (token) => {
             // A token goes to exactly one consumer: if a consume()
             // is already waiting, hand it over directly; only park
