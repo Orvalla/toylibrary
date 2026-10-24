@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shareSlugFromHost } from './hostSlug'
+import { shareSlugFromHost, shareUrlFor } from './hostSlug'
 
 describe('shareSlugFromHost', () => {
   it('reads a slug label under toylibrary.store', () => {
@@ -20,5 +20,12 @@ describe('shareSlugFromHost', () => {
     expect(shareSlugFromHost('-bad.toylibrary.store')).toBeNull()
     expect(shareSlugFromHost('bad-.toylibrary.store')).toBeNull()
     expect(shareSlugFromHost('bad_name.toylibrary.store')).toBeNull()
+  })
+})
+
+describe('shareUrlFor', () => {
+  it('builds the canonical subdomain share URL', () => {
+    expect(shareUrlFor('millers')).toBe('https://millers.toylibrary.store')
+    expect(shareUrlFor('the-millers')).toBe('https://the-millers.toylibrary.store')
   })
 })

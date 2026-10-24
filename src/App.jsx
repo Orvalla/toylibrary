@@ -13,6 +13,7 @@ import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/Pas
 import PublicListPage from './pages/PublicListPage'
 import UnsubscribePage from './pages/UnsubscribePage'
 import { useAuth } from './lib/auth'
+import { shareSlugFromHost } from './lib/hostSlug'
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -22,6 +23,22 @@ function Protected({ children }) {
 }
 
 export default function App() {
+  // On a family subdomain (<slug>.toylibrary.store) the gift
+  // page is the whole site: share links ARE subdomains now, so
+  // there's no path form and no site chrome to wander into.
+  const hostSlug = shareSlugFromHost(window.location.hostname)
+  if (hostSlug) {
+    return (
+      <>
+        <Routes>
+          <Route path="*" element={<PublicListPage slugOverride={hostSlug} />} />
+        </Routes>
+        <footer className="footer">
+          Toy Library — fewer duplicate gifts, happier holidays.
+        </footer>
+      </>
+    )
+  }
   return (
     <>
       <Header />
@@ -66,13 +83,10 @@ export default function App() {
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        {/* The gift-giver share page: public, read-only, no account
-            needed. Canonical form is /<slug>; /s/<slug> stays as a
-            permanent alias for links already shared. Route names
-            win over the slug route (static beats dynamic), and the
-            slug reserved list fences every route name off. */}
-        <Route path="/s/:slug" element={<PublicListPage />} />
-        <Route path="/:slug" element={<PublicListPage />} />
+        {/* No share-page route here on purpose: gift pages live
+            only on their family subdomain (see the hostSlug
+            branch above), so a slug can never collide with a
+            present or future page on this domain. */}
         {/* Gift-circle email unsubscribe: public, token-checked by RPC. */}
         <Route path="/unsubscribe" element={<UnsubscribePage />} />
         <Route path="*" element={<NotFoundPage />} />

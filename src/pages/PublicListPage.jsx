@@ -14,8 +14,9 @@ import { defaultChildId, subscribePayload, subscribeResultMessage } from '../lib
 // The page gift-givers see. No login: the data comes from the
 // get_shared_list() RPC, which only exposes the two lists for this slug.
 // Wishlist items can be claimed anonymously (see ClaimableWishlist).
-export default function PublicListPage() {
-  const { slug } = useParams()
+export default function PublicListPage({ slugOverride } = {}) {
+  const { slug: routeSlug } = useParams()
+  const slug = slugOverride ?? routeSlug
   const [data, setData] = useState(undefined) // undefined = loading, null = unavailable
   const [query, setQuery] = useState('')
   // The gift cart: a per-slug list in this browser's localStorage.

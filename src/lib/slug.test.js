@@ -44,8 +44,14 @@ describe('validateShareSlug', () => {
 
   it('rejects reserved words', () => {
     expect(validateShareSlug('admin')).toMatch(/reserved/)
-    expect(validateShareSlug('settings')).toMatch(/reserved/)
+    expect(validateShareSlug('www')).toMatch(/reserved/)
     expect(validateShareSlug('toy-library')).toMatch(/reserved/)
+  })
+
+  it('allows page names now that slugs are subdomains', () => {
+    // books.toylibrary.store can't collide with the /books page.
+    expect(validateShareSlug('books')).toBeNull()
+    expect(validateShareSlug('settings')).toBeNull()
   })
 
   it('rejects the empty slug with a nudge to type something', () => {

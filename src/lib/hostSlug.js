@@ -1,9 +1,10 @@
-// Subdomain share links: millers.toylibrary.store should land a
-// gift-giver on the same page as toylibrary.store/millers. The SPA
-// host only serves one app, so main.jsx reads the subdomain and
-// redirects to the canonical path form — the visitor's browser
-// ends up in exactly one place, and carts/claims (stored per
-// origin) never split across two addresses.
+// Subdomain share links are THE share links (owner decision
+// 2026-10-23): a family's gift page lives at
+// <slug>.toylibrary.store and nowhere else — the old
+// toylibrary.store/<slug> and /s/<slug> paths are gone, so a
+// family name can never collide with a future site page.
+// App.jsx reads the subdomain and renders the gift page in
+// place; the URL in the visitor's browser stays the subdomain.
 
 const SHARE_HOST_SUFFIX = '.toylibrary.store'
 const NON_SLUG_LABELS = new Set(['www'])
@@ -19,4 +20,9 @@ export function shareSlugFromHost(hostname) {
   if (NON_SLUG_LABELS.has(label)) return null
   if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(label)) return null
   return label
+}
+
+// The one canonical share URL for a family's slug.
+export function shareUrlFor(slug) {
+  return `https://${slug}.toylibrary.store`
 }

@@ -1,16 +1,20 @@
 // Custom share slugs: a family's gift-giver link is
-// {origin}/s/<slug>. Auto-generated slugs (fam-015f2077) are hard
-// to say out loud, so parents can pick their own in Settings.
-// These helpers mirror the server rules in migration 0012
-// (set_share_slug + the profiles_share_slug_format check) so the
-// UI can clean up and vet a choice before the round-trip.
-
+// <slug>.toylibrary.store. Auto-generated slugs (fam-015f2077)
+// are hard to say out loud, so parents can pick their own in
+// Settings. These helpers mirror the server rules in
+// migration 0038 (set_share_slug) so the UI can clean up and
+// vet a choice before the round-trip.
+//
+// Since slugs became subdomains (2026-10-23), page names no
+// longer need fencing — a family called "books" can't collide
+// with the /books page from books.toylibrary.store. Only
+// infrastructure-flavoured names stay reserved, so a family
+// subdomain never impersonates a service address.
 export const RESERVED_SLUGS = new Set([
-  'admin', 'api', 'app', 'about', 'books', 'brand', 'catalog',
-  'dashboard', 'devices', 'forgot-password', 'help', 'login',
-  'privacy', 'reset-password', 's', 'settings', 'share',
-  'signup', 'support', 'terms', 'toy-library', 'toylibrary',
-  'unsubscribe', 'welcome', 'www',
+  'admin', 'api', 'app', 'assets', 'auth', 'billing', 'blog',
+  'cdn', 'help', 'login', 'mail', 'media', 'pay', 'secure',
+  'shop', 'signup', 'static', 'store', 'support', 'toy-library',
+  'toylibrary', 'unsubscribe', 'www',
 ])
 
 // Turn whatever the parent typed ("The Millers!", "my_family")

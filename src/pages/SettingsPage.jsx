@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { formatOccasionLine } from '../lib/occasions'
 import { normalizeShareSlug, validateShareSlug } from '../lib/slug'
+import { shareUrlFor } from '../lib/hostSlug'
 import { GENDERS, INTERESTS } from '../lib/onboarding'
 import { giftMessage, instagramLink, messengerLink, normalizeHandle } from '../lib/giftCircle'
 
@@ -412,7 +413,7 @@ export default function SettingsPage() {
     }
   }
 
-  const shareUrl = `${window.location.origin}/${profile.share_slug}`
+  const shareUrl = shareUrlFor(profile.share_slug)
 
   return (
     <main className="page narrow">
@@ -624,13 +625,14 @@ export default function SettingsPage() {
           <label>
             Make it memorable
             <span className="slug-field">
-              <span className="slug-prefix">{window.location.origin}/s/</span>
+              <span className="slug-prefix">https://</span>
               <input
                 value={slugInput}
                 onChange={(e) => setSlugInput(e.target.value)}
                 placeholder="the-millers"
                 maxLength={40}
               />
+              <span className="slug-prefix">.toylibrary.store</span>
             </span>
           </label>
           <p className="field-help">

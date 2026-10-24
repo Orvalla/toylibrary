@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { GENDERS, HOLIDAYS, INTERESTS, ageLabel } from '../lib/onboarding'
 import { platformLabel } from '../lib/platforms'
 import { platformNoun } from '../lib/bundles'
+import { shareUrlFor } from '../lib/hostSlug'
 import Ethos from '../components/Ethos'
 
 const STEP_TITLES = ['About your child', 'Gift occasions', 'Their devices', 'Interests', 'Fill the shelves', 'You’re all set']
@@ -82,7 +83,7 @@ export default function WelcomePage() {
   }, [user.id])
 
   const childName = name.trim() || 'your child'
-  const shareUrl = profile ? `${window.location.origin}/${profile.share_slug}` : ''
+  const shareUrl = profile ? shareUrlFor(profile.share_slug) : ''
 
   async function finish(withTour = false) {
     await supabase.from('profiles').update({ onboarded_at: new Date().toISOString() }).eq('id', user.id)

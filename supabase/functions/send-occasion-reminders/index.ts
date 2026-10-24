@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
       const allEntries = due.get(profile.id)
       if (!allEntries?.length) continue
       if (!profile.occasion_reminders || !profile.share_enabled) continue
-      const link = `${SITE}/${profile.share_slug}`
+      const link = `https://${profile.share_slug}.toylibrary.store`
       const ownerName = profile.display_name || 'A Toy Library parent'
 
       // ------------------------------------------ owner digest

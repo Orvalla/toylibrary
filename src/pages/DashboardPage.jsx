@@ -8,6 +8,7 @@ import ManufacturerLink from '../components/ManufacturerLink'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from '../components/PlatformMark'
 import { childNameFor } from '../lib/children'
+import { shareUrlFor } from '../lib/hostSlug'
 import { formatOccasionLine, nearestOccasion } from '../lib/occasions'
 import BundleNote from '../components/BundleNote'
 import PlatformGrid from '../components/PlatformGrid'
@@ -285,7 +286,7 @@ export default function DashboardPage() {
   if (loading) return <main className="page"><p>Loading your library…</p></main>
   if (!profile) return <main className="page"><p>We couldn't load your profile. Try refreshing.</p></main>
 
-  const shareUrl = `${window.location.origin}/${profile.share_slug}`
+  const shareUrl = shareUrlFor(profile.share_slug)
   const q = filter.trim().toLowerCase()
   const visible = items.filter(
     (i) =>
