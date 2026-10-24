@@ -457,16 +457,17 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // header rides with its items and repeats when a section spans
   // two pages. safePage is the clamped page actually shown.
   //
-  // The Suggested sort is the exception: it pages the flat
-  // ranked list. Regrouping it into brand sections would bury
-  // the ranking — sections render in fixed registry order, so
-  // the first games brand in the registry (HABA) owned page 1
+  // The ranked sorts — Suggested and Popular — page the flat
+  // list. Regrouping them into brand sections would bury the
+  // ranking: sections render in fixed registry order, so the
+  // first games brand in the registry (HABA) owned page 1
   // with all 65 of its games no matter what the scores said,
-  // and a better-fitting game from another brand couldn't
-  // surface for pages. Suggested means the ranking IS the
-  // order; brand sections are for the browsing sorts.
-  const groupedFlat =
-    sort === 'suggested' ? sortedVisible : ordered.flatMap((pKey) => byPlatform[pKey])
+  // and the Everything shelf opened with page after page of
+  // Tonies under Popular. For these sorts the ranking IS the
+  // order; brand sections remain only for A–Z / Z–A, where
+  // the brand block is the browsing unit.
+  const flatList = sort === 'suggested' || sort === 'popular'
+  const groupedFlat = flatList ? sortedVisible : ordered.flatMap((pKey) => byPlatform[pKey])
   const {
     pageItems,
     page: safePage,
@@ -478,17 +479,16 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   }, {})
   const pageOrdered = PLATFORMS.map((p) => p.key).filter((k) => pageByPlatform[k])
   // The sections this page renders: one anonymous section in
-  // the Suggested view (tiles carry their own brand), else a
-  // headed section per brand present on the page.
-  const pageSections =
-    sort === 'suggested'
-      ? [{ key: '__suggested', label: null, platform: 'suggested', items: pageItems }]
-      : pageOrdered.map((pKey) => ({
-          key: pKey,
-          label: platformLabel(pKey),
-          platform: pKey,
-          items: pageByPlatform[pKey],
-        }))
+  // the flat ranked views (tiles carry their own brand), else
+  // a headed section per brand present on the page.
+  const pageSections = flatList
+    ? [{ key: '__flat', label: null, platform: 'flat', items: pageItems }]
+    : pageOrdered.map((pKey) => ({
+        key: pKey,
+        label: platformLabel(pKey),
+        platform: pKey,
+        items: pageByPlatform[pKey],
+      }))
 
   const pagerBar = () =>
     sortedVisible.length > PAGE_SIZES[0] ? (

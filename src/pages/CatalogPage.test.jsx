@@ -19,9 +19,12 @@ const CATALOG = [
   // Two board games whose brand order and fit order disagree:
   // HABA sits near the front of the brand registry but this
   // title is aimed at 8-year-olds; the eeBoo game fits a
-  // 2-year-old animal lover.
-  { id: 'c3', platform: 'haba', title: 'Castle Siege', details: 'A strategy board game for older kids', image_url: '', sort_order: 3, age_min_years: 8 },
-  { id: 'c4', platform: 'eeboo', title: 'Zoo Pairs', details: 'An animal matching card game', image_url: '', sort_order: 4, age_min_years: 2 },
+  // 2-year-old animal lover. Their sort_orders interleave the
+  // brands too (eeBoo's game ranks above HABA's in the
+  // catalog's own order), so the Popular view separates the
+  // flat list from the old brand sections as well.
+  { id: 'c3', platform: 'haba', title: 'Castle Siege', details: 'A strategy board game for older kids', image_url: '', sort_order: 5, age_min_years: 8 },
+  { id: 'c4', platform: 'eeboo', title: 'Zoo Pairs', details: 'An animal matching card game', image_url: '', sort_order: 3, age_min_years: 2 },
 ]
 const MINE = [{ platform: 'tonies', title: 'Bluey', list_type: 'have', child_id: null }]
 // No children in this stub: ownership matching runs against Family.
@@ -86,6 +89,25 @@ describe('CatalogPage sorting', () => {
     fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'za' } })
     const after = screen.getByText('Bluey').compareDocumentPosition(screen.getByText('Peppa Pig'))
     expect(after & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // Peppa first (Z–A)
+  })
+
+  it('Popular is one ranked list too — brands interleave by catalog order', async () => {
+    render(
+      <AuthProvider>
+        <Harness />
+      </AuthProvider>
+    )
+    // No child selected, so the view stays on Popular: the
+    // catalog's own order (Bluey, Peppa, Zoo Pairs, Castle
+    // Siege) flows across brands. Under the old brand
+    // sections the HABA game would have preceded the eeBoo
+    // one purely because HABA's section comes first.
+    expect(await screen.findByText('Zoo Pairs')).toBeInTheDocument()
+    const pos = screen
+      .getByText('Zoo Pairs')
+      .compareDocumentPosition(screen.getByText('Castle Siege'))
+    expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'HABA' })).not.toBeInTheDocument()
   })
 
   it('offers Popular and Suggested sort options', async () => {

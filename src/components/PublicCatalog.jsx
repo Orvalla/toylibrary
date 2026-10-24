@@ -187,13 +187,28 @@ export default function PublicCatalog({ devicesOnly = false }) {
     return acc
   }, {})
   const ordered = PLATFORMS.map((p) => p.key).filter((k) => byPlatform[k])
-  const groupedFlat = ordered.flatMap((pKey) => byPlatform[pKey])
+  // Popular — the default here — is the catalog's own ranked
+  // order, so it pages flat like the signed-in browser's
+  // ranked sorts (see CatalogBrowser): regrouping into brand
+  // sections renders them in fixed registry order and buries
+  // the ranking, opening the Everything shelf with page after
+  // page of a single brand. A–Z / Z–A keep the sections.
+  const flatList = sort === 'popular'
+  const groupedFlat = flatList ? sortedVisible : ordered.flatMap((pKey) => byPlatform[pKey])
   const { pageItems, page: safePage, pageCount } = pageSlice(groupedFlat, page, perPage)
   const pageByPlatform = pageItems.reduce((acc, c) => {
     ;(acc[c.platform] ??= []).push(c)
     return acc
   }, {})
   const pageOrdered = PLATFORMS.map((p) => p.key).filter((k) => pageByPlatform[k])
+  const pageSections = flatList
+    ? [{ key: '__flat', label: null, platform: 'flat', items: pageItems }]
+    : pageOrdered.map((pKey) => ({
+        key: pKey,
+        label: platformLabel(pKey),
+        platform: pKey,
+        items: pageByPlatform[pKey],
+      }))
 
   const pagerBar = () =>
     sortedVisible.length > PAGE_SIZES[0] ? (
@@ -517,12 +532,12 @@ export default function PublicCatalog({ devicesOnly = false }) {
         </p>
       )}
 
-      {pageOrdered.map((pKey) => (
-        <section key={pKey} className="platform-group">
-          <h3>{platformLabel(pKey)}</h3>
+      {pageSections.map((sec) => (
+        <section key={sec.key} className="platform-group">
+          {sec.label && <h3>{sec.label}</h3>}
           <PlatformGrid
-            platform={pKey}
-            items={pageByPlatform[pKey]}
+            platform={sec.platform}
+            items={sec.items}
             renderItem={(entry) => {
               const info = entry.is_bundle
                 ? bundleInfoFor({
