@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import Turnstile from '../components/Turnstile'
 import { useAuth } from '../lib/auth'
 import { formatOccasionLine } from '../lib/occasions'
 import { normalizeShareSlug, validateShareSlug } from '../lib/slug'
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState(null)
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
   const [pwBusy, setPwBusy] = useState(false)
+  const captchaRef = useRef(null)
   const [displayName, setDisplayName] = useState('')
   const [childName, setChildName] = useState('')
   const [kids, setKids] = useState([])
@@ -371,16 +373,39 @@ export default function SettingsPage() {
       return
     }
     setPwBusy(true)
+    // Each auth call needs its own single-use captcha token, so
+    // consume one for the re-auth check and a fresh one for the
+    // password update itself.
+    let checkToken = ''
+    try {
+      checkToken = await captchaRef.current.consume()
+    } catch {
+      setPwBusy(false)
+      setMessage('Please complete the human check, then try again.')
+      return
+    }
     const { error: checkError } = await supabase.auth.signInWithPassword({
       email: user.email,
       password: pw.current,
+      options: checkToken ? { captchaToken: checkToken } : undefined,
     })
     if (checkError) {
       setPwBusy(false)
       setMessage("Your current password doesn't match — nothing was changed.")
       return
     }
-    const { error } = await supabase.auth.updateUser({ password: pw.next })
+    let updateToken = ''
+    try {
+      updateToken = await captchaRef.current.consume()
+    } catch {
+      setPwBusy(false)
+      setMessage('Please complete the human check, then try again.')
+      return
+    }
+    const { error } = await supabase.auth.updateUser(
+      { password: pw.next },
+      updateToken ? { captchaToken: updateToken } : undefined
+    )
     setPwBusy(false)
     if (error) {
       setMessage(error.message)
@@ -780,6 +805,7 @@ export default function SettingsPage() {
               onChange={(e) => setPw((p) => ({ ...p, confirm: e.target.value }))}
             />
           </label>
+          <Turnstile ref={captchaRef} />
           <p>
             <button type="submit" className="btn btn-small" disabled={pwBusy}>
               {pwBusy ? 'Changing…' : 'Change password'}

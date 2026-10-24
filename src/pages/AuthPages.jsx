@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import Turnstile from '../components/Turnstile'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -8,12 +9,25 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const captchaRef = useRef(null)
 
   async function onSubmit(e) {
     e.preventDefault()
     setBusy(true)
     setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    let captchaToken = ''
+    try {
+      captchaToken = await captchaRef.current.consume()
+    } catch {
+      setBusy(false)
+      setError('Please complete the human check, then try again.')
+      return
+    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: captchaToken ? { captchaToken } : undefined,
+    })
     setBusy(false)
     if (error) setError(error.message)
     else navigate('/dashboard')
@@ -32,6 +46,7 @@ export function LoginPage() {
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         {error && <p className="error">{error}</p>}
+        <Turnstile ref={captchaRef} />
         <button className="btn" disabled={busy}>
           {busy ? 'Logging in…' : 'Log in'}
         </button>
@@ -53,17 +68,29 @@ export function SignupPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const captchaRef = useRef(null)
 
   async function onSubmit(e) {
     e.preventDefault()
     setBusy(true)
     setError('')
+    let captchaToken = ''
+    try {
+      captchaToken = await captchaRef.current.consume()
+    } catch {
+      setBusy(false)
+      setError('Please complete the human check, then try again.')
+      return
+    }
     // display_name / child_name land in raw_user_meta_data, which the
     // handle_new_user trigger copies into the new profile row.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName, child_name: childName } },
+      options: {
+        data: { display_name: displayName, child_name: childName },
+        ...(captchaToken ? { captchaToken } : {}),
+      },
     })
     setBusy(false)
     if (error) {
@@ -102,6 +129,7 @@ export function SignupPage() {
         </label>
         {error && <p className="error">{error}</p>}
         {notice && <p className="notice">{notice}</p>}
+        <Turnstile ref={captchaRef} />
         <button className="btn" disabled={busy}>
           {busy ? 'Creating…' : 'Sign up'}
         </button>

@@ -1,19 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import Turnstile from '../components/Turnstile'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const captchaRef = useRef(null)
 
   async function onSubmit(e) {
     e.preventDefault()
     setBusy(true)
     setError('')
+    let captchaToken = ''
+    try {
+      captchaToken = await captchaRef.current.consume()
+    } catch {
+      setBusy(false)
+      setError('Please complete the human check, then try again.')
+      return
+    }
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
+      ...(captchaToken ? { captchaToken } : {}),
     })
     setBusy(false)
     if (error) setError(error.message)
@@ -32,6 +43,7 @@ export function ForgotPasswordPage() {
         </label>
         {error && <p className="error">{error}</p>}
         {message && <p className="notice">{message}</p>}
+        <Turnstile ref={captchaRef} />
         <button className="btn" disabled={busy}>
           {busy ? 'Sending…' : 'Send reset link'}
         </button>
@@ -52,6 +64,7 @@ export function ResetPasswordPage() {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const captchaRef = useRef(null)
 
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
@@ -67,7 +80,18 @@ export function ResetPasswordPage() {
     e.preventDefault()
     setBusy(true)
     setError('')
-    const { error } = await supabase.auth.updateUser({ password })
+    let captchaToken = ''
+    try {
+      captchaToken = await captchaRef.current.consume()
+    } catch {
+      setBusy(false)
+      setError('Please complete the human check, then try again.')
+      return
+    }
+    const { error } = await supabase.auth.updateUser(
+      { password },
+      captchaToken ? { captchaToken } : undefined
+    )
     setBusy(false)
     if (error) setError(error.message)
     else navigate('/dashboard')
@@ -99,6 +123,7 @@ export function ResetPasswordPage() {
           />
         </label>
         {error && <p className="error">{error}</p>}
+        <Turnstile ref={captchaRef} />
         <button className="btn" disabled={busy}>
           {busy ? 'Saving…' : 'Set password'}
         </button>
