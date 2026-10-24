@@ -58,19 +58,35 @@ export default function SupportWidget() {
         .upload(path, shot.blob, { contentType: 'image/png' })
       if (!upErr) screenshotPath = path
     }
-    const { error: insErr } = await supabase.from('support_reports').insert({
-      user_id: user?.id ?? null,
-      email: email.trim() || user?.email || null,
-      kind,
-      message: message.trim(),
-      page_url: pageUrl.current,
-      screenshot_path: screenshotPath,
-      user_agent: navigator.userAgent.slice(0, 300),
-    })
+    const { data: filed, error: insErr } = await supabase
+      .from('support_reports')
+      .insert({
+        user_id: user?.id ?? null,
+        email: email.trim() || user?.email || null,
+        kind,
+        message: message.trim(),
+        page_url: pageUrl.current,
+        screenshot_path: screenshotPath,
+        user_agent: navigator.userAgent.slice(0, 300),
+      })
+      .select('id')
+      .single()
     setSending(false)
     if (insErr) {
       setError(insErr.message)
       return
+    }
+    // Best-effort: also email the ticket to support@ so it
+    // can be worked from a mail app. A failed ping never
+    // un-files the report — it still sits in the admin inbox.
+    if (filed?.id) {
+      try {
+        await supabase.functions.invoke('notify-support', {
+          body: { report_id: filed.id },
+        })
+      } catch {
+        // The admin inbox remains the source of truth.
+      }
     }
     setSent(true)
     setMessage('')
