@@ -8,6 +8,11 @@ import { bundleHeadline } from '../lib/bundles'
 // both the share RPC and lib/bundles produce.
 export default function BundleNote({ info, name, platform }) {
   if (!info || !info.total) return null
+  // Owning none of the pieces makes the note pure noise — the
+  // "still missing" list is just the whole set the tile itself
+  // already shows. The note earns its space from the first
+  // owned piece on (progress + what completes the set).
+  if (!info.owned) return null
   const complete = info.owned >= info.total
   return (
     <div className="bundle-note">
