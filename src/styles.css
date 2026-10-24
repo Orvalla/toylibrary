@@ -259,6 +259,11 @@ a { color: var(--accent-dark); }
   padding: 8px 0; border-bottom: 1.5px dashed var(--line); margin: 0;
 }
 .child-block { flex-direction: column; align-items: stretch; gap: 8px; }
+/* The child form's actions are real buttons in their own row at
+   the bottom of the block — solid rectangles, deliberately
+   unlike the white pill chips used for interest toggles. */
+.child-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.child-actions .btn { flex: 1 1 150px; }
 .child-row-main { display: flex; gap: 8px; align-items: center; }
 .child-row-main input { flex: 1; }
 .child-profile { display: flex; gap: 12px; flex-wrap: wrap; }

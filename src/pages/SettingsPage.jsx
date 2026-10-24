@@ -542,14 +542,6 @@ export default function SettingsPage() {
                     onChange={(e) => setKidEdits((ed) => ({ ...ed, [kid.id]: e.target.value }))}
                     aria-label={`Name for ${kid.name}`}
                   />
-                  <span className="item-actions">
-                    <button className="linklike" onClick={() => renameKid(kid)}>
-                      Save
-                    </button>
-                    <button className="linklike danger" onClick={() => deleteKid(kid)}>
-                      Remove
-                    </button>
-                  </span>
                 </div>
                 <div className="child-profile">
                   <label>
@@ -614,6 +606,14 @@ export default function SettingsPage() {
                       </button>
                     )
                   })}
+                </div>
+                <div className="child-actions">
+                  <button type="button" className="btn" onClick={() => renameKid(kid)}>
+                    Save {kid.name}'s profile
+                  </button>
+                  <button type="button" className="btn btn-danger" onClick={() => deleteKid(kid)}>
+                    Remove {kid.name}
+                  </button>
                 </div>
               </li>
             )
