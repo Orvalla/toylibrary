@@ -14,6 +14,7 @@ import PublicListPage from './pages/PublicListPage'
 import UnsubscribePage from './pages/UnsubscribePage'
 import { useAuth } from './lib/auth'
 import { shareSlugFromHost } from './lib/hostSlug'
+import SupportWidget from './components/SupportWidget'
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -34,7 +35,7 @@ export default function App() {
           <Route path="*" element={<PublicListPage slugOverride={hostSlug} />} />
         </Routes>
         <footer className="footer">
-          Toy Library — fewer duplicate gifts, happier holidays.
+          Toy Library — fewer duplicate gifts, happier holidays. · <SupportWidget />
         </footer>
       </>
     )
@@ -92,7 +93,7 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <footer className="footer">
-        Toy Library — fewer duplicate gifts, happier holidays.
+        Toy Library — fewer duplicate gifts, happier holidays. · <SupportWidget />
       </footer>
     </>
   )

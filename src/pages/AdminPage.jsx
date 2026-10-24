@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { platformLabel } from '../lib/platforms'
 import AnalyticsPanel from '../components/AnalyticsPanel'
+import SupportInbox from '../components/SupportInbox'
 
 // Site admin (migration 0031): the owner's moderation desk for
 // the user-grown catalog. Everything here runs through
@@ -98,6 +99,8 @@ export default function AdminPage() {
       </p>
 
       <AnalyticsPanel />
+
+      <SupportInbox />
 
       {openFlags.length > 0 && (
         <section className="card">

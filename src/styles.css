@@ -400,6 +400,15 @@ a { color: var(--accent-dark); }
 
 .footer { text-align: center; color: #8b87ad; padding: 22px; border-top: 1px solid var(--line); font-size: 14px; }
 
+/* Support dialog (footer link, bug/feature reports) */
+.footer-link { background: none; border: none; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+.support-overlay { position: fixed; inset: 0; z-index: 80; background: rgba(46, 42, 85, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.support-card { background: #fff; border-radius: 18px; max-width: 520px; width: 100%; max-height: 90vh; overflow: auto; padding: 22px; position: relative; box-shadow: 6px 6px 0 var(--accent); color: var(--ink); text-align: left; }
+.support-close { position: absolute; top: 10px; right: 12px; background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink); }
+.support-shot { margin: 0 0 12px; }
+.support-shot img { width: 100%; border: 1px solid var(--line); border-radius: 10px; display: block; }
+.support-shot figcaption { font-size: 13px; color: #8b87ad; margin-top: 6px; }
+
 /* Gift cart drawer (public share page) */
 .cart-overlay {
   position: fixed; inset: 0; z-index: 60;
@@ -577,3 +586,5 @@ h2 .plat-badge img, h3 .plat-badge img { max-width: 24px; max-height: 24px; }
 .subscribe-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .subscribe-form input[type="email"] { flex: 1 1 220px; padding: 10px 12px; border-radius: 12px; border: 2px solid #ddd6f5; font: inherit; }
 .subscribe-form select { padding: 9px; border-radius: 10px; border: 2px solid #ddd6f5; font: inherit; }
+.support-report { border-top: 1px solid var(--line); padding: 10px 0; }
+.support-report:first-of-type { border-top: none; }
