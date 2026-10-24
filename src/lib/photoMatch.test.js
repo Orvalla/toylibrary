@@ -95,4 +95,16 @@ describe('bestMatch', () => {
     const m = bestMatch({ title: 'The Very Hungry Caterpillar', platform: 'books' }, docs)
     expect(m?.entry.id).toBe('ol1')
   })
+
+  it('breaks containment ties toward the bare printed title (cartridge vs reel)', () => {
+    const rows = [
+      { id: 'reel', platform: 'projector', title: 'World of Eric Carle: Mister Seahorse' },
+      { id: 'cart', platform: 'projector', title: 'Mister Seahorse' },
+    ]
+    const m = bestMatch({ title: 'Mister Seahorse', platform: 'projector' }, rows)
+    expect(m?.entry.id).toBe('cart')
+    // …and the prefixed row still wins when it's the only form.
+    const m2 = bestMatch({ title: 'Mister Seahorse', platform: 'projector' }, [rows[0]])
+    expect(m2?.entry.id).toBe('reel')
+  })
 })

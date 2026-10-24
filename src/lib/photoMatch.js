@@ -46,11 +46,22 @@ export function matchScore(detection, entry) {
 function pickBest(detection, rows) {
   let best = null
   let bestScore = 0
+  let bestDiff = Infinity
+  const dSize = titleWords(detection?.title).size
   for (const entry of rows) {
     const s = matchScore(detection, entry)
-    if (s > bestScore) {
+    if (s <= 0) continue
+    // Score ties go to the closest title shape: containment
+    // scores a bare title and its series-prefixed twin alike
+    // ("Mister Seahorse" the Dream Machine cartridge vs
+    // "World of Eric Carle: Mister Seahorse" the Moonlite
+    // reel), and the bare printed title is the better bet for
+    // what's actually in the photo.
+    const diff = Math.abs(titleWords(entry?.title).size - dSize)
+    if (s > bestScore + 1e-9 || (Math.abs(s - bestScore) <= 1e-9 && diff < bestDiff)) {
       best = entry
       bestScore = s
+      bestDiff = diff
     }
   }
   return bestScore >= 0.6 ? { entry: best, score: bestScore } : null
