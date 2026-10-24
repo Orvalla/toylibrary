@@ -25,6 +25,12 @@ export default function PublicListPage({ slugOverride } = {}) {
   // holds an item against other gift-givers.
   const [cart, setCart] = useState(() => loadCart(slug))
   const [cartOpen, setCartOpen] = useState(false)
+  // The have list starts folded (owner request 2026-10-24):
+  // gift-givers came for the wishlist, and a wall of owned
+  // tiles pushed it far down the page. The shelf stays one
+  // tap away — and the check-before-you-buy box above still
+  // searches it while it's closed.
+  const [haveOpen, setHaveOpen] = useState(false)
 
   useEffect(() => {
     saveCart(slug, cart)
@@ -234,22 +240,45 @@ export default function PublicListPage({ slugOverride } = {}) {
           ))}
       </section>
 
-      <h2>🚫 Already have it — please don't buy these</h2>
-      {grouped ? (
-        haveSections.length ? (
-          haveSections.map((s) => (
-            <div key={s.childId ?? 'family'}>
-              <h3>{sectionTitle(s)}</h3>
-              {occasionBadge(s.childId)}
-              <ItemTiles items={s.items} emptyText="Nothing logged yet." />
-            </div>
-          ))
-        ) : (
-          <p className="empty">Nothing logged yet.</p>
-        )
-      ) : (
-        <ItemTiles items={data.have} emptyText="Nothing logged yet." />
-      )}
+      <div className="filter-section">
+        <button
+          type="button"
+          className="filter-section-head"
+          aria-expanded={haveOpen}
+          onClick={() => setHaveOpen((o) => !o)}
+        >
+          <span className="filter-section-label">
+            🚫 Already have it — please don't buy these
+          </span>
+          <span className="filter-section-summary">
+            {data.have.length
+              ? `${data.have.length} on the shelf`
+              : 'nothing logged yet'}
+          </span>
+          <span className="filter-section-chevron" aria-hidden="true">
+            {haveOpen ? '▾' : '▸'}
+          </span>
+        </button>
+        {haveOpen && (
+          <div className="filter-section-body">
+            {grouped ? (
+              haveSections.length ? (
+                haveSections.map((s) => (
+                  <div key={s.childId ?? 'family'}>
+                    <h3>{sectionTitle(s)}</h3>
+                    {occasionBadge(s.childId)}
+                    <ItemTiles items={s.items} emptyText="Nothing logged yet." />
+                  </div>
+                ))
+              ) : (
+                <p className="empty">Nothing logged yet.</p>
+              )
+            ) : (
+              <ItemTiles items={data.have} emptyText="Nothing logged yet." />
+            )}
+          </div>
+        )}
+      </div>
 
       <h2>⭐ Wishlist — safe bets (claim yours so it isn't doubled)</h2>
       {grouped ? (
