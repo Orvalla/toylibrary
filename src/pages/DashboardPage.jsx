@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { fetchCatalog } from '../lib/catalogFetch'
+import { loadCatalog } from '../lib/catalogCache'
 import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
 import AmazonLink from '../components/AmazonLink'
@@ -27,10 +27,10 @@ import ProposalInbox from '../components/ProposalInbox'
 import TourGuide from '../components/TourGuide'
 
 // The catalog index the bundle lookup and recommendations
-// read — the shared streaming fetch (slim columns, parallel
-// pages; see lib/catalogFetch).
+// read — the shared cached load (lib/catalogCache over the
+// streaming fetch in lib/catalogFetch).
 async function fetchCatalogIndex() {
-  return fetchCatalog(supabase)
+  return loadCatalog(supabase)
 }
 
 // child_id '' in a form means Family (stored as NULL in the database).

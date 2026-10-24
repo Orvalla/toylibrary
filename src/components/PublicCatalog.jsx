@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { fetchCatalog } from '../lib/catalogFetch'
+import { loadCatalog } from '../lib/catalogCache'
 import { inKind, kindOf } from '../lib/kinds'
 import KindBar from './KindBar'
 import ItemTile from './ItemTile'
@@ -70,13 +70,13 @@ export default function PublicCatalog({ devicesOnly = false }) {
   const [sectionOpen, setSectionOpen] = useState({})
 
   const load = useCallback(async () => {
-    // Same streaming fetch as the signed-in browser: render
+    // Same cached load as the signed-in browser (lib/catalogCache): render
     // on the first chunk, fill in behind a "still loading"
     // note, instead of gating on all ~18k rows.
     setCatalogLoading(true)
     let resolveFirst
     const firstChunk = new Promise((r) => (resolveFirst = r))
-    const catalogDone = fetchCatalog(supabase, {
+    const catalogDone = loadCatalog(supabase, {
       onChunk: (rows) => {
         setCatalog(rows)
         resolveFirst()

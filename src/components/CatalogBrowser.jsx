@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { fetchCatalog } from '../lib/catalogFetch'
+import { loadCatalog } from '../lib/catalogCache'
 import { inKind, kindOf } from '../lib/kinds'
 import KindBar from './KindBar'
 import { useAuth } from '../lib/auth'
@@ -151,14 +151,15 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const [catalogLoading, setCatalogLoading] = useState(true)
 
   const load = useCallback(async () => {
-    // The catalog streams in via lib/catalogFetch (slim
+    // The catalog streams in via lib/catalogCache — a version-checked
+    // browser cache over the streaming fetch in lib/catalogFetch (slim
     // columns, parallel pages). The page renders on the FIRST
     // chunk and fills in behind a "still loading" note, rather
     // than gating on all ~18k rows the way it used to.
     setCatalogLoading(true)
     let resolveFirst
     const firstChunk = new Promise((r) => (resolveFirst = r))
-    const catalogDone = fetchCatalog(supabase, {
+    const catalogDone = loadCatalog(supabase, {
       onChunk: (rows) => {
         setCatalog(rows)
         resolveFirst()
