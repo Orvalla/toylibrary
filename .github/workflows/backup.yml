@@ -1,0 +1,31 @@
+name: Weekly database backup
+
+# Sundays: export every table + the auth user list to a
+# gzipped JSON bundle in the private 'backups' storage bucket
+# (newest 8 kept). The free Supabase plan has no automated
+# backups; see ingestor/backup.mjs for the format and what a
+# restore looks like.
+on:
+  schedule:
+    - cron: '37 15 * * 0' # Sundays ~08:37 Pacific
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Dry run (export and report, upload nothing)'
+        type: boolean
+        default: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Export and upload the backup bundle
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_DRY: ${{ inputs.dry && '1' || '' }}
+        run: node ingestor/backup.mjs
