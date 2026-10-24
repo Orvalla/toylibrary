@@ -41,27 +41,25 @@ describe('SupportWidget', () => {
   beforeEach(() => {
     insertMock.mockReset()
     supabase.functions.invoke.mockReset()
-    insertMock.mockReturnValue({
-      select: () => ({
-        single: async () => ({ data: { id: 'report-1' }, error: null }),
-      }),
-    })
+    insertMock.mockResolvedValue({ error: null })
     supabase.functions.invoke.mockResolvedValue({ data: { ok: true }, error: null })
   })
 
-  it('files the report and pings notify-support with the new id', async () => {
+  it('files the report and pings notify-support with the client-minted id', async () => {
     await fileReport()
     await waitFor(() =>
       expect(screen.getByText(/Thanks — it's on its way/)).toBeInTheDocument()
     )
     expect(insertMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: expect.any(String),
         kind: 'bug',
         message: 'The catalog page froze on my phone.',
       })
     )
+    const payload = insertMock.mock.calls[0][0]
     expect(supabase.functions.invoke).toHaveBeenCalledWith('notify-support', {
-      body: { report_id: 'report-1' },
+      body: { report_id: payload.id },
     })
   })
 

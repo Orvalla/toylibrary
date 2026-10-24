@@ -58,19 +58,22 @@ export default function SupportWidget() {
         .upload(path, shot.blob, { contentType: 'image/png' })
       if (!upErr) screenshotPath = path
     }
-    const { data: filed, error: insErr } = await supabase
-      .from('support_reports')
-      .insert({
-        user_id: user?.id ?? null,
-        email: email.trim() || user?.email || null,
-        kind,
-        message: message.trim(),
-        page_url: pageUrl.current,
-        screenshot_path: screenshotPath,
-        user_agent: navigator.userAgent.slice(0, 300),
-      })
-      .select('id')
-      .single()
+    // The id is minted here, not read back: the table's
+    // INSERT-only policy gives visitors no SELECT, so asking
+    // PostgREST to return the row would fail the whole
+    // insert (42501). Knowing the id up front is also what
+    // lets us ping the notifier below.
+    const reportId = crypto.randomUUID()
+    const { error: insErr } = await supabase.from('support_reports').insert({
+      id: reportId,
+      user_id: user?.id ?? null,
+      email: email.trim() || user?.email || null,
+      kind,
+      message: message.trim(),
+      page_url: pageUrl.current,
+      screenshot_path: screenshotPath,
+      user_agent: navigator.userAgent.slice(0, 300),
+    })
     setSending(false)
     if (insErr) {
       setError(insErr.message)
@@ -79,14 +82,12 @@ export default function SupportWidget() {
     // Best-effort: also email the ticket to support@ so it
     // can be worked from a mail app. A failed ping never
     // un-files the report — it still sits in the admin inbox.
-    if (filed?.id) {
-      try {
-        await supabase.functions.invoke('notify-support', {
-          body: { report_id: filed.id },
-        })
-      } catch {
-        // The admin inbox remains the source of truth.
-      }
+    try {
+      await supabase.functions.invoke('notify-support', {
+        body: { report_id: reportId },
+      })
+    } catch {
+      // The admin inbox remains the source of truth.
     }
     setSent(true)
     setMessage('')
