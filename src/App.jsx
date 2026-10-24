@@ -12,6 +12,7 @@ import AdminPage from './pages/AdminPage'
 import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/PasswordPages'
 import PublicListPage from './pages/PublicListPage'
 import UnsubscribePage from './pages/UnsubscribePage'
+import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { useAuth } from './lib/auth'
 import { shareSlugFromHost } from './lib/hostSlug'
 import SupportWidget from './components/SupportWidget'
@@ -32,6 +33,14 @@ function FooterLine() {
           </a>
         </>
       )}
+      {' · '}
+      <a className="footer-link" href="https://toylibrary.store/privacy">
+        Privacy
+      </a>
+      {' · '}
+      <a className="footer-link" href="https://toylibrary.store/terms">
+        Terms
+      </a>
     </>
   )
 }
@@ -108,6 +117,8 @@ export default function App() {
             present or future page on this domain. */}
         {/* Gift-circle email unsubscribe: public, token-checked by RPC. */}
         <Route path="/unsubscribe" element={<UnsubscribePage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <footer className="footer"><FooterLine /></footer>

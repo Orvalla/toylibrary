@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import Turnstile from '../components/Turnstile'
 import { useAuth } from '../lib/auth'
@@ -13,6 +13,11 @@ import { donateUrl } from '../lib/donate'
 
 export default function SettingsPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const [delConfirm, setDelConfirm] = useState(false)
+  const [delPw, setDelPw] = useState('')
+  const [delBusy, setDelBusy] = useState(false)
+  const [delError, setDelError] = useState('')
   const [profile, setProfile] = useState(null)
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
   const [pwBusy, setPwBusy] = useState(false)
@@ -414,6 +419,42 @@ export default function SettingsPage() {
     }
     setPw({ current: '', next: '', confirm: '' })
     setMessage('Password changed.')
+  }
+
+  // Account deletion (migration 0046): re-verify the password
+  // first — same captcha'd re-auth pattern as changePassword —
+  // then the delete_my_account RPC removes everything server-
+  // side. Locally we just sign out and go home.
+  async function deleteAccount(e) {
+    e.preventDefault()
+    setDelError('')
+    setDelBusy(true)
+    let token = ''
+    try {
+      token = await captchaRef.current.consume()
+    } catch {
+      setDelBusy(false)
+      setDelError('Please complete the human check, then try again.')
+      return
+    }
+    const { error: checkError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: delPw,
+      options: token ? { captchaToken: token } : undefined,
+    })
+    if (checkError) {
+      setDelBusy(false)
+      setDelError("That password doesn't match — nothing was deleted.")
+      return
+    }
+    const { error } = await supabase.rpc('delete_my_account')
+    if (error) {
+      setDelBusy(false)
+      setDelError(`Deletion didn't go through: ${error.message}`)
+      return
+    }
+    await supabase.auth.signOut()
+    navigate('/')
   }
 
   async function toggleFamilyScope(on) {
@@ -1021,6 +1062,62 @@ export default function SettingsPage() {
           </p>
         </section>
       )}
+
+      <section className="card">
+        <h2>Delete account</h2>
+        <p>
+          Permanently delete your account and everything in it: your profile,
+          your children's profiles, all have-lists and wishlists, gift claims,
+          and your sign-in. Items you added to the shared catalog stay in the
+          catalog, without your name attached. This cannot be undone.
+        </p>
+        {!delConfirm ? (
+          <p>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => setDelConfirm(true)}
+            >
+              Delete my account…
+            </button>
+          </p>
+        ) : (
+          <form onSubmit={deleteAccount} className="form">
+            <p>
+              <strong>This is permanent.</strong> Enter your password to
+              confirm it's really you.
+            </p>
+            <label>
+              Password
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={delPw}
+                onChange={(e) => setDelPw(e.target.value)}
+              />
+            </label>
+            {delError && <p className="error">{delError}</p>}
+            <p>
+              <button type="submit" className="btn btn-danger" disabled={delBusy}>
+                {delBusy ? 'Deleting…' : 'Yes, delete everything'}
+              </button>{' '}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={delBusy}
+                onClick={() => {
+                  setDelConfirm(false)
+                  setDelPw('')
+                  setDelError('')
+                }}
+              >
+                Cancel
+              </button>
+            </p>
+          </form>
+        )}
+      </section>
 
       {message && <p className="notice">{message}</p>}
     </main>
