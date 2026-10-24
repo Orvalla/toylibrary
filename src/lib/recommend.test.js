@@ -80,6 +80,32 @@ describe('recommendForChild', () => {
   })
 })
 
+describe('language preference (owner request 2026-10-23)', () => {
+  const langCatalog = [
+    { id: 'e1', platform: 'books', title: 'English Story', details: 'Picture book', sort_order: 1, language: 'en' },
+    { id: 's1', platform: 'books', title: 'Cuento Español', details: 'Picture book', sort_order: 2, language: 'es' },
+    { id: 'm1', platform: 'books', title: 'Bilingual Tale', details: 'Picture book', sort_order: 3, language: 'multi' },
+    { id: 'g1', platform: 'books', title: 'Deutsche Geschichte', details: 'Picture book', sort_order: 4, language: 'de' },
+  ]
+  const langBase = { ...base, catalog: langCatalog }
+
+  it('an English preference never recommends other languages', () => {
+    const recs = recommendForChild({ ...langBase, languagePref: 'en' })
+    expect(recs.map((r) => r.id)).toEqual(['e1', 'm1'])
+  })
+
+  it('a Spanish preference floats Spanish and bilingual first', () => {
+    const recs = recommendForChild({ ...langBase, languagePref: 'es' })
+    expect(recs[0].id).toBe('s1')
+    expect(recs.map((r) => r.id)).toContain('e1') // others stay reachable
+  })
+
+  it('no preference leaves language alone', () => {
+    const recs = recommendForChild(langBase)
+    expect(recs).toHaveLength(4)
+  })
+})
+
 describe('sortBySuggestions', () => {
   it('floats platform fit + interests + age fit up, and keeps everything', () => {
     const sorted = sortBySuggestions(catalog, {

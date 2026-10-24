@@ -9,6 +9,7 @@ import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
+import { CATALOG_LANGUAGES, languageLabel, languageVisible } from '../lib/language'
 import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
 import BundleNote from './BundleNote'
 import PlatformGrid from './PlatformGrid'
@@ -73,6 +74,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Shopping theme (lib/themes): what the parent is shopping
   // FOR — puzzles, STEM, pretend play — across every shelf.
   const [theme, setTheme] = useState('all')
+  const [language, setLanguage] = useState('all')
   // Sub-category inside the projector platform: Moonlite vs Dream
   // Machine (lib/projector.js). Reset whenever the platform changes.
   const [subBrand, setSubBrand] = useState('all')
@@ -176,6 +178,24 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     load()
   }, [load])
 
+  // The parent's saved language preference seeds the language
+  // filter — an English-preference parent lands on English
+  // only (plus bilingual), per the owner's rule. They can
+  // still widen it to All languages here.
+  const langSeeded = useRef(false)
+  useEffect(() => {
+    if (langSeeded.current) return
+    langSeeded.current = true
+    supabase
+      .from('profiles')
+      .select('language_pref')
+      .eq('id', user.id)
+      .then(({ data }) => {
+        const pref = Array.isArray(data) ? data[0]?.language_pref : data?.language_pref
+        if (pref && pref !== 'all') setLanguage(pref)
+      })
+  }, [user.id])
+
   useEffect(() => {
     setSubBrand('all')
   }, [platform])
@@ -183,7 +203,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Any change to what could be visible starts back at page 1.
   useEffect(() => {
     setPage(1)
-  }, [platform, category, theme, ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
+  }, [platform, category, theme, language, ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Sam having Bluey doesn't
@@ -358,6 +378,9 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const themeCount = (k) =>
     base.reduce((n, c) => n + ((themeMap.get(c.id) ?? []).includes(k) ? 1 : 0), 0)
   const themesPresent = THEMES.filter((t) => themeCount(t.key) > 0)
+  const languageCount = (k) =>
+    base.reduce((n, c) => n + ((c.language || 'en') === k ? 1 : 0), 0)
+  const languagesPresent = CATALOG_LANGUAGES.filter((l) => languageCount(l.key) > 0)
 
   // Word-wise search: every word in the query must appear in the
   // title or details, but not necessarily adjacently — a raw
@@ -377,6 +400,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
       (devicesOnly || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
+      (devicesOnly || languageVisible(c.language, language)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -627,6 +651,36 @@ export default function CatalogBrowser({ devicesOnly = false }) {
               onClick={() => setTheme(t.key)}
             >
               {t.emoji} {t.label} ({themeCount(t.key)})
+            </button>
+          ))}
+        </div>
+      </FilterSection>
+      )}
+
+      {!devicesOnly && languagesPresent.length > 1 && (
+      <FilterSection
+        id="language"
+        label="Language"
+        summary={
+          language === 'all' ? 'All languages' : languageLabel(language)
+        }
+        open={isSectionOpen('language')}
+        onToggle={toggleSection}
+      >
+        <div className="tabs" aria-label="Language">
+          <button
+            className={language === 'all' ? 'active' : ''}
+            onClick={() => setLanguage('all')}
+          >
+            All languages
+          </button>
+          {languagesPresent.map((l) => (
+            <button
+              key={l.key}
+              className={language === l.key ? 'active' : ''}
+              onClick={() => setLanguage(l.key)}
+            >
+              {l.flag} {l.label} ({languageCount(l.key)})
             </button>
           ))}
         </div>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { platformEmoji, platformLogo } from '../lib/platforms'
 import { storeLogoUrlFor } from '../lib/logo'
 import { ageLabelFor } from '../lib/ages'
+import { CATALOG_LANGUAGES, languageLabel } from '../lib/language'
 
 // One item as a tile: photo on top (or platform art when there's no
 // photo yet), title/details below, and whatever actions the parent
@@ -47,6 +48,12 @@ export default function ItemTile({ item, badge, children }) {
       <div className="tile-body">
         <strong>{item.title}</strong>
         {item.details && <div className="details">{item.details}</div>}
+        {item.language && item.language !== 'en' && (
+          <div className="notes">
+            {CATALOG_LANGUAGES.find((l) => l.key === item.language)?.flag ?? '🌐'}{' '}
+            {languageLabel(item.language)}
+          </div>
+        )}
         {showRating && (
           <div
             className="notes"

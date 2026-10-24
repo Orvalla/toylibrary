@@ -8,6 +8,7 @@ import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
+import { CATALOG_LANGUAGES, languageLabel, languageVisible } from '../lib/language'
 import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
 import PlatformGrid from './PlatformGrid'
 import { FilterSection } from './CatalogBrowser'
@@ -39,6 +40,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
   )
   const [category, setCategory] = useState('all')
   const [theme, setTheme] = useState('all')
+  const [language, setLanguage] = useState('all')
   const [subBrand, setSubBrand] = useState('all')
   const [ageBand, setAgeBand] = useState(
     () => new URLSearchParams(window.location.search).get('age') ?? 'all'
@@ -128,6 +130,9 @@ export default function PublicCatalog({ devicesOnly = false }) {
   const themeCount = (k) =>
     base.reduce((n, c) => n + ((themeMap.get(c.id) ?? []).includes(k) ? 1 : 0), 0)
   const themesPresent = THEMES.filter((t) => themeCount(t.key) > 0)
+  const languageCount = (k) =>
+    base.reduce((n, c) => n + ((c.language || 'en') === k ? 1 : 0), 0)
+  const languagesPresent = CATALOG_LANGUAGES.filter((l) => languageCount(l.key) > 0)
 
   const qWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const matchesQuery = (c) =>
@@ -143,6 +148,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
       (devicesOnly || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
+      (devicesOnly || languageVisible(c.language, language)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -363,6 +369,36 @@ export default function PublicCatalog({ devicesOnly = false }) {
                 onClick={() => setTheme(t.key)}
               >
                 {t.emoji} {t.label} ({themeCount(t.key)})
+              </button>
+            ))}
+          </div>
+        </FilterSection>
+      )}
+
+      {!devicesOnly && languagesPresent.length > 1 && (
+        <FilterSection
+          id="language"
+          label="Language"
+          summary={
+            language === 'all' ? 'All languages' : languageLabel(language)
+          }
+          open={isSectionOpen('language')}
+          onToggle={toggleSection}
+        >
+          <div className="tabs" aria-label="Language">
+            <button
+              className={language === 'all' ? 'active' : ''}
+              onClick={() => setLanguage('all')}
+            >
+              All languages
+            </button>
+            {languagesPresent.map((l) => (
+              <button
+                key={l.key}
+                className={language === l.key ? 'active' : ''}
+                onClick={() => setLanguage(l.key)}
+              >
+                {l.flag} {l.label} ({languageCount(l.key)})
               </button>
             ))}
           </div>

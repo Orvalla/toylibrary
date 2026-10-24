@@ -23,6 +23,7 @@ import { itemKey } from './bundles'
 import { agedOutOf, ageFits } from './ages'
 import { ALWAYS_PLAYABLE } from './platforms'
 import { titleWords } from './photoMatch'
+import { languageFitsPref } from './language'
 
 // Affinity derived from the child's own library (owner
 // request 2026-10-22): what they already have is the best
@@ -152,6 +153,7 @@ export function recommendForChild({
   limit = 8,
   today = new Date(),
   growIntoYears,
+  languagePref,
 }) {
   // An explicit argument wins (tests, one-off callers); the
   // child's own setting is next; then the default.
@@ -177,6 +179,14 @@ export function recommendForChild({
     // exclusion shapes the shortlist.)
     if (age != null && entry.age_min_years != null && entry.age_min_years > age + windowYears)
       continue
+    // Language preference (owner's rule, 2026-10-23): an
+    // English preference is strict — books and stories in other
+    // languages are never recommended, since the family can't
+    // read them (bilingual editions still count, they work in
+    // both). Other preferences are not exclusions — those
+    // shelves are still growing — but matching-language items
+    // get a strong boost in the scoring below.
+    if (languagePref === 'en' && !languageFitsPref(entry.language, 'en')) continue
     const k = itemKey(entry.platform, entry.title)
     if (ownedKeys?.has(k) || wishlistKeys?.has(k)) continue
     const text = `${entry.title} ${entry.details ?? ''}`
@@ -187,6 +197,13 @@ export function recommendForChild({
     }
     if (entry.platform === 'books' && bookAgeFit(entry.details, age)) score += 2
     if (ageFits(entry, age)) score += 2
+    if (
+      languagePref &&
+      languagePref !== 'all' &&
+      languagePref !== 'en' &&
+      languageFitsPref(entry.language, languagePref)
+    )
+      score += 4
     if (entry.is_bundle) score += 1
     scored.push({ entry, score })
   }

@@ -7,6 +7,7 @@ import { normalizeShareSlug, validateShareSlug } from '../lib/slug'
 import { shareUrlFor } from '../lib/hostSlug'
 import { GENDERS, INTERESTS } from '../lib/onboarding'
 import { giftMessage, instagramLink, messengerLink, normalizeHandle } from '../lib/giftCircle'
+import { LANGUAGE_PREFS } from '../lib/language'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -401,6 +402,19 @@ export default function SettingsPage() {
     }
   }
 
+  async function setLanguagePref(pref) {
+    const prev = profile.language_pref
+    setProfile((p) => ({ ...p, language_pref: pref }))
+    const { error } = await supabase
+      .from('profiles')
+      .update({ language_pref: pref })
+      .eq('id', user.id)
+    if (error) {
+      setMessage(error.message)
+      setProfile((p) => ({ ...p, language_pref: prev }))
+    }
+  }
+
   async function toggleNoAffiliate(on) {
     setProfile((p) => ({ ...p, no_affiliate: on }))
     const { error } = await supabase
@@ -678,6 +692,26 @@ export default function SettingsPage() {
             onChange={(e) => toggleReminders(e.target.checked)}
           />{' '}
           Email me before gift occasions
+        </label>
+        <h4>Book &amp; story language</h4>
+        <p>
+          Your language sets the catalog's starting filter and shapes the
+          gift ideas on your dashboard. Pick English and you won't be shown
+          books and stories in other languages at all — bilingual editions
+          still appear, since they work in both.
+        </p>
+        <label className="toggle">
+          Language{' '}
+          <select
+            value={profile.language_pref ?? 'en'}
+            onChange={(e) => setLanguagePref(e.target.value)}
+          >
+            {LANGUAGE_PREFS.map((l) => (
+              <option key={l.key} value={l.key}>
+                {l.label}
+              </option>
+            ))}
+          </select>
         </label>
         <h4>Affiliate links</h4>
         <p>

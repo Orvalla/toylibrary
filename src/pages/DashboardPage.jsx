@@ -31,7 +31,7 @@ async function fetchCatalogIndex() {
   for (let from = 0; ; from += 1000) {
     const { data } = await supabase
       .from('catalog_items')
-      .select('id, platform, title, details, image_url, asin, product_url, is_bundle, item_type, sort_order, age_min_years, age_max_years, rating, rating_count')
+      .select('id, platform, title, details, image_url, asin, product_url, is_bundle, item_type, sort_order, age_min_years, age_max_years, rating, rating_count, language')
       .range(from, from + 999)
     rows.push(...(data ?? []))
     if (!data || data.length < 1000) break
@@ -319,6 +319,7 @@ export default function DashboardPage() {
     ? recommendForChild({
         catalog: catalogRows,
         child: filteredKid,
+        languagePref: profile?.language_pref,
         ownedPlatforms: new Set(
           items
             .filter(
