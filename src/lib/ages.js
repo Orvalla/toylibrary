@@ -55,14 +55,25 @@ export function agedOutOf(entry, ageYears) {
   return max != null && ageYears > max
 }
 
-// Does the item's range overlap a filter band (AGE_BANDS keys)?
+// Does the item belong in a filter band (AGE_BANDS keys)?
+// An item with a stated range matches every band it overlaps.
+// An open-ended item ("Ages 8+", no max — how nearly all board
+// games are graded) matches its starting band and the one band
+// above it: a printed starting age reaches a little way up, but
+// treating no-max as "to 99" flooded the 13+ shelf with every
+// "Ages 2+" toddler game in the catalog.
 export function inAgeBand(entry, bandKey) {
-  const band = AGE_BANDS.find((b) => b.key === bandKey)
-  if (!band) return true
+  const bandIdx = AGE_BANDS.findIndex((b) => b.key === bandKey)
+  if (bandIdx === -1) return true
+  const band = AGE_BANDS[bandIdx]
   const min = entry?.age_min_years
   const max = entry?.age_max_years
   if (min == null && max == null) return false
-  const lo = min ?? 0
-  const hi = max ?? 99
-  return lo <= band.max && hi >= band.min
+  if (max != null) {
+    const lo = min ?? 0
+    return lo <= band.max && max >= band.min
+  }
+  const startIdx = AGE_BANDS.findIndex((b) => min <= b.max)
+  const start = startIdx === -1 ? AGE_BANDS.length - 1 : startIdx
+  return bandIdx === start || bandIdx === start + 1
 }

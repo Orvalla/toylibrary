@@ -50,4 +50,26 @@ describe('inAgeBand', () => {
     expect(inAgeBand({ age_min_years: 3, age_max_years: 6 }, 'nope')).toBe(true)
     expect(inAgeBand({}, '3-4')).toBe(false)
   })
+  it('an open-ended "Ages 2+" matches its own band and one up — never the teen bands', () => {
+    const toddler = { age_min_years: 2, age_max_years: null }
+    expect(inAgeBand(toddler, '0-2')).toBe(true)
+    expect(inAgeBand(toddler, '3-4')).toBe(true)
+    expect(inAgeBand(toddler, '5-6')).toBe(false)
+    expect(inAgeBand(toddler, '10-12')).toBe(false)
+    expect(inAgeBand(toddler, '13+')).toBe(false)
+  })
+  it('open-ended games reach one band up, so 10+ and 12+ games land on the 13+ shelf', () => {
+    const eight = { age_min_years: 8, age_max_years: null }
+    expect(inAgeBand(eight, '7-9')).toBe(true)
+    expect(inAgeBand(eight, '10-12')).toBe(true)
+    expect(inAgeBand(eight, '13+')).toBe(false)
+    const ten = { age_min_years: 10, age_max_years: null }
+    expect(inAgeBand(ten, '10-12')).toBe(true)
+    expect(inAgeBand(ten, '13+')).toBe(true)
+    const twelve = { age_min_years: 12, age_max_years: null }
+    expect(inAgeBand(twelve, '13+')).toBe(true)
+    const fourteen = { age_min_years: 14, age_max_years: null }
+    expect(inAgeBand(fourteen, '13+')).toBe(true)
+    expect(inAgeBand(fourteen, '10-12')).toBe(false)
+  })
 })
