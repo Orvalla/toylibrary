@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { fetchCatalog } from '../lib/catalogFetch'
 import { useAuth } from '../lib/auth'
 import ItemTile, { OwnedBadge } from './ItemTile'
 import AmazonLink from './AmazonLink'
@@ -139,43 +140,35 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   }, [childSel, devicesOnly])
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [catalogLoading, setCatalogLoading] = useState(true)
 
   const load = useCallback(async () => {
-    // The catalog fetch MUST page: PostgREST caps a response at
-    // 1,000 rows, and an unpaged select silently delivered only
-    // the first 1,000 — 16 of 481 Tonies, 2 of 1,570 Yoto cards —
-    // because the platforms' sort_order ranges interleave. The
-    // id tiebreaker keeps the page order total so rows can't
-    // slip between pages. (The dashboard's index fetch paginates
-    // the same way; this one was missed.)
-    const fetchCatalog = async () => {
-      const rows = []
-      for (let from = 0; ; from += 1000) {
-        const { data } = await supabase
-          .from('catalog_items')
-          .select('*')
-          .order('sort_order')
-          .order('title')
-          .order('id')
-          .range(from, from + 999)
-        rows.push(...(data ?? []))
-        if (!data || data.length < 1000) break
-      }
-      return rows
-    }
-    const [cat, { data: items }, { data: childRows }, { data: bundleRows }] = await Promise.all([
-      fetchCatalog(),
+    // The catalog streams in via lib/catalogFetch (slim
+    // columns, parallel pages). The page renders on the FIRST
+    // chunk and fills in behind a "still loading" note, rather
+    // than gating on all ~18k rows the way it used to.
+    setCatalogLoading(true)
+    let resolveFirst
+    const firstChunk = new Promise((r) => (resolveFirst = r))
+    const catalogDone = fetchCatalog(supabase, {
+      onChunk: (rows) => {
+        setCatalog(rows)
+        resolveFirst()
+      },
+    }).then(() => setCatalogLoading(false))
+    const [, { data: items }, { data: childRows }, { data: bundleRows }] = await Promise.all([
+      firstChunk,
       supabase.from('items').select('id, platform, title, list_type, child_id').eq('owner_id', user.id),
       supabase.from('children').select('*').eq('owner_id', user.id).order('sort_order').order('name'),
       supabase.from('bundle_contents').select('*'),
     ])
-    setCatalog(cat ?? [])
     setMine(items ?? [])
     setKids(childRows ?? [])
     setBundleRows(bundleRows ?? [])
     // Default to the first child once children are known (Family if none).
     if (childRows?.length) setChildSel((prev) => prev || childRows[0].id)
     setLoading(false)
+    await catalogDone
   }, [user.id])
 
   useEffect(() => {
@@ -509,6 +502,11 @@ export default function CatalogBrowser({ devicesOnly = false }) {
 
   return (
     <main className="page">
+      {catalogLoading && (
+        <p className="notice" role="status">
+          Loading the rest of the catalog…
+        </p>
+      )}
       {devicesOnly ? (
         <>
           <h1>The devices</h1>

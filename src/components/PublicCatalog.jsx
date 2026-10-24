@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { fetchCatalog } from '../lib/catalogFetch'
 import ItemTile from './ItemTile'
 import AmazonLink from './AmazonLink'
 import ManufacturerLink from './ManufacturerLink'
@@ -35,6 +36,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
   const [catalog, setCatalog] = useState([])
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [catalogLoading, setCatalogLoading] = useState(true)
   const [platform, setPlatform] = useState(
     () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
   )
@@ -61,28 +63,25 @@ export default function PublicCatalog({ devicesOnly = false }) {
   const [sectionOpen, setSectionOpen] = useState({})
 
   const load = useCallback(async () => {
-    const fetchCatalog = async () => {
-      const rows = []
-      for (let from = 0; ; from += 1000) {
-        const { data } = await supabase
-          .from('catalog_items')
-          .select('*')
-          .order('sort_order')
-          .order('title')
-          .order('id')
-          .range(from, from + 999)
-        rows.push(...(data ?? []))
-        if (!data || data.length < 1000) break
-      }
-      return rows
-    }
-    const [cat, { data: bundles }] = await Promise.all([
-      fetchCatalog(),
+    // Same streaming fetch as the signed-in browser: render
+    // on the first chunk, fill in behind a "still loading"
+    // note, instead of gating on all ~18k rows.
+    setCatalogLoading(true)
+    let resolveFirst
+    const firstChunk = new Promise((r) => (resolveFirst = r))
+    const catalogDone = fetchCatalog(supabase, {
+      onChunk: (rows) => {
+        setCatalog(rows)
+        resolveFirst()
+      },
+    }).then(() => setCatalogLoading(false))
+    const [, { data: bundles }] = await Promise.all([
+      firstChunk,
       supabase.from('bundle_contents').select('*'),
     ])
-    setCatalog(cat ?? [])
     setBundleRows(bundles ?? [])
     setLoading(false)
+    await catalogDone
   }, [])
 
   useEffect(() => {
@@ -233,6 +232,11 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   return (
     <main className="page">
+      {catalogLoading && (
+        <p className="notice" role="status">
+          Loading the rest of the catalog…
+        </p>
+      )}
       {devicesOnly ? (
         <>
           <h1>The devices</h1>

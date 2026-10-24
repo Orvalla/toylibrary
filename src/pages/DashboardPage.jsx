@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { fetchCatalog } from '../lib/catalogFetch'
 import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
 import AmazonLink from '../components/AmazonLink'
@@ -24,19 +25,11 @@ import PhotoScan from '../components/PhotoScan'
 import ProposalInbox from '../components/ProposalInbox'
 import TourGuide from '../components/TourGuide'
 
-// The catalog is several thousand rows — page through it so the
-// bundle lookup below sees every row, not just the first page.
+// The catalog index the bundle lookup and recommendations
+// read — the shared streaming fetch (slim columns, parallel
+// pages; see lib/catalogFetch).
 async function fetchCatalogIndex() {
-  const rows = []
-  for (let from = 0; ; from += 1000) {
-    const { data } = await supabase
-      .from('catalog_items')
-      .select('id, platform, title, details, image_url, asin, product_url, is_bundle, item_type, sort_order, age_min_years, age_max_years, rating, rating_count, language')
-      .range(from, from + 999)
-    rows.push(...(data ?? []))
-    if (!data || data.length < 1000) break
-  }
-  return rows
+  return fetchCatalog(supabase)
 }
 
 // child_id '' in a form means Family (stored as NULL in the database).
