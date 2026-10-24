@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { visitorLabel } from '../lib/visitorLabel'
 
 // Visitor analytics for the admin page (migration 0040):
 // first-party only — live presence, windowed totals, top
@@ -35,6 +36,24 @@ function whereLabel(s) {
   return path
 }
 
+// Who a session belongs to, as far as privacy-light data can
+// say (migration 0048): signed-in visits carry the account's
+// display name from the server-side join; guests are told
+// apart by a stable nickname derived from their browser's
+// random visitor id — same browser, same nickname, no IP.
+function whoLabel(s) {
+  if (s.signed_in) {
+    const name = (s.display_name ?? '').trim()
+    return name ? `👤 ${name}` : '👤 Signed-in parent'
+  }
+  return `🧭 Guest ${visitorLabel(s.visitor_id)}`
+}
+
+function visitsLabel(s) {
+  const n = s.visitor_visits ?? 1
+  return n > 1 ? ` · visit #${n}` : ' · first visit'
+}
+
 export default function AnalyticsPanel() {
   const [live, setLive] = useState(null)
   const [summary, setSummary] = useState(null)
@@ -64,7 +83,9 @@ export default function AnalyticsPanel() {
       <h2>👀 Visitors</h2>
       <p className="muted">
         First-party analytics only — no third-party trackers, no IP addresses
-        stored. A session ends after 30 quiet minutes.
+        stored. Signed-in visits show the account name; guests are told apart
+        by a nickname hashed from their browser's random id (same browser,
+        same nickname). A session ends after 30 quiet minutes.
       </p>
       {error && <p className="error">{error}</p>}
 
@@ -75,9 +96,10 @@ export default function AnalyticsPanel() {
         <ul>
           {live.sessions.map((s, i) => (
             <li key={i}>
-              {whereLabel(s)} — {s.page_count} page{s.page_count === 1 ? '' : 's'},{' '}
-              here for {fmtDuration(s.started_at, s.last_seen_at)}
-              {s.signed_in ? ' · signed in' : ''}
+              {whoLabel(s)} — {whereLabel(s)} — {s.page_count} page
+              {s.page_count === 1 ? '' : 's'}, here for{' '}
+              {fmtDuration(s.started_at, s.last_seen_at)}
+              {visitsLabel(s)}
             </li>
           ))}
         </ul>
@@ -120,10 +142,10 @@ export default function AnalyticsPanel() {
               <ul>
                 {summary.recent_sessions.map((s, i) => (
                   <li key={i}>
-                    {fmtWhen(s.started_at)} — {whereLabel(s)} · {s.page_count}{' '}
-                    page{s.page_count === 1 ? '' : 's'} ·{' '}
+                    {fmtWhen(s.started_at)} — {whoLabel(s)} · {whereLabel(s)} ·{' '}
+                    {s.page_count} page{s.page_count === 1 ? '' : 's'} ·{' '}
                     {fmtDuration(s.started_at, s.last_seen_at)}
-                    {s.signed_in ? ' · signed in' : ''}
+                    {visitsLabel(s)}
                   </li>
                 ))}
               </ul>

@@ -55,6 +55,14 @@ export function PrivacyPage() {
           the report, a screenshot of the page as it looked.
         </p>
         <p>
+          <strong>Visitor counts:</strong> we count page views with our own
+          analytics — no third-party trackers, no IP addresses, and no
+          device fingerprints. Your browser keeps a random ID so repeat
+          visits can be told apart, and if you're signed in, your visits
+          are tied to your account name. Only the site owner can see these
+          numbers.
+        </p>
+        <p>
           <strong>Donations:</strong> donations are handled entirely by
           PayPal; we never receive or store your card details. If you donate,
           we may mark your account as a supporter, which raises some usage
