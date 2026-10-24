@@ -342,7 +342,13 @@ a { color: var(--accent-dark); }
   display: flex; flex-direction: column; box-shadow: 0 3px 0 rgba(46, 42, 85, 0.05);
 }
 .tile-media { position: relative; aspect-ratio: 1 / 1; background: var(--soft); }
-.tile-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The photo fills the tile — but NOT the little store mark
+   stamped in its corner (.tile-store-mark has its own size
+   below). An unscoped `.tile-media img` rule outranks the
+   mark's class rule and once stretched the mark across the
+   whole tile, hiding the photo under a giant blurry favicon
+   on every platform without a logo of its own. */
+.tile-media img:not(.tile-store-mark) { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tile-art { width: 100%; height: 100%; display: grid; place-items: center; font-size: 54px; }
 .tile-tonies .tile-art { background: linear-gradient(135deg, #ffe29a, #ff9f43); }
 .tile-yoto .tile-art { background: linear-gradient(135deg, #ffc2c2, #ff5a5f); }
