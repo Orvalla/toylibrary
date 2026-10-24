@@ -7,6 +7,7 @@ import ManufacturerLink from './ManufacturerLink'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
+import { THEMES, themesOf } from '../lib/themes'
 import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
 import PlatformGrid from './PlatformGrid'
 import { FilterSection } from './CatalogBrowser'
@@ -37,6 +38,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
     () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
   )
   const [category, setCategory] = useState('all')
+  const [theme, setTheme] = useState('all')
   const [subBrand, setSubBrand] = useState('all')
   const [ageBand, setAgeBand] = useState(
     () => new URLSearchParams(window.location.search).get('age') ?? 'all'
@@ -87,7 +89,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   useEffect(() => {
     setPage(1)
-  }, [platform, category, ageBand, query, sort, subBrand, stage, perPage, devicesOnly])
+  }, [platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly])
 
   const sectionDefaultOpen = (id) => {
     switch (id) {
@@ -101,6 +103,8 @@ export default function PublicCatalog({ devicesOnly = false }) {
         return true
       case 'category':
         return platform === 'all'
+      case 'theme':
+        return platform === 'all'
       default:
         return false
     }
@@ -111,12 +115,19 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   const contentsByBundle = useMemo(() => indexContents(bundleRows), [bundleRows])
   const catalogIndex = useMemo(() => indexCatalog(catalog), [catalog])
+  const themeMap = useMemo(
+    () => new Map(catalog.map((c) => [c.id, themesOf(c)])),
+    [catalog]
+  )
   const noOwned = useMemo(() => new Set(), [])
 
   if (loading) return <main className="page"><p>Loading the catalog…</p></main>
 
   const base = devicesOnly ? catalog.filter((c) => c.item_type === 'device') : catalog
   const categoriesPresent = CATEGORIES.filter((cat) => base.some((c) => categoryOf(c) === cat))
+  const themeCount = (k) =>
+    base.reduce((n, c) => n + ((themeMap.get(c.id) ?? []).includes(k) ? 1 : 0), 0)
+  const themesPresent = THEMES.filter((t) => themeCount(t.key) > 0)
 
   const qWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const matchesQuery = (c) =>
@@ -131,6 +142,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
       (platform === 'all' || c.platform === platform) &&
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
+      (devicesOnly || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -319,6 +331,38 @@ export default function PublicCatalog({ devicesOnly = false }) {
                 onClick={() => setCategory(cat)}
               >
                 {cat}
+              </button>
+            ))}
+          </div>
+        </FilterSection>
+      )}
+
+      {!devicesOnly && (
+        <FilterSection
+          id="theme"
+          label="Shop by interest"
+          summary={
+            theme === 'all'
+              ? 'All interests'
+              : (THEMES.find((t) => t.key === theme)?.label ?? 'All interests')
+          }
+          open={isSectionOpen('theme')}
+          onToggle={toggleSection}
+        >
+          <div className="tabs" aria-label="Shop by interest">
+            <button
+              className={theme === 'all' ? 'active' : ''}
+              onClick={() => setTheme('all')}
+            >
+              All interests
+            </button>
+            {themesPresent.map((t) => (
+              <button
+                key={t.key}
+                className={theme === t.key ? 'active' : ''}
+                onClick={() => setTheme(t.key)}
+              >
+                {t.emoji} {t.label} ({themeCount(t.key)})
               </button>
             ))}
           </div>
