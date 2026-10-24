@@ -4,6 +4,15 @@
 //
 //   node ingestor/backfill-images.mjs [--dry-run] [--limit 100]
 //
+// Runs in two transports: with SUPABASE_URL +
+// SUPABASE_SERVICE_ROLE_KEY in the env (GitHub Actions, as a
+// step of the weekly scan) it reads/writes over PostgREST with
+// the service key, like weekly.mjs; without them it shells out
+// to the local sb.py helper. WEEKLY_DRY=1 means --dry-run, the
+// same convention as weekly.mjs. Either way an update only
+// ever fills a row whose image_url is still blank — the guard
+// is in the update filter itself, never in the caller's care.
+//
 // Sources, in order (first hit wins):
 //   1. The ingestor's own catalog (ingestor/out/catalog.json) —
 //      most imageless rows are hand-seeded duplicates of ingested
@@ -14,9 +23,11 @@
 //   3. The platform store's live suggest search (Shopify stores).
 //   4. LeapFrog's own store search, for leapfrog items.
 //   5. Whole-store products.json feeds (Moonlite; global Tonies).
-//   6. Open Library covers, for the books platform.
+//   6. Open Library covers, for the books platform — only
+//      with --allow-open-library (attended runs; see below).
 //
-// Prints a JSON summary: { checked, updated, still_missing:
+// Prints a JSON summary: { checked, updated, found:
+// [{ id, platform, title, image_url, source }], still_missing:
 // [{ title, platform }] }. Exits non-zero only if the database
 // round-trip itself fails, so a scheduled run can report honestly.
 
@@ -35,7 +46,14 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url))
 const SB = join(HERE, '..', '..', 'custom-connectors', 'custom.supabase', 'bin', 'sb.py')
 const args = process.argv.slice(2)
-const dryRun = args.includes('--dry-run')
+const dryRun = args.includes('--dry-run') || process.env.WEEKLY_DRY === '1'
+// Open Library covers are opt-in (--allow-open-library) and
+// attended-only: title search happily returns a DIFFERENT
+// book that shares the title (the 2026-10-24 pass produced
+// three wrong books for four lookups — every one caught only
+// by eyeballing the covers). A scheduled run must never
+// apply one unseen.
+const allowOpenLibrary = args.includes('--allow-open-library')
 const limit = Number(args[args.indexOf('--limit') + 1]) || 100
 const UA = 'ToyLibraryIngestor/1.0 (image backfill)'
 
@@ -48,6 +66,82 @@ function sql(statement) {
   const parsed = JSON.parse(out)
   if (parsed.status >= 300) throw new Error(`SQL failed (${parsed.status}): ${out.slice(0, 300)}`)
   return parsed.result
+}
+
+// ---- database transport ----------------------------------------------
+// Service-key PostgREST when the weekly-scan env is present
+// (the weekly.mjs pattern), the local sb.py helper otherwise.
+const REST_URL = process.env.SUPABASE_URL
+const REST_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const USE_REST = Boolean(REST_URL && REST_KEY)
+
+async function rest(path, options = {}, extraHeaders = {}) {
+  const res = await fetch(`${REST_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: REST_KEY,
+      Authorization: `Bearer ${REST_KEY}`,
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    },
+  })
+  if (!res.ok) throw new Error(`REST ${path} -> ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  return res.status === 204 ? null : res.json()
+}
+
+// Rows whose image_url is blank ('' in practice; the column is
+// NOT NULL, but the null arm costs nothing and keeps both
+// transports asking the same question).
+const BLANK_FILTER = 'or=(image_url.is.null,image_url.eq.)'
+
+async function fetchMissing(rowLimit) {
+  if (USE_REST) {
+    return rest(
+      `catalog_items?select=id,platform,title,source_url&${BLANK_FILTER}` +
+        `&order=platform,title&limit=${Math.max(1, Math.floor(rowLimit))}`,
+    )
+  }
+  // The sb.py bridge truncates long replies (at ~4 KB), so
+  // page the read: 15 rows including their source_urls stay
+  // safely under the cap, and (platform, title) is a stable
+  // order to page across.
+  const PAGE = 15
+  const cap = Math.max(1, Math.floor(rowLimit))
+  const rows = []
+  for (let offset = 0; rows.length < cap; offset += PAGE) {
+    const page = sql(
+      `select id, platform, title, source_url from public.catalog_items
+       where image_url is null or image_url = ''
+       order by platform, title
+       limit ${PAGE} offset ${offset}`,
+    )
+    rows.push(...page)
+    if (page.length < PAGE) break
+  }
+  return rows.slice(0, cap)
+}
+
+// Fill one row's image. The blank-only guard lives in the
+// update filter itself (the PATCH query / the UPDATE's WHERE),
+// so a row that gained an image since the read is never
+// overwritten. Resolves true when a row actually changed; the
+// sb.py path cannot report a rowcount, so it resolves true
+// once the guarded UPDATE has run, as the script always did.
+async function applyImage(item, image) {
+  if (USE_REST) {
+    const rows = await rest(
+      `catalog_items?id=eq.${item.id}&${BLANK_FILTER}`,
+      { method: 'PATCH', body: JSON.stringify({ image_url: image }) },
+      { Prefer: 'return=representation' },
+    )
+    return Array.isArray(rows) && rows.length > 0
+  }
+  const escaped = String(image).replace(/'/g, "''")
+  sql(
+    `update public.catalog_items set image_url = '${escaped}'
+     where id = '${item.id}' and (image_url is null or image_url = '')`,
+  )
+  return true
 }
 
 const norm = (s) =>
@@ -213,6 +307,7 @@ async function fromStoreFeed(item) {
 
 // ---- source 6: Open Library (books) ---------------------------------
 async function fromOpenLibrary(item) {
+  if (!allowOpenLibrary) return null
   if (item.platform !== 'books') return null
   const json = await fetchJson(
     `https://openlibrary.org/search.json?title=${encodeURIComponent(item.title)}&limit=3`,
@@ -225,14 +320,10 @@ async function fromOpenLibrary(item) {
 }
 
 // ---- main -------------------------------------------------------------
-const missing = sql(
-  `select id, platform, title, source_url from public.catalog_items
-   where image_url is null or image_url = ''
-   order by platform, title
-   limit ${Math.max(1, Math.floor(limit))}`,
-)
+const missing = await fetchMissing(limit)
 
 let updated = 0
+const found = []
 const stillMissing = []
 for (const item of missing) {
   let image = null
@@ -251,6 +342,14 @@ for (const item of missing) {
     } catch {
       image = null
     }
+    // A publisher's fallback art is worse than a blank tile:
+    // source pages sometimes hand back the site logo, an
+    // "image not found" box, or a no-image placeholder (all
+    // three seen in the 2026-10-24 pass). Never let one
+    // through as if it were the product's photo.
+    if (image && /logo|image-not-found|noimage|no-image|placeholder|favicon/i.test(image)) {
+      image = null
+    }
     if (image) {
       via = name
       break
@@ -261,19 +360,17 @@ for (const item of missing) {
     continue
   }
   console.log(`image via ${via}: [${item.platform}] ${item.title}`)
-  if (!dryRun) {
-    const escaped = String(image).replace(/'/g, "''")
-    sql(
-      `update public.catalog_items set image_url = '${escaped}'
-       where id = '${item.id}' and (image_url is null or image_url = '')`,
-    )
+  found.push({ id: item.id, platform: item.platform, title: item.title, image_url: image, source: via })
+  if (dryRun) {
+    updated++
+  } else if (await applyImage(item, image)) {
+    updated++
   }
-  updated++
 }
 
 console.log(
   JSON.stringify(
-    { dry_run: dryRun, checked: missing.length, updated, still_missing: stillMissing },
+    { dry_run: dryRun, checked: missing.length, updated, found, still_missing: stillMissing },
     null,
     2,
   ),

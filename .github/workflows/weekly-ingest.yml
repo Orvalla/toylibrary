@@ -3,7 +3,9 @@ name: Weekly catalog scan
 # Mondays: re-scan the tracked stores for net-new products,
 # attach age guidance, and top up product ratings. Delta-only —
 # the job never edits an existing catalog row (see
-# ingestor/weekly.mjs), so curated data is safe.
+# ingestor/weekly.mjs), so curated data is safe. One narrow
+# exception: the image backfill step only fills image_url
+# where it is blank and never edits anything else.
 on:
   schedule:
     - cron: '7 15 * * 1' # Mondays ~08:07 Pacific
@@ -28,3 +30,9 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           WEEKLY_DRY: ${{ inputs.dry && '1' || '' }}
         run: node ingestor/weekly.mjs
+      - name: Backfill images for items that have none
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WEEKLY_DRY: ${{ inputs.dry && '1' || '' }}
+        run: node ingestor/backfill-images.mjs --limit 200
