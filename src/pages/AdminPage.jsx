@@ -41,6 +41,7 @@ export default function AdminPage() {
   const [flaggedOnly, setFlaggedOnly] = useState(false)
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
+  const [donorEmail, setDonorEmail] = useState('')
 
   const load = useCallback(async () => {
     const [additions, flagRows] = await Promise.all([
@@ -77,6 +78,30 @@ export default function AdminPage() {
     load()
   }
 
+  // Supporter flag (migration 0045): flip profiles.donated for
+  // the account with this email once a donation lands.
+  async function setDonated(flag) {
+    let result = null
+    await act(
+      'donor',
+      async () => {
+        const { data, error } = await supabase.rpc('admin_set_donated', {
+          p_email: donorEmail,
+          p_donated: flag,
+        })
+        result = data
+        return { error }
+      },
+      () => {
+        if (result) {
+          setMessage(
+            `${result.display_name ?? 'That family'} (${result.slug ?? 'no slug'}) — supporter flag ${result.donated ? 'ON' : 'OFF'}.`,
+          )
+        }
+      },
+    )
+  }
+
   if (!user) return null
   if (denied) {
     return (
@@ -101,6 +126,45 @@ export default function AdminPage() {
       <AnalyticsPanel />
 
       <SupportInbox />
+
+      <section className="card">
+        <h2>❤️ Supporters</h2>
+        <p className="muted">
+          When a donation lands in the PayPal, flip the family's supporter flag
+          by their account email. Supporters get the raised photo-scan limit.
+        </p>
+        <form
+          className="form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setDonated(true)
+          }}
+        >
+          <label>
+            Account email
+            <input
+              type="email"
+              required
+              value={donorEmail}
+              onChange={(e) => setDonorEmail(e.target.value)}
+              placeholder="parent@example.com"
+            />
+          </label>
+          <p>
+            <button type="submit" className="btn" disabled={busy === 'donor'}>
+              Mark as supporter
+            </button>{' '}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy === 'donor'}
+              onClick={() => setDonated(false)}
+            >
+              Remove supporter flag
+            </button>
+          </p>
+        </form>
+      </section>
 
       {openFlags.length > 0 && (
         <section className="card">

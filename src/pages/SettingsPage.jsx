@@ -9,6 +9,7 @@ import { shareUrlFor } from '../lib/hostSlug'
 import { GENDERS, INTERESTS } from '../lib/onboarding'
 import { giftMessage, instagramLink, messengerLink, normalizeHandle } from '../lib/giftCircle'
 import { PREF_LANGUAGES } from '../lib/language'
+import { donateUrl } from '../lib/donate'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -769,6 +770,46 @@ export default function SettingsPage() {
           No affiliate links for my family
         </label>
       </section>
+
+      {(donateUrl() || profile.donated) && (
+        <section className="card">
+          <h3>❤️ Support Toy Library</h3>
+          {profile.donated ? (
+            <p>
+              <strong>You're a supporter — thank you!</strong> Your donations
+              keep the servers running for every family here. As a thank-you,
+              your photo-scan limit is raised well above the standard daily
+              cap.
+            </p>
+          ) : (
+            <p>
+              Toy Library is free, and it stays that way. If it's saved your
+              family a duplicate gift or two, you can chip in toward the
+              server bills — every donation goes into the PayPal that pays
+              them, and donating raises your photo-scan limit as a thank-you.
+            </p>
+          )}
+          {donateUrl() && !profile.donated && (
+            <p>
+              <a
+                className="btn"
+                href={donateUrl()}
+                target="_blank"
+                rel="noreferrer"
+              >
+                ❤️ Donate via PayPal
+              </a>
+            </p>
+          )}
+          {donateUrl() && profile.donated && (
+            <p>
+              <a href={donateUrl()} target="_blank" rel="noreferrer">
+                Donate again via PayPal
+              </a>
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="card">
         <h3>Password</h3>

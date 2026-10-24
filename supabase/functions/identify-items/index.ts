@@ -18,7 +18,10 @@
 // the vision call and the scan is recorded after a successful
 // one, so a provider hiccup never eats a user's scan. When the
 // limit is hit the answer is { configured: true, limited: true,
-// items: [] } and the UI explains the wait.
+// items: [] } and the UI explains the wait. Supporter families
+// (profiles.donated, migration 0045 — set from /admin when a
+// donation lands) get the raised SUPPORTER_SCAN_LIMIT instead:
+// the first perk the donated flag unlocks.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -27,6 +30,7 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? ''
 const SCAN_LIMIT = 10
+const SUPPORTER_SCAN_LIMIT = 50
 const SCAN_WINDOW_MS = 24 * 60 * 60 * 1000
 const MODEL = Deno.env.get('VISION_MODEL') ?? 'gpt-4o'
 // The client downscales to ≤1024px JPEG (~a few hundred KB); this
@@ -176,6 +180,12 @@ Deno.serve(async (req: Request) => {
     // The daily limit. Counting goes through the service role:
     // photo_scans has RLS on and no client policies by design.
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('donated')
+      .eq('id', user.id)
+      .single()
+    const scanLimit = profile?.donated ? SUPPORTER_SCAN_LIMIT : SCAN_LIMIT
     const windowStart = new Date(Date.now() - SCAN_WINDOW_MS).toISOString()
     const { count: usedToday, error: countError } = await admin
       .from('photo_scans')
@@ -186,8 +196,8 @@ Deno.serve(async (req: Request) => {
       console.error('photo_scans count failed', countError)
       return json({ error: 'Could not check your scan count — try again.' }, 500)
     }
-    if ((usedToday ?? 0) >= SCAN_LIMIT) {
-      return json({ configured: true, limited: true, limit: SCAN_LIMIT, items: [] })
+    if ((usedToday ?? 0) >= scanLimit) {
+      return json({ configured: true, limited: true, limit: scanLimit, items: [] })
     }
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -246,7 +256,7 @@ Deno.serve(async (req: Request) => {
     return json({
       configured: true,
       items,
-      scansLeft: Math.max(0, SCAN_LIMIT - (usedToday ?? 0) - 1),
+      scansLeft: Math.max(0, scanLimit - (usedToday ?? 0) - 1),
     })
   } catch (err) {
     console.error('identify-items failed', err)

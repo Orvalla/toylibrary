@@ -15,6 +15,26 @@ import UnsubscribePage from './pages/UnsubscribePage'
 import { useAuth } from './lib/auth'
 import { shareSlugFromHost } from './lib/hostSlug'
 import SupportWidget from './components/SupportWidget'
+import { donateUrl } from './lib/donate'
+
+// The footer line both layouts share. The Donate link renders
+// only once the owner has set the PayPal link (lib/donate).
+function FooterLine() {
+  const url = donateUrl()
+  return (
+    <>
+      Toy Library — fewer duplicate gifts, happier holidays. · <SupportWidget />
+      {url && (
+        <>
+          {' · '}
+          <a className="footer-link" href={url} target="_blank" rel="noreferrer">
+            ❤️ Donate
+          </a>
+        </>
+      )}
+    </>
+  )
+}
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -34,9 +54,7 @@ export default function App() {
         <Routes>
           <Route path="*" element={<PublicListPage slugOverride={hostSlug} />} />
         </Routes>
-        <footer className="footer">
-          Toy Library — fewer duplicate gifts, happier holidays. · <SupportWidget />
-        </footer>
+        <footer className="footer"><FooterLine /></footer>
       </>
     )
   }
@@ -92,9 +110,7 @@ export default function App() {
         <Route path="/unsubscribe" element={<UnsubscribePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-      <footer className="footer">
-        Toy Library — fewer duplicate gifts, happier holidays. · <SupportWidget />
-      </footer>
+      <footer className="footer"><FooterLine /></footer>
     </>
   )
 }
