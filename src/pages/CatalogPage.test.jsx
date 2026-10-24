@@ -16,6 +16,12 @@ function Harness() {
 const CATALOG = [
   { id: 'c1', platform: 'tonies', title: 'Bluey', details: 'Character Tonie', image_url: '', sort_order: 1 },
   { id: 'c2', platform: 'tonies', title: 'Peppa Pig', details: 'Character Tonie', image_url: '', sort_order: 2 },
+  // Two board games whose brand order and fit order disagree:
+  // HABA sits near the front of the brand registry but this
+  // title is aimed at 8-year-olds; the eeBoo game fits a
+  // 2-year-old animal lover.
+  { id: 'c3', platform: 'haba', title: 'Castle Siege', details: 'A strategy board game for older kids', image_url: '', sort_order: 3, age_min_years: 8 },
+  { id: 'c4', platform: 'eeboo', title: 'Zoo Pairs', details: 'An animal matching card game', image_url: '', sort_order: 4, age_min_years: 2 },
 ]
 const MINE = [{ platform: 'tonies', title: 'Bluey', list_type: 'have', child_id: null }]
 // No children in this stub: ownership matching runs against Family.
@@ -58,9 +64,10 @@ describe('CatalogPage', () => {
     // clearly labeled way to take it back off the list.
     expect(await screen.findByText('✓ On your have list')).toBeInTheDocument()
     expect(screen.getByText('✕ Remove from have list')).toBeInTheDocument()
-    // Unowned title: both add actions offered.
-    expect(screen.getByText('＋ We have it')).toBeInTheDocument()
-    expect(screen.getByText('☆ Add to wishlist')).toBeInTheDocument()
+    // Unowned titles: both add actions offered (several
+    // unowned tiles render, so match them all).
+    expect(screen.getAllByText('＋ We have it').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('☆ Add to wishlist').length).toBeGreaterThan(0)
     expect(screen.getByText('Peppa Pig')).toBeInTheDocument()
   })
 })
@@ -125,8 +132,46 @@ describe('CatalogPage — filter sections + child default sort', () => {
           <Harness />
         </AuthProvider>
       )
-      expect(await screen.findByText('Bluey')).toBeInTheDocument()
-      await vi.waitFor(() => expect(screen.getByLabelText('Sort').value).toBe('suggested'))
+      // Wait for the sort flip FIRST, then query tiles: the
+      // flip re-mounts the results under a different section
+      // key, so a tile node found before it is detached after
+      // it — asserting on that node races the flip.
+      await vi.waitFor(
+        () => expect(screen.getByLabelText('Sort').value).toBe('suggested'),
+        { timeout: 5000 }
+      )
+      expect(screen.getByText('Bluey')).toBeInTheDocument()
+    } finally {
+      KIDS = []
+    }
+  })
+
+  it('Suggested is one ranked list — brand sections cannot bury the ranking', async () => {
+    KIDS = [{ id: 'k1', name: 'Sam', birth_date: '2024-01-01', interests: ['animals'] }]
+    try {
+      render(
+        <AuthProvider>
+          <Harness />
+        </AuthProvider>
+      )
+      // Same ordering as the test above: settle into the
+      // Suggested view before touching tile nodes.
+      await vi.waitFor(
+        () => expect(screen.getByLabelText('Sort').value).toBe('suggested'),
+        { timeout: 5000 }
+      )
+      expect(screen.getByText('Zoo Pairs')).toBeInTheDocument()
+      // The eeBoo game fits Sam (age 2, loves animals) and must
+      // outrank the HABA game aimed at 8-year-olds — even though
+      // HABA sits far earlier in the brand registry and, when
+      // the list was regrouped into brand sections, owned the
+      // first page with its whole section.
+      const pos = screen
+        .getByText('Zoo Pairs')
+        .compareDocumentPosition(screen.getByText('Castle Siege'))
+      expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // No brand section headings in the Suggested view.
+      expect(screen.queryByRole('heading', { name: 'HABA' })).not.toBeInTheDocument()
     } finally {
       KIDS = []
     }
