@@ -282,6 +282,12 @@ a { color: var(--accent-dark); }
 .bundle-line { font-weight: 800; color: var(--ink); }
 .bundle-missing { color: var(--ink-soft); }
 .bundle-missing a { color: var(--accent-dark); font-weight: 700; }
+.bundle-have {
+  font: inherit; font-weight: 700; color: var(--accent-dark);
+  background: #fff; border: 1.5px solid var(--sun); border-radius: 999px;
+  padding: 1px 8px; cursor: pointer;
+}
+.bundle-have:hover { background: #fff3c4; }
 .share-url { font-family: ui-monospace, monospace; word-break: break-all; margin: 6px 0; }
 .toggle { font-weight: 800; }
 .slug-field { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

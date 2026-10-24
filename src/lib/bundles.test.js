@@ -3,6 +3,7 @@ import {
   bundleHeadline,
   bundleInfoFor,
   cascadeContentRows,
+  foldedContentItemIds,
   indexCatalog,
   indexContents,
   itemKey,
@@ -81,6 +82,9 @@ describe('bundleInfoFor', () => {
       'Goosebumps: Say Cheese and Die!',
       'Goosebumps: The Haunted Mask',
     ])
+    // Missing pieces carry their catalog identity so the
+    // parent's lists can offer a one-tap "mark as have".
+    expect(info.missing[0]).toMatchObject({ id: 'c2', platform: 'tonies' })
   })
 
   it('is null for non-bundles and unmapped bundles', () => {
@@ -90,6 +94,32 @@ describe('bundleInfoFor', () => {
     expect(
       bundleInfoFor({ twin: { ...twin, id: 'nope' }, contentsByBundle, catalogById: byId, ownedKeys: new Set() })
     ).toBe(null)
+  })
+})
+
+describe('foldedContentItemIds', () => {
+  const { byKey } = indexCatalog(catalog)
+  const contentsByBundle = indexContents(contentsRows)
+  const listItems = [
+    { id: 'i-bundle', list_type: 'have', platform: 'tonies', title: 'Goosebumps Book Tonies - 4 Pack', child_id: 'kid-a' },
+    { id: 'i-c1', list_type: 'have', platform: 'tonies', title: 'Goosebumps: Night of the Living Dummy', child_id: 'kid-a' },
+    { id: 'i-c2-other-kid', list_type: 'have', platform: 'tonies', title: 'Goosebumps: Say Cheese and Die!', child_id: 'kid-b' },
+    { id: 'i-c3-want', list_type: 'wishlist', platform: 'tonies', title: 'Goosebumps: The Haunted Mask', child_id: 'kid-a' },
+    { id: 'i-bluey', list_type: 'have', platform: 'tonies', title: 'Bluey', child_id: 'kid-a' },
+  ]
+
+  it('folds pieces that share the bundle’s bucket and list', () => {
+    const folded = foldedContentItemIds({ items: listItems, catalogByKey: byKey, contentsByBundle })
+    expect([...folded]).toEqual(['i-c1'])
+  })
+
+  it('folds nothing when the bundle itself is not on the list', () => {
+    const folded = foldedContentItemIds({
+      items: listItems.filter((i) => i.id !== 'i-bundle'),
+      catalogByKey: byKey,
+      contentsByBundle,
+    })
+    expect(folded.size).toBe(0)
   })
 })
 

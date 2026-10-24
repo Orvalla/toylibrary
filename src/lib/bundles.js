@@ -79,12 +79,44 @@ export function bundleInfoFor({ twin, contentsByBundle, catalogById, ownedKeys }
     total: contents.length,
     owned: contents.length - missing.length,
     missing: missing.slice(0, 12).map((c) => ({
+      id: c.id,
       title: c.title,
       platform: c.platform,
+      details: c.details ?? '',
       asin: c.asin ?? null,
+      product_url: c.product_url ?? null,
       image_url: c.image_url ?? '',
     })),
   }
+}
+
+// Which list items a bundle on the same list speaks for: when
+// a bundle sits in a bucket (a child's list, or Family), its
+// content items in the SAME bucket and list don't need their
+// own tiles — the bundle's entry (and its coverage note)
+// represents them. Returns the item ids to fold away in list
+// views. The rows themselves are untouched: bundle math, the
+// share page and every other consumer still see each piece.
+// A bundle that is itself the content of a bigger bundle on
+// the list folds too (a 3-pack of collections shows as the
+// one pack).
+export function foldedContentItemIds({ items, catalogByKey, contentsByBundle }) {
+  const bucketContents = new Map() // "list|child" -> Set<catalogId>
+  const bucketOf = (i) => `${i.list_type}|${i.child_id ?? ''}`
+  for (const i of items ?? []) {
+    const twin = catalogByKey?.get(itemKey(i.platform, i.title))
+    if (!twin?.is_bundle) continue
+    const key = bucketOf(i)
+    if (!bucketContents.has(key)) bucketContents.set(key, new Set())
+    for (const cid of contentsByBundle?.get(twin.id) ?? []) bucketContents.get(key).add(cid)
+  }
+  const folded = new Set()
+  for (const i of items ?? []) {
+    const twin = catalogByKey?.get(itemKey(i.platform, i.title))
+    if (!twin) continue
+    if (bucketContents.get(bucketOf(i))?.has(twin.id)) folded.add(i.id)
+  }
+  return folded
 }
 
 // When a bundle joins a have-list, its contents join too — the

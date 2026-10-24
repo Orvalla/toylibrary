@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import BundleNote from './BundleNote'
 
 const missing = [
@@ -31,5 +31,26 @@ describe('BundleNote', () => {
   it('renders nothing without bundle info', () => {
     const { container } = render(<BundleNote info={null} name="Sam" platform="other" />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('links missing pieces to Amazon for gift-givers by default', () => {
+    render(<BundleNote info={{ total: 2, owned: 1, missing: [missing[1]] }} name="Sam" platform="other" />)
+    const link = screen.getByRole('link', { name: /Cheery Lane Cheeries/ })
+    expect(link.getAttribute('href')).toContain('amazon.')
+  })
+
+  it('offers one-tap mark-as-have instead of buy links when onHave is given', () => {
+    const onHave = vi.fn()
+    render(
+      <BundleNote
+        info={{ total: 2, owned: 1, missing: [{ ...missing[1], id: 'c9' }] }}
+        name="Sam"
+        platform="other"
+        onHave={onHave}
+      />
+    )
+    expect(screen.queryByRole('link', { name: /Cheery Lane Cheeries/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Cheery Lane Cheeries/ }))
+    expect(onHave).toHaveBeenCalledWith(expect.objectContaining({ id: 'c9' }))
   })
 })

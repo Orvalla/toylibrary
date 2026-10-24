@@ -15,6 +15,7 @@ import BundleNote from '../components/BundleNote'
 import PlatformGrid from '../components/PlatformGrid'
 import {
   bundleInfoFor,
+  foldedContentItemIds,
   indexCatalog,
   indexContents,
   itemKey,
@@ -275,6 +276,52 @@ export default function DashboardPage() {
 
   const catalogIndex = useMemo(() => indexCatalog(catalogRows), [catalogRows])
   const contentsByBundle = useMemo(() => indexContents(bundleRows), [bundleRows])
+  // Pieces that a bundle on the same list already speaks for —
+  // folded out of the list view so a set shows as one entry,
+  // not a bundle tile plus a tile per cartridge.
+  const foldedIds = useMemo(
+    () =>
+      foldedContentItemIds({
+        items,
+        catalogByKey: catalogIndex.byKey,
+        contentsByBundle,
+      }),
+    [items, catalogIndex, contentsByBundle]
+  )
+
+  // From a bundle's coverage note on the parent's own lists:
+  // a missing piece the family actually has gets marked have
+  // in the bundle's bucket, one tap, no trip to the catalog.
+  async function markPieceHave(bundleItem, piece) {
+    const entry = catalogIndex.byId.get(piece.id)
+    if (!entry) return
+    setMessage('')
+    const { data, error } = await supabase
+      .from('items')
+      .insert({
+        owner_id: user.id,
+        list_type: 'have',
+        platform: entry.platform,
+        title: entry.title,
+        details: entry.details ?? '',
+        notes: '',
+        image_url: entry.image_url ?? '',
+        asin: entry.asin ?? null,
+        product_url: entry.product_url ?? null,
+        child_id: bundleItem.child_id ?? null,
+      })
+      .select()
+      .single()
+    if (error) {
+      setMessage(
+        error.code === '23505'
+          ? `“${entry.title}” is already on that list.`
+          : error.message
+      )
+      return
+    }
+    if (data) setItems((prev) => [...prev, data])
+  }
 
   if (loading) return <main className="page"><p>Loading your library…</p></main>
   if (!profile) return <main className="page"><p>We couldn't load your profile. Try refreshing.</p></main>
@@ -284,6 +331,10 @@ export default function DashboardPage() {
   const visible = items.filter(
     (i) =>
       i.list_type === tab &&
+      // Folded bundle pieces hide while browsing; a text
+      // search surfaces every row again so nothing is ever
+      // unfindable (or impossible to edit/remove).
+      (q || !foldedIds.has(i.id)) &&
       (childFilter === 'all' ||
         (childFilter === 'family' ? !i.child_id : i.child_id === childFilter)) &&
       (!q ||
@@ -613,6 +664,7 @@ export default function DashboardPage() {
                     })()}
                     name={childNameFor(item, kids)}
                     platform={item.platform}
+                    onHave={(piece) => markPieceHave(item, piece)}
                   />
                   <div className="tile-actions">
                     {childFilter === 'all' && kids.length > 0 && (
