@@ -21,7 +21,7 @@
 // vanished from the browser.
 
 export const CATALOG_COLUMNS =
-  'id, platform, title, details, image_url, asin, product_url, logo_url, is_bundle, item_type, sort_order, age_min_years, age_max_years, rating, rating_count, language'
+  'id, platform, title, details, image_url, asin, product_url, logo_url, is_bundle, item_type, sort_order, popularity_score, age_min_years, age_max_years, rating, rating_count, language'
 
 export const CATALOG_PAGE_SIZE = 1000
 const CONCURRENCY = 6

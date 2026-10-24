@@ -36,3 +36,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           WEEKLY_DRY: ${{ inputs.dry && '1' || '' }}
         run: node ingestor/backfill-images.mjs --limit 200
+      - name: Recompute popularity scores
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node ingestor/popularity.mjs ${{ inputs.dry && '--dry' || '' }}

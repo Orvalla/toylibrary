@@ -206,6 +206,28 @@ async function flagForReview(
   }
 }
 
+// The sort_order a brand-new row for this platform should
+// carry: one past the platform's current maximum. sort_order
+// is the platform's own ordering (the maker's store order at
+// ingest time), and the column default of 0 would put a
+// parent-added item ahead of the brand's whole line — under
+// the Popular sort's within-brand ranking it would become
+// the brand's #1. New arrivals join the end of the line.
+// Gaps are fine; only the order matters.
+async function nextSortOrder(
+  admin: ReturnType<typeof createClient>,
+  platform: string,
+): Promise<number> {
+  const { data } = await admin
+    .from('catalog_items')
+    .select('sort_order')
+    .eq('platform', platform)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return (data?.sort_order ?? 0) + 1
+}
+
 // Insert a catalog row unless (platform, title) already exists, and
 // report which happened. Only a genuine insert is logged — the
 // additions log is a record of who grew the catalog, not of attempts.
@@ -258,6 +280,7 @@ async function upsertCatalogItem(
         source_url: row.source_url,
         logo_url: faviconUrlFor(row.source_url),
         added_by: userId,
+        sort_order: await nextSortOrder(admin, row.platform),
       },
       { onConflict: 'platform,title', ignoreDuplicates: true },
     )
@@ -329,8 +352,12 @@ async function insertCatalogRows(
   sourceUrl: string,
 ): Promise<number> {
   const inserted: Record<string, unknown>[] = []
+  // The whole haul joins the end of the platform's line, in
+  // plan order (see nextSortOrder). Duplicates the upsert
+  // skips leave harmless gaps in the numbering.
+  const firstOrder = await nextSortOrder(admin, platform)
   for (let i = 0; i < rows.length; i += 100) {
-    const batch = rows.slice(i, i + 100).map((row: any) => ({
+    const batch = rows.slice(i, i + 100).map((row: any, j: number) => ({
       platform,
       title: row.title.slice(0, TITLE_CAP),
       details: row.details ?? '',
@@ -343,6 +370,7 @@ async function insertCatalogRows(
       source_url: row.source_url ?? sourceUrl,
       logo_url: faviconUrlFor(row.source_url ?? sourceUrl),
       added_by: userId,
+      sort_order: firstOrder + i + j,
     }))
     const { data, error } = await admin
       .from('catalog_items')

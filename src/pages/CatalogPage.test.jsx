@@ -91,22 +91,30 @@ describe('CatalogPage sorting', () => {
     expect(after & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // Peppa first (Z–A)
   })
 
-  it('Popular is one ranked list too — brands interleave by catalog order', async () => {
+  it('Popular ranks by the unified score — each brand’s best first', async () => {
     render(
       <AuthProvider>
         <Harness />
       </AuthProvider>
     )
-    // No child selected, so the view stays on Popular: the
-    // catalog's own order (Bluey, Peppa, Zoo Pairs, Castle
-    // Siege) flows across brands. Under the old brand
-    // sections the HABA game would have preceded the eeBoo
-    // one purely because HABA's section comes first.
+    // No child selected, so the view stays on Popular. The
+    // fixtures carry no stored popularity_score, so the
+    // client fallback applies — the within-brand percentile
+    // of list order: each brand's #1 (Bluey, Castle Siege,
+    // Zoo Pairs) scores 0.40 and leads, in brand-registry
+    // order, ahead of Tonies' #2 (Peppa). Under the old
+    // brand sections the whole HABA block would have come
+    // before eeBoo purely by section order, and under raw
+    // sort_order the eeBoo game (rank 3) would have beaten
+    // HABA's (rank 5) for the wrong reason.
     expect(await screen.findByText('Zoo Pairs')).toBeInTheDocument()
-    const pos = screen
-      .getByText('Zoo Pairs')
-      .compareDocumentPosition(screen.getByText('Castle Siege'))
-    expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const order = ['Bluey', 'Castle Siege', 'Zoo Pairs', 'Peppa Pig']
+    for (let i = 0; i + 1 < order.length; i++) {
+      const pos = screen
+        .getByText(order[i])
+        .compareDocumentPosition(screen.getByText(order[i + 1]))
+      expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
     expect(screen.queryByRole('heading', { name: 'HABA' })).not.toBeInTheDocument()
   })
 

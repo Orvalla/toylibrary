@@ -1,0 +1,29 @@
+name: Popularity scores
+
+# On-demand recompute of catalog_items.popularity_score
+# (ingestor/popularity.mjs — the unified ranking metric).
+# The weekly ingest runs the same script after scanning;
+# this workflow exists so a score refresh never has to wait
+# for Monday or ride along with a store scan.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Dry run (compute and report, change nothing)'
+        type: boolean
+        default: false
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Compute popularity scores
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node ingestor/popularity.mjs ${{ inputs.dry && '--dry' || '' }}

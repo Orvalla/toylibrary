@@ -26,6 +26,7 @@ import {
   platformNoun,
 } from '../lib/bundles'
 import { affinityFromItems, sortBySuggestions } from '../lib/recommend'
+import { popularityIndex, sortByPopularity } from '../lib/popular'
 import { PAGE_SIZES, pageNumbers, pageSlice } from '../lib/paging'
 import { AGE_BANDS, inAgeBand } from '../lib/ages'
 import { BOOK_STAGES, bookInStage } from '../lib/books'
@@ -237,6 +238,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
 
   const contentsByBundle = useMemo(() => indexContents(bundleRows), [bundleRows])
   const catalogIndex = useMemo(() => indexCatalog(catalog), [catalog])
+  const popIndex = useMemo(() => popularityIndex(catalog), [catalog])
   const themeMap = useMemo(
     () => new Map(catalog.map((c) => [c.id, themesOf(c)])),
     [catalog]
@@ -425,11 +427,12 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       (!qWords.length || matchesQuery(c))
   )
 
-  // Sort orders. "Popular" is the catalog's own order — stores
-  // list their best-sellers first and the ingest kept that, and
-  // the books were ingested in ranked order. "Suggested" floats
-  // up what fits the selected child: content for players they
-  // own, their interests, age-fit books (lib/recommend.js).
+  // Sort orders. "Popular" is the unified popularity score
+  // (lib/popular.js — on-site behavior, store reviews, list
+  // presence, over a maker-list-order base). "Suggested"
+  // floats up what fits the selected child: content for
+  // players they own, their interests, age-fit books
+  // (lib/recommend.js).
   const selectedKid = kids.find((k) => k.id === childSel) ?? null
   const sortedVisible =
     sort === 'az'
@@ -443,10 +446,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
               affinity: bucketAffinity,
               ownedKeys: bucketKeys,
             })
-          : [...visible].sort(
-              (a, b) =>
-                (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.title.localeCompare(b.title)
-            )
+          : sortByPopularity(visible, popIndex)
   const byPlatform = sortedVisible.reduce((acc, c) => {
     ;(acc[c.platform] ??= []).push(c)
     return acc

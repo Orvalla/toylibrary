@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { loadCatalog } from '../lib/catalogCache'
+import { popularityIndex, sortByPopularity } from '../lib/popular'
 import { inKind, kindOf } from '../lib/kinds'
 import KindBar from './KindBar'
 import ItemTile from './ItemTile'
@@ -127,6 +128,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   const contentsByBundle = useMemo(() => indexContents(bundleRows), [bundleRows])
   const catalogIndex = useMemo(() => indexCatalog(catalog), [catalog])
+  const popIndex = useMemo(() => popularityIndex(catalog), [catalog])
   const themeMap = useMemo(
     () => new Map(catalog.map((c) => [c.id, themesOf(c)])),
     [catalog]
@@ -174,14 +176,14 @@ export default function PublicCatalog({ devicesOnly = false }) {
       (!qWords.length || matchesQuery(c))
   )
 
+  // The default sort is the unified popularity score
+  // (lib/popular.js — same metric as the signed-in browser).
   const sortedVisible =
     sort === 'az'
       ? [...visible].sort((a, b) => a.title.localeCompare(b.title))
       : sort === 'za'
         ? [...visible].sort((a, b) => b.title.localeCompare(a.title))
-        : [...visible].sort(
-            (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.title.localeCompare(b.title)
-          )
+        : sortByPopularity(visible, popIndex)
   const byPlatform = sortedVisible.reduce((acc, c) => {
     ;(acc[c.platform] ??= []).push(c)
     return acc
