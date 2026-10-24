@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { platformLabel } from '../lib/platforms'
+import AnalyticsPanel from '../components/AnalyticsPanel'
 
 // Site admin (migration 0031): the owner's moderation desk for
 // the user-grown catalog. Everything here runs through
@@ -95,6 +96,8 @@ export default function AdminPage() {
         the catalog for everyone (their own lists keep their copies). Private keeps
         it in the adder's catalog only.
       </p>
+
+      <AnalyticsPanel />
 
       {openFlags.length > 0 && (
         <section className="card">

@@ -4,6 +4,13 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './lib/auth'
 import './styles.css'
+import { startAnalytics } from './lib/analytics'
+
+// First-party, privacy-light analytics (migration 0040):
+// pageviews + a visibility heartbeat for session durations
+// and the admin page's live view. Runs on the apex and on
+// family subdomains alike (gift-page visits included).
+startAnalytics()
 
 // No redirect here: on a family subdomain
 // (millers.toylibrary.store) App itself renders the gift page in
