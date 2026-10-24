@@ -70,7 +70,11 @@ function page(title: string, description: string, url: string) {
 
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url)
-  const slug = (url.searchParams.get('slug') ?? '').toLowerCase()
+  // nginx passes the slug as a header (see nginx.conf for why);
+  // the ?slug= form stays for direct calls and debugging.
+  const slug = (req.headers.get('x-family-slug') ?? url.searchParams.get('slug') ?? '')
+    .toLowerCase()
+    .trim()
   const pageUrl = slug ? `https://${slug}.toylibrary.store/` : 'https://toylibrary.store/'
 
   if (!/^[a-z0-9-]{1,64}$/.test(slug) || !SUPABASE_SERVICE_ROLE_KEY) {
