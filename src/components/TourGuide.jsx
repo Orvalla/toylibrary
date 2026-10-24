@@ -19,7 +19,7 @@ const STEPS = [
   {
     anchor: 'share',
     title: 'This link is the whole trick 🔗',
-    body: 'Send it to grandparents, aunts, uncles — anyone who buys gifts. No account needed: they see the wishlist and what you already own, they can claim a gift (“I’m getting this”) so two people never buy the same thing, and they can gather picks into a little gift cart. Before each birthday or holiday we’ll email a gentle reminder with the link.',
+    body: 'Send it to grandparents, aunts, uncles — anyone who buys gifts. No account needed: they see the wishlist and what you already own, they can claim a gift (“I’m getting this”) so two people never buy the same thing, and they can gather picks into a little gift basket. Before each birthday or holiday we’ll email a gentle reminder with the link.',
   },
   {
     anchor: 'lists',

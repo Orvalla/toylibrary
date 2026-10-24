@@ -5,10 +5,12 @@ import { amazonUrlFor } from '../lib/amazon'
 import PlatformMark from './PlatformMark'
 import { useClaim } from './useClaim'
 
-// The gift cart drawer on the public share page. It is a list,
+// The gift basket pane on the public share page (rendered by
+// GiftBasket inside its right-side overlay). It is a list,
 // not a checkout: each item keeps its own "Buy on Amazon"
 // affiliate link. No prices are shown here — they live on
-// Amazon.
+// Amazon. "Basket", not "cart", so nobody confuses it with
+// the Amazon cart the buy links lead to.
 //
 // Claiming lives here too: the rows carry the same anonymous
 // claim controls as the wishlist tiles (shared via useClaim),
@@ -112,10 +114,9 @@ export default function GiftCart({ entries, slug, liveById, onChanged, onRemove,
   }
 
   return (
-    <div className="cart-overlay" onClick={onClose}>
-      <aside className="cart-panel" onClick={(e) => e.stopPropagation()} aria-label="Gift cart">
+      <aside className="cart-panel" onClick={(e) => e.stopPropagation()} aria-label="Gift basket">
         <div className="cart-head">
-          <h2>🛒 Your gift cart</h2>
+          <h2>🧺 Your basket</h2>
           <button className="linklike" onClick={onClose}>
             Close ✕
           </button>
@@ -123,8 +124,8 @@ export default function GiftCart({ entries, slug, liveById, onChanged, onRemove,
 
         {entries.length === 0 ? (
           <p className="empty">
-            Nothing here yet. Tap “Add to cart” on any wishlist item and it will wait for you
-            here — handy when you're picking gifts for more than one occasion.
+            Nothing here yet. Tap “Add to basket” on any wishlist item and it will wait for
+            you here — handy when you're picking gifts for more than one occasion.
           </p>
         ) : launching ? (
           <>
@@ -183,7 +184,7 @@ export default function GiftCart({ entries, slug, liveById, onChanged, onRemove,
               </>
             ) : (
               <button className="linklike" onClick={() => setLaunching(false)}>
-                ← Back to cart
+                ← Back to basket
               </button>
             )}
           </>
@@ -224,6 +225,5 @@ export default function GiftCart({ entries, slug, liveById, onChanged, onRemove,
           </>
         )}
       </aside>
-    </div>
   )
 }

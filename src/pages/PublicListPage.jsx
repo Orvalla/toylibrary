@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import ItemTiles from '../components/ItemTiles'
 import ClaimableWishlist from '../components/ClaimableWishlist'
-import GiftCart from '../components/GiftCart'
+import GiftBasket from '../components/GiftBasket'
 import SuggestGift, { ApprovedGifts } from '../components/SuggestGift'
 import { addToCart, cartHas, loadCart, removeFromCart, saveCart } from '../lib/cart'
 import { noteSharePageVisit } from '../lib/amazon'
@@ -24,7 +24,6 @@ export default function PublicListPage({ slugOverride } = {}) {
   // the drawer also offers claiming inline, and claiming is what
   // holds an item against other gift-givers.
   const [cart, setCart] = useState(() => loadCart(slug))
-  const [cartOpen, setCartOpen] = useState(false)
   // The have list starts folded (owner request 2026-10-24):
   // gift-givers came for the wishlist, and a wall of owned
   // tiles pushed it far down the page. The shelf stays one
@@ -196,25 +195,13 @@ export default function PublicListPage({ slugOverride } = {}) {
       )}
       {subState === 'done' && <p className="notice">📬 {subMsg}</p>}
 
-      <p>
-        <button className="btn btn-small" onClick={() => setCartOpen(true)}>
-          🛒 Your gift cart ({cart.length})
-        </button>{' '}
-        <span className="details">
-          Collecting gifts for a few kids or occasions? Add wishlist items to the cart and buy
-          them together on Amazon.
-        </span>
-      </p>
-      {cartOpen && (
-        <GiftCart
-          entries={cart}
-          slug={slug}
-          liveById={liveById}
-          onChanged={load}
-          onRemove={(id) => setCart((prev) => removeFromCart(prev, id))}
-          onClose={() => setCartOpen(false)}
-        />
-      )}
+      <GiftBasket
+        entries={cart}
+        slug={slug}
+        liveById={liveById}
+        onChanged={load}
+        onRemove={(id) => setCart((prev) => removeFromCart(prev, id))}
+      />
 
       <section className="check-box">
         <h2>🔍 Check before you buy</h2>

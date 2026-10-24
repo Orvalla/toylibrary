@@ -62,7 +62,7 @@ function WishlistTile({ slug, item, onChanged, inCart, onToggleCart }) {
         {note && <div className="notes">{note}</div>}
         {(!item.claimed || mine) && onToggleCart && (
           <button className="linklike" onClick={() => onToggleCart(item)}>
-            {inCart ? '🛒 In your cart — tap to remove' : '🛒 Add to cart'}
+            {inCart ? '🧺 In your basket — tap to remove' : '🧺 Add to basket'}
           </button>
         )}
         <AmazonLink item={item} />
