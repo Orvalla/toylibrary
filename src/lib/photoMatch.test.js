@@ -44,4 +44,49 @@ describe('bestMatch', () => {
     ).toBeNull()
     expect(matchScore({ title: 'Bluey', platform: 'tonies' }, catalog[4])).toBe(0)
   })
+
+  // The Dream Machine failure (2026-10-24): a photo of Story
+  // Dream Machine cartridges produced confident "found in the
+  // catalog" hits on the same stories' picture books. A named
+  // platform confines matching to that platform's shelf.
+  it('never matches a cartridge detection to the picture book of the same story', () => {
+    const booksOnly = [
+      { id: 'b1', platform: 'books', title: 'Elmo Goes to School', details: 'Board book' },
+      { id: 'b2', platform: 'books', title: 'The Very Quiet Cricket', details: 'Picture book' },
+    ]
+    expect(
+      bestMatch({ title: 'Elmo Goes to School', platform: 'projector', confidence: 0.95 }, booksOnly)
+    ).toBeNull()
+    expect(
+      bestMatch({ title: 'The Very Quiet Cricket', platform: 'projector', confidence: 0.9 }, booksOnly)
+    ).toBeNull()
+  })
+
+  it('matches a cartridge to its projector row despite the series prefix', () => {
+    const withCartridge = [
+      { id: 'b1', platform: 'books', title: 'Mister Seahorse', details: 'Picture book' },
+      {
+        id: 'p1',
+        platform: 'projector',
+        title: 'World of Eric Carle: Mister Seahorse',
+        details: 'Dream Machine story cartridge',
+      },
+    ]
+    const m = bestMatch(
+      { title: 'Mister Seahorse', platform: 'projector', confidence: 0.9 },
+      withCartridge
+    )
+    expect(m?.entry.id).toBe('p1')
+    // And the same photo read as a book still finds the book.
+    const asBook = bestMatch(
+      { title: 'Mister Seahorse', platform: 'books', confidence: 0.9 },
+      withCartridge
+    )
+    expect(asBook?.entry.id).toBe('b1')
+  })
+
+  it('a platform-less detection still searches every shelf', () => {
+    const m = bestMatch({ title: 'Goodnight Moon', platform: 'other', confidence: 0.8 }, catalog)
+    expect(m?.entry.id).toBe('c5')
+  })
 })

@@ -124,9 +124,12 @@ BOARD GAMES: a board game collection photo shows box lids and spines stacked on 
 STORY TOYS:
 - Tonie or Creative Tonie figures — title is the character or franchise shown, e.g. "Paw Patrol — Chase", "Blippi"
 - Yoto cards — use the card's printed title
-- Little Tikes Story Dream Machine story cartridges/books — use the story title
 - LeapFrog / LeapPad books and cartridges — use the printed title
 - Storypod audio figures and cards, Lunii story packs, Osmo games
+
+STORY CARTRIDGES — read the FORM of the object, not just its title:
+- Little Tikes Story Dream Machine cartridges look like chunky little PLASTIC books: a thick rigid body and a small square window/hole near the top of the cover. Sesame Street, Eric Carle and Little Golden Book titles are common. A Dream Machine cartridge is platform "projector" — NEVER "books", however book-like it looks. The same story usually also exists as a paper book; what decides the platform is the object in the photo: plastic cartridge with a window = projector, paper = books.
+- Moonlite story discs and reels (small round discs, usually pictured on their packaging) are platform "projector" too.
 
 Rules: one entry per physical product (a product appearing twice is listed once); use the title as printed when legible, otherwise the character/franchise name; do not list generic toys, furniture, people, or the storage/shelf itself; if you cannot identify any products, return an empty list.
 
@@ -225,6 +228,11 @@ Deno.serve(async (req: Request) => {
       .slice(0, MAX_ITEMS)
       .map((i: any) => ({
         title: String(i.title).trim().slice(0, 200),
+        // The author disambiguates books with shared titles —
+        // the prompt asks for it and the client's book resolver
+        // scores on it. (It was collected and then dropped here
+        // until v13, which left book matching title-blind.)
+        author: typeof i.author === 'string' ? i.author.trim().slice(0, 120) : '',
         platform: PLATFORM_KEYS.includes(i.platform) ? i.platform : 'other',
         confidence: Math.min(1, Math.max(0, Number(i.confidence) || 0)),
       }))

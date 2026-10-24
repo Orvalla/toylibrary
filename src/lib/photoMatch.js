@@ -43,13 +43,10 @@ export function matchScore(detection, entry) {
   return score
 }
 
-// The best catalog row for one detection, or null when nothing
-// is close enough to suggest (the detection is then offered as
-// a manual add under its printed title).
-export function bestMatch(detection, catalog) {
+function pickBest(detection, rows) {
   let best = null
   let bestScore = 0
-  for (const entry of catalog ?? []) {
+  for (const entry of rows) {
     const s = matchScore(detection, entry)
     if (s > bestScore) {
       best = entry
@@ -57,4 +54,27 @@ export function bestMatch(detection, catalog) {
     }
   }
   return bestScore >= 0.6 ? { entry: best, score: bestScore } : null
+}
+
+// The best catalog row for one detection, or null when nothing
+// is close enough to suggest (the detection is then offered as
+// a manual add under its printed title).
+//
+// The platform guess is decisive, not a tiebreaker: when the
+// vision pass names a real platform, only that platform's rows
+// may match. Story titles repeat across shelves by design —
+// "Elmo Goes to School" is a picture book AND a Dream Machine
+// cartridge — and a cross-platform title match used to offer
+// the book as a confident hit for the cartridge in the photo.
+// A wrong-platform "found in the catalog" is worse than an
+// honest not-in-the-catalog: it files the wrong product on the
+// child's shelf. Detections with no platform ('other') still
+// search the whole catalog.
+export function bestMatch(detection, catalog) {
+  const rows = catalog ?? []
+  const dp = detection?.platform
+  if (dp && dp !== 'other') {
+    return pickBest(detection, rows.filter((e) => e.platform === dp))
+  }
+  return pickBest(detection, rows)
 }
