@@ -9,7 +9,7 @@ import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
-import { CATALOG_LANGUAGES, languageLabel, languageVisible } from '../lib/language'
+import { CATALOG_LANGUAGES, languageLabel, languagesVisible, normalizePrefs } from '../lib/language'
 import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
 import BundleNote from './BundleNote'
 import PlatformGrid from './PlatformGrid'
@@ -74,7 +74,11 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Shopping theme (lib/themes): what the parent is shopping
   // FOR — puzzles, STEM, pretend play — across every shelf.
   const [theme, setTheme] = useState('all')
-  const [language, setLanguage] = useState('all')
+  const [languages, setLanguages] = useState([])
+  const toggleLanguage = (k) =>
+    setLanguages((prev) =>
+      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]
+    )
   // Sub-category inside the projector platform: Moonlite vs Dream
   // Machine (lib/projector.js). Reset whenever the platform changes.
   const [subBrand, setSubBrand] = useState('all')
@@ -178,10 +182,10 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     load()
   }, [load])
 
-  // The parent's saved language preference seeds the language
-  // filter — an English-preference parent lands on English
-  // only (plus bilingual), per the owner's rule. They can
-  // still widen it to All languages here.
+  // The parent's saved language set seeds the language
+  // filter — an English-only parent lands on English (plus
+  // bilingual), per the owner's rule. Chips toggle freely
+  // from there.
   const langSeeded = useRef(false)
   useEffect(() => {
     if (langSeeded.current) return
@@ -191,8 +195,10 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       .select('language_pref')
       .eq('id', user.id)
       .then(({ data }) => {
-        const pref = Array.isArray(data) ? data[0]?.language_pref : data?.language_pref
-        if (pref && pref !== 'all') setLanguage(pref)
+        const prefs = normalizePrefs(
+          Array.isArray(data) ? data[0]?.language_pref : data?.language_pref
+        )
+        if (prefs.length) setLanguages(prefs)
       })
   }, [user.id])
 
@@ -203,7 +209,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Any change to what could be visible starts back at page 1.
   useEffect(() => {
     setPage(1)
-  }, [platform, category, theme, language, ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
+  }, [platform, category, theme, languages.join(','), ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Sam having Bluey doesn't
@@ -400,7 +406,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
       (devicesOnly || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
-      (devicesOnly || languageVisible(c.language, language)) &&
+      (devicesOnly || languagesVisible(c.language, languages)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -662,23 +668,28 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         id="language"
         label="Language"
         summary={
-          language === 'all' ? 'All languages' : languageLabel(language)
+          languages.length === 0
+            ? 'All languages'
+            : languages.length === 1
+              ? languageLabel(languages[0])
+              : `${languages.length} languages`
         }
         open={isSectionOpen('language')}
         onToggle={toggleSection}
       >
         <div className="tabs" aria-label="Language">
           <button
-            className={language === 'all' ? 'active' : ''}
-            onClick={() => setLanguage('all')}
+            className={languages.length === 0 ? 'active' : ''}
+            onClick={() => setLanguages([])}
           >
             All languages
           </button>
           {languagesPresent.map((l) => (
             <button
               key={l.key}
-              className={language === l.key ? 'active' : ''}
-              onClick={() => setLanguage(l.key)}
+              className={languages.includes(l.key) ? 'active' : ''}
+              onClick={() => toggleLanguage(l.key)}
+              aria-pressed={languages.includes(l.key)}
             >
               {l.flag} {l.label} ({languageCount(l.key)})
             </button>

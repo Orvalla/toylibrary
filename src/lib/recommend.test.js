@@ -90,14 +90,18 @@ describe('language preference (owner request 2026-10-23)', () => {
   const langBase = { ...base, catalog: langCatalog }
 
   it('an English preference never recommends other languages', () => {
-    const recs = recommendForChild({ ...langBase, languagePref: 'en' })
+    const recs = recommendForChild({ ...langBase, languagePref: ['en'] })
     expect(recs.map((r) => r.id)).toEqual(['e1', 'm1'])
   })
 
-  it('a Spanish preference floats Spanish and bilingual first', () => {
-    const recs = recommendForChild({ ...langBase, languagePref: 'es' })
-    expect(recs[0].id).toBe('s1')
-    expect(recs.map((r) => r.id)).toContain('e1') // others stay reachable
+  it('a Spanish preference is strict too', () => {
+    const recs = recommendForChild({ ...langBase, languagePref: ['es'] })
+    expect(recs.map((r) => r.id)).toEqual(['s1', 'm1'])
+  })
+
+  it('multiple languages admit each of them, plus bilingual', () => {
+    const recs = recommendForChild({ ...langBase, languagePref: ['en', 'es'] })
+    expect(recs.map((r) => r.id)).toEqual(['e1', 's1', 'm1'])
   })
 
   it('no preference leaves language alone', () => {

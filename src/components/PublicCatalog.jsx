@@ -8,7 +8,7 @@ import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
-import { CATALOG_LANGUAGES, languageLabel, languageVisible } from '../lib/language'
+import { CATALOG_LANGUAGES, languageLabel, languagesVisible } from '../lib/language'
 import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
 import PlatformGrid from './PlatformGrid'
 import { FilterSection } from './CatalogBrowser'
@@ -40,7 +40,11 @@ export default function PublicCatalog({ devicesOnly = false }) {
   )
   const [category, setCategory] = useState('all')
   const [theme, setTheme] = useState('all')
-  const [language, setLanguage] = useState('all')
+  const [languages, setLanguages] = useState([])
+  const toggleLanguage = (k) =>
+    setLanguages((prev) =>
+      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]
+    )
   const [subBrand, setSubBrand] = useState('all')
   const [ageBand, setAgeBand] = useState(
     () => new URLSearchParams(window.location.search).get('age') ?? 'all'
@@ -148,7 +152,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (devicesOnly || category === 'all' || categoryOf(c) === category) &&
       (devicesOnly || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
-      (devicesOnly || languageVisible(c.language, language)) &&
+      (devicesOnly || languagesVisible(c.language, languages)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -380,23 +384,28 @@ export default function PublicCatalog({ devicesOnly = false }) {
           id="language"
           label="Language"
           summary={
-            language === 'all' ? 'All languages' : languageLabel(language)
+            languages.length === 0
+              ? 'All languages'
+              : languages.length === 1
+                ? languageLabel(languages[0])
+                : `${languages.length} languages`
           }
           open={isSectionOpen('language')}
           onToggle={toggleSection}
         >
           <div className="tabs" aria-label="Language">
             <button
-              className={language === 'all' ? 'active' : ''}
-              onClick={() => setLanguage('all')}
+              className={languages.length === 0 ? 'active' : ''}
+              onClick={() => setLanguages([])}
             >
               All languages
             </button>
             {languagesPresent.map((l) => (
               <button
                 key={l.key}
-                className={language === l.key ? 'active' : ''}
-                onClick={() => setLanguage(l.key)}
+                className={languages.includes(l.key) ? 'active' : ''}
+                onClick={() => toggleLanguage(l.key)}
+                aria-pressed={languages.includes(l.key)}
               >
                 {l.flag} {l.label} ({languageCount(l.key)})
               </button>

@@ -179,14 +179,12 @@ export function recommendForChild({
     // exclusion shapes the shortlist.)
     if (age != null && entry.age_min_years != null && entry.age_min_years > age + windowYears)
       continue
-    // Language preference (owner's rule, 2026-10-23): an
-    // English preference is strict — books and stories in other
-    // languages are never recommended, since the family can't
-    // read them (bilingual editions still count, they work in
-    // both). Other preferences are not exclusions — those
-    // shelves are still growing — but matching-language items
-    // get a strong boost in the scoring below.
-    if (languagePref === 'en' && !languageFitsPref(entry.language, 'en')) continue
+    // Language preference (owner's rule, 2026-10-23): the
+    // family's chosen language SET is strict — books and
+    // stories in other languages are never recommended, since
+    // the family can't read them. Bilingual editions still
+    // count; they work in both. No set chosen = no rule.
+    if (!languageFitsPref(entry.language, languagePref)) continue
     const k = itemKey(entry.platform, entry.title)
     if (ownedKeys?.has(k) || wishlistKeys?.has(k)) continue
     const text = `${entry.title} ${entry.details ?? ''}`
@@ -197,13 +195,7 @@ export function recommendForChild({
     }
     if (entry.platform === 'books' && bookAgeFit(entry.details, age)) score += 2
     if (ageFits(entry, age)) score += 2
-    if (
-      languagePref &&
-      languagePref !== 'all' &&
-      languagePref !== 'en' &&
-      languageFitsPref(entry.language, languagePref)
-    )
-      score += 4
+
     if (entry.is_bundle) score += 1
     scored.push({ entry, score })
   }
