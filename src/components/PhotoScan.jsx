@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
-import { itemKey } from '../lib/bundles'
+import { cascadeContentRows, indexCatalog, indexContents, itemKey } from '../lib/bundles'
 import { bestMatch } from '../lib/photoMatch'
 import { fileToDataUrl } from '../lib/photoImage'
 import { createBookResolver, createProductImageFetcher } from '../lib/productImage'
@@ -14,7 +14,7 @@ import { createBookResolver, createProductImageFetcher } from '../lib/productIma
 // the catalog, and the parent confirms before anything lands on
 // the have list. Nothing is added without the confirm tap —
 // vision guesses are good, not perfect.
-export default function PhotoScan({ kids, catalogRows, items, initialChildId, onAdded }) {
+export default function PhotoScan({ kids, catalogRows, bundleRows, items, initialChildId, onAdded }) {
   const { user } = useAuth()
   const [file, setFile] = useState(null)
   const [targetChild, setTargetChild] = useState(initialChildId ?? '')
@@ -71,6 +71,26 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
   const targetName = targetChild
     ? (kids.find((k) => k.id === targetChild)?.name ?? 'your child')
     : 'the family'
+
+  // Bundle maps for the review list: which catalog rows live
+  // inside which bundles. A photographed cartridge usually
+  // means the whole pack is on the shelf (parents buy the
+  // 3-pack, then photograph one cartridge), so a content
+  // match earns a "whole pack" suggestion row below.
+  const contentsByBundle = useMemo(() => indexContents(bundleRows ?? []), [bundleRows])
+  const { byId: catalogById } = useMemo(() => indexCatalog(catalogRows ?? []), [catalogRows])
+  const bundlesByContent = useMemo(() => {
+    const map = new Map()
+    for (const [bundleId, contentIds] of contentsByBundle) {
+      const bundle = catalogById.get(bundleId)
+      if (!bundle) continue
+      for (const cid of contentIds) {
+        if (!map.has(cid)) map.set(cid, [])
+        map.get(cid).push(bundle)
+      }
+    }
+    return map
+  }, [contentsByBundle, catalogById])
 
   // Have-list keys for the target bucket — a child bucket also
   // counts family-shared items as owned (same rule as bundles).
@@ -132,12 +152,46 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
         : ownedHaveKeys.has(itemKey(detection.platform, detection.title))
       return { detection, match, owned, include: !owned, fetchedImage: '', resolution: null }
     })
+    // Whole-pack suggestions: a matched item that lives
+    // inside a bundle earns a suggestion row for the bundle
+    // itself — one photographed cartridge usually means the
+    // whole pack is on the shelf. Skipped when the bundle is
+    // already owned, already suggested, or itself matched in
+    // this same scan (its own row covers it).
+    const matchedBundleIds = new Set(
+      built.filter((r) => r.match?.entry.is_bundle).map((r) => r.match.entry.id)
+    )
+    const suggestedIds = new Set()
+    const suggestions = []
+    for (const r of built) {
+      if (!r.match || r.match.entry.is_bundle || r.owned) continue
+      for (const bundle of bundlesByContent.get(r.match.entry.id) ?? []) {
+        if (matchedBundleIds.has(bundle.id) || suggestedIds.has(bundle.id)) continue
+        if (ownedHaveKeys.has(itemKey(bundle.platform, bundle.title))) continue
+        suggestedIds.add(bundle.id)
+        suggestions.push({
+          detection: r.detection,
+          match: null,
+          suggestion: bundle,
+          viaTitle: r.match.entry.title,
+          owned: false,
+          include: true,
+          fetchedImage: '',
+          resolution: null,
+        })
+      }
+    }
     // Multi-shelf: review rows accumulate across scans, so a
     // whole bookcase can be worked through photo by photo.
     // A title already in the review list isn't added twice.
     setRows((prev) => {
       const seen = new Set(prev.map((r) => lookupKey(r.detection)))
-      return [...prev, ...built.filter((r) => !seen.has(lookupKey(r.detection)))]
+      const prevBundles = new Set(prev.filter((r) => r.suggestion).map((r) => r.suggestion.id))
+      return [
+        ...prev,
+        ...built.filter((r) => !seen.has(lookupKey(r.detection))),
+        ...suggestions.filter((s) => !prevBundles.has(s.suggestion.id)),
+      ]
     })
     // Start the product-picture hunt for unmatched detections
     // right away; results patch into the review rows as they land.
@@ -182,7 +236,68 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
     setError('')
     const added = []
     let skipped = 0
+    const insertedKeys = new Set()
+    const insertRow = async (payload) => {
+      const { data, error: insError } = await supabase
+        .from('items')
+        .insert(payload)
+        .select()
+        .single()
+      if (insError || !data) return false
+      added.push(data)
+      insertedKeys.add(itemKey(payload.platform, payload.title))
+      return true
+    }
+    // A catalog entry — a direct match or a suggested bundle:
+    // insert it, and when it's a bundle cascade its contents.
+    // Owning the pack means owning every cartridge in it, so
+    // the contents land on the have list too (the same rule as
+    // adding a bundle from the catalog).
+    const addCatalogEntry = async (entry) => {
+      if (insertedKeys.has(itemKey(entry.platform, entry.title))) return
+      const ok = await insertRow({
+        owner_id: user.id,
+        list_type: 'have',
+        platform: entry.platform,
+        title: entry.title,
+        details: entry.details ?? '',
+        notes: '',
+        image_url: entry.image_url ?? '',
+        asin: entry.asin ?? null,
+        product_url: entry.product_url ?? null,
+        child_id: targetChild || null,
+      })
+      if (!ok) {
+        skipped++
+        return
+      }
+      if (entry.is_bundle) {
+        const ownedNow = new Set([...ownedHaveKeys, ...insertedKeys])
+        const cascaded = cascadeContentRows({
+          entry,
+          contentsByBundle,
+          catalogById,
+          ownedKeys: ownedNow,
+          ownerId: user.id,
+          childId: targetChild || null,
+        })
+        for (const c of cascaded) {
+          if (!(await insertRow(c))) skipped++
+        }
+      }
+    }
     for (const r of chosen) {
+      if (r.suggestion) {
+        await addCatalogEntry(r.suggestion)
+        continue
+      }
+      if (r.match) {
+        await addCatalogEntry(r.match.entry)
+        continue
+      }
+      // A single whose pack was accepted above is already on
+      // the list via the cascade — don't add it twice.
+      if (insertedKeys.has(itemKey(r.detection.platform, r.detection.title))) continue
       // Unmatched detections use the fetched product picture
       // (await the scan-time lookup if it's still in flight).
       // Never the parent's photo — '' falls back to tile art.
@@ -242,13 +357,7 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
             image_url: fetchedImage,
             child_id: targetChild || null,
           }
-      const { data, error: insError } = await supabase
-        .from('items')
-        .insert(payload)
-        .select()
-        .single()
-      if (insError) skipped++
-      else if (data) added.push(data)
+      if (!(await insertRow(payload))) skipped++
     }
     if (added.length) onAdded(added)
     setNote(
@@ -321,9 +430,17 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
         <>
           <ul className="scan-list">
             {rows.map((r, idx) => {
-              const title = r.match ? r.match.entry.title : r.detection.title
-              const platform = r.match ? r.match.entry.platform : r.detection.platform
-              const img = r.match?.entry.image_url || r.fetchedImage
+              const title = r.suggestion
+                ? r.suggestion.title
+                : r.match
+                  ? r.match.entry.title
+                  : r.detection.title
+              const platform = r.suggestion
+                ? r.suggestion.platform
+                : r.match
+                  ? r.match.entry.platform
+                  : r.detection.platform
+              const img = r.suggestion?.image_url || r.match?.entry.image_url || r.fetchedImage
               return (
                 <li key={idx} className="scan-row">
                   <input
@@ -347,14 +464,16 @@ export default function PhotoScan({ kids, catalogRows, items, initialChildId, on
                     <span className="notes">
                       {' '}
                       {platformLabel(platform)}
-                      {r.match
-                        ? ' · found in the catalog'
-                        : r.resolution
-                          ? ' · new to the catalog — will be added there too'
-                          : r.fetchedImage
-                            ? ' · not in the catalog — product picture found'
-                            : ' · not in the catalog'}
-                      {r.detection.confidence
+                      {r.suggestion
+                        ? ` · 📦 whole pack — “${r.viaTitle}” comes in this collection, so the pack is probably on the shelf too. Adding it adds all its stories.`
+                        : r.match
+                          ? ' · found in the catalog'
+                          : r.resolution
+                            ? ' · new to the catalog — will be added there too'
+                            : r.fetchedImage
+                              ? ' · not in the catalog — product picture found'
+                              : ' · not in the catalog'}
+                      {!r.suggestion && r.detection.confidence
                         ? ` · ${Math.round(r.detection.confidence * 100)}% sure`
                         : ''}
                     </span>

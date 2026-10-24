@@ -526,6 +526,7 @@ export default function DashboardPage() {
       <PhotoScan
         kids={kids}
         catalogRows={catalogRows}
+        bundleRows={bundleRows}
         items={items}
         initialChildId={form.child_id}
         onAdded={(rows) => setItems((prev) => [...prev, ...rows])}

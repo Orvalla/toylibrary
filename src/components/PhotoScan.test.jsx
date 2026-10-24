@@ -176,6 +176,83 @@ describe('PhotoScan', () => {
   })
 })
 
+describe('PhotoScan — bundle suggestions', () => {
+  const BUNDLE_CATALOG = [
+    { id: 'b1', platform: 'projector', title: 'Sesame Street Collection', details: 'Dream Machine story collection', image_url: 'https://img/pack.png', asin: null, is_bundle: true },
+    { id: 's1', platform: 'projector', title: 'Sesame Street: Elmo Goes to School!', details: 'Dream Machine story cartridge', image_url: 'https://img/elmo.png', asin: null },
+    { id: 's2', platform: 'projector', title: 'Sesame Street: My First Pet', details: 'Dream Machine story cartridge', image_url: 'https://img/pet.png', asin: null },
+    { id: 's3', platform: 'projector', title: 'Sesame Street: Counting All Around', details: 'Dream Machine story cartridge', image_url: 'https://img/count.png', asin: null },
+  ]
+  const BUNDLE_ROWS = [
+    { bundle_id: 'b1', content_id: 's1' },
+    { bundle_id: 'b1', content_id: 's2' },
+    { bundle_id: 'b1', content_id: 's3' },
+  ]
+  const bundleProps = { ...baseProps, catalogRows: BUNDLE_CATALOG, bundleRows: BUNDLE_ROWS }
+
+  function mockDetection(title) {
+    invoke.mockResolvedValue({
+      data: { configured: true, items: [{ title, platform: 'projector', confidence: 0.9 }], scansLeft: 9 },
+      error: null,
+    })
+  }
+
+  it('suggests the whole pack for a photographed cartridge and cascades it', async () => {
+    inserted.length = 0
+    mockDetection('Sesame Street: Elmo Goes to School!')
+    const { container } = render(
+      <AuthProvider>
+        <Harness {...bundleProps} />
+      </AuthProvider>
+    )
+    await pickPhotoAndScan(container)
+    // The cartridge row plus a pre-checked whole-pack suggestion.
+    expect(await screen.findByText(/whole pack/)).toBeInTheDocument()
+    const suggestionBox = screen.getByRole('checkbox', { name: /Sesame Street Collection/ })
+    expect(suggestionBox).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: /Add 2 to/ }))
+    expect(await screen.findByText(/Added 4 items to Sam/)).toBeInTheDocument()
+    const titles = inserted.map((p) => p.title).sort()
+    expect(titles).toEqual([
+      'Sesame Street Collection',
+      'Sesame Street: Counting All Around',
+      'Sesame Street: Elmo Goes to School!',
+      'Sesame Street: My First Pet',
+    ])
+  })
+
+  it('adds only the single cartridge when the pack suggestion is declined', async () => {
+    inserted.length = 0
+    mockDetection('Sesame Street: Elmo Goes to School!')
+    const { container } = render(
+      <AuthProvider>
+        <Harness {...bundleProps} />
+      </AuthProvider>
+    )
+    await pickPhotoAndScan(container)
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Sesame Street Collection/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Add 1 to/ }))
+    expect(await screen.findByText(/Added 1 item to Sam/)).toBeInTheDocument()
+    expect(inserted.map((p) => p.title)).toEqual(['Sesame Street: Elmo Goes to School!'])
+  })
+
+  it('cascades the contents when the pack itself is photographed', async () => {
+    inserted.length = 0
+    mockDetection('Sesame Street Collection')
+    const { container } = render(
+      <AuthProvider>
+        <Harness {...bundleProps} />
+      </AuthProvider>
+    )
+    await pickPhotoAndScan(container)
+    expect(await screen.findByText('found in the catalog', { exact: false })).toBeInTheDocument()
+    expect(screen.queryByText(/whole pack/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Add 1 to/ }))
+    expect(await screen.findByText(/Added 4 items to Sam/)).toBeInTheDocument()
+    expect(inserted).toHaveLength(4)
+  })
+})
+
 describe('PhotoScan — bookshelf upgrade', () => {
   it('resolves an unknown book on Open Library and catalogues it when added', async () => {
     inserted.length = 0
