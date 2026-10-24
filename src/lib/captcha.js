@@ -12,7 +12,7 @@
 // side must only be switched on (Auth → captcha settings) AFTER
 // a build carrying the real key is live, or every login breaks.
 
-export const TURNSTILE_SITE_KEY = ''
+export const TURNSTILE_SITE_KEY = '0x4AAAAAAFjdeLKnTVPYkhrg'
 
 export const TURNSTILE_SCRIPT_URL =
   'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'

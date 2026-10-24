@@ -11,10 +11,11 @@ describe('captcha lib', () => {
     vi.resetModules()
   })
 
-  it('reports unconfigured while the site key is empty', async () => {
+  it('carries the live Turnstile site key', async () => {
     const { TURNSTILE_SITE_KEY, captchaConfigured } = await import('./captcha')
-    expect(TURNSTILE_SITE_KEY).toBe('')
-    expect(captchaConfigured()).toBe(false)
+    // Turnstile site keys are public and start with 0x4.
+    expect(TURNSTILE_SITE_KEY).toMatch(/^0x4/)
+    expect(captchaConfigured()).toBe(true)
   })
 
   it('resolves immediately when the API object is already present', async () => {
