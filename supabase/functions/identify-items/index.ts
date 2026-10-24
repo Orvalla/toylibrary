@@ -128,7 +128,8 @@ STORY TOYS:
 - Storypod audio figures and cards, Lunii story packs, Osmo games
 
 STORY CARTRIDGES — read the FORM of the object, not just its title:
-- Little Tikes Story Dream Machine cartridges look like chunky little PLASTIC books: a thick rigid body and a small square window/hole near the top of the cover. Sesame Street, Eric Carle and Little Golden Book titles are common. A Dream Machine cartridge is platform "projector" — NEVER "books", however book-like it looks. The same story usually also exists as a paper book; what decides the platform is the object in the photo: plastic cartridge with a window = projector, paper = books.
+- Little Tikes Story Dream Machine cartridges look like chunky little PLASTIC books: a thick rigid body and a small square window/hole near the top of the cover. Sesame Street, Eric Carle and Little Golden Book titles are common. A Dream Machine cartridge is platform "projector" — NEVER "books", however book-like it looks, and never "storypod" either (see below). The same story usually also exists as a paper book; what decides the platform is the object in the photo: plastic cartridge with a window = projector, paper = books.
+- They are also NOT Storypod: Storypod items are thin trading-card-sized cards and small soft audio figures (Crafties) — never thick, book-shaped objects. If it is book-shaped plastic with a window, it is a Dream Machine cartridge (projector), full stop.
 - Moonlite story discs and reels (small round discs, usually pictured on their packaging) are platform "projector" too.
 
 Rules: one entry per physical product (a product appearing twice is listed once); use the title as printed when legible, otherwise the character/franchise name; do not list generic toys, furniture, people, or the storage/shelf itself; if you cannot identify any products, return an empty list.

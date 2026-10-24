@@ -70,11 +70,18 @@ function pickBest(detection, rows) {
 // honest not-in-the-catalog: it files the wrong product on the
 // child's shelf. Detections with no platform ('other') still
 // search the whole catalog.
+//
+// One exception, by design: rows that carry NO platform at
+// all stay eligible. bestMatch is also the scorer for
+// candidate lists that aren't catalog rows — Open Library
+// search docs have no platform field, and confining those to
+// the detection's shelf would empty the list and break book
+// cover lookups.
 export function bestMatch(detection, catalog) {
   const rows = catalog ?? []
   const dp = detection?.platform
   if (dp && dp !== 'other') {
-    return pickBest(detection, rows.filter((e) => e.platform === dp))
+    return pickBest(detection, rows.filter((e) => !e.platform || e.platform === dp))
   }
   return pickBest(detection, rows)
 }

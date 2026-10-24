@@ -89,4 +89,10 @@ describe('bestMatch', () => {
     const m = bestMatch({ title: 'Goodnight Moon', platform: 'other', confidence: 0.8 }, catalog)
     expect(m?.entry.id).toBe('c5')
   })
+
+  it('rows with no platform of their own stay eligible (Open Library docs)', () => {
+    const docs = [{ id: 'ol1', title: 'The Very Hungry Caterpillar', cover_i: 42 }]
+    const m = bestMatch({ title: 'The Very Hungry Caterpillar', platform: 'books' }, docs)
+    expect(m?.entry.id).toBe('ol1')
+  })
 })
