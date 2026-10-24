@@ -12,7 +12,7 @@ import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
 import { CATALOG_LANGUAGES, languageLabel, languagesVisible } from '../lib/language'
-import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
+import { PROJECTOR_BRANDS, isDevicesPageRow, projectorBrandOf } from '../lib/projector'
 import PlatformGrid from './PlatformGrid'
 import { FilterSection } from './CatalogBrowser'
 import { amazonUrlFor } from '../lib/amazon'
@@ -135,7 +135,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   if (loading) return <main className="page"><p>Loading the catalog…</p></main>
 
-  const baseAll = devicesOnly ? catalog.filter((c) => c.item_type === 'device') : catalog
+  const baseAll = devicesOnly ? catalog.filter(isDevicesPageRow) : catalog
   const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
   const kindCounts = { all: baseAll.length }
   for (const c of baseAll) {
@@ -258,8 +258,9 @@ export default function PublicCatalog({ devicesOnly = false }) {
         <>
           <h1>The devices</h1>
           <p className="lede">
-            The players themselves — a Toniebox, a Yoto Player, a LeapPad — with the
-            links to buy each one. No account needed to look around.
+            The players themselves — a Toniebox, a Yoto Player, a LeapPad — plus
+            every story collection for the storybook projectors, with the links to
+            buy each one. No account needed to look around.
           </p>
         </>
       ) : (

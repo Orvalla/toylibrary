@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { projectorBrandOf, projectorGroups } from './projector'
+import { isDevicesPageRow, projectorBrandOf, projectorGroups } from './projector'
 
 const p = (title, details) => ({ platform: 'projector', title, details })
 
@@ -26,6 +26,26 @@ describe('projectorBrandOf', () => {
     expect(projectorBrandOf({ platform: 'tonies', title: 'Story reel', details: '' })).toBeNull()
     expect(projectorBrandOf(p('My homemade projector story', 'Scanned at home'))).toBeNull()
     expect(projectorBrandOf(null)).toBeNull()
+  })
+})
+
+describe('isDevicesPageRow', () => {
+  it('includes every player and the projectors’ bundles', () => {
+    expect(isDevicesPageRow({ platform: 'tonies', item_type: 'device', is_bundle: false })).toBe(true)
+    expect(
+      isDevicesPageRow({ platform: 'projector', item_type: 'content', is_bundle: true })
+    ).toBe(true)
+    // The Dream Machine itself is a device AND (as the starter
+    // set) a bundle — one row, shown once.
+    expect(isDevicesPageRow({ platform: 'projector', item_type: 'device', is_bundle: true })).toBe(true)
+  })
+
+  it('leaves loose content — singles, reels, other platforms’ bundles — in the catalog', () => {
+    expect(
+      isDevicesPageRow({ platform: 'projector', item_type: 'content', is_bundle: false })
+    ).toBe(false)
+    expect(isDevicesPageRow({ platform: 'tonies', item_type: 'content', is_bundle: true })).toBe(false)
+    expect(isDevicesPageRow(null)).toBe(false)
   })
 })
 

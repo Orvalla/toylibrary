@@ -13,7 +13,7 @@ import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
 import { CATALOG_LANGUAGES, languageLabel, languagesVisible, normalizePrefs } from '../lib/language'
-import { PROJECTOR_BRANDS, projectorBrandOf } from '../lib/projector'
+import { PROJECTOR_BRANDS, isDevicesPageRow, projectorBrandOf } from '../lib/projector'
 import BundleNote from './BundleNote'
 import PlatformGrid from './PlatformGrid'
 import {
@@ -375,14 +375,13 @@ export default function CatalogBrowser({ devicesOnly = false }) {
 
   if (loading) return <main className="page"><p>Loading the catalog…</p></main>
 
-  // The devices page is just the catalog narrowed to the players
-  // themselves; rows from before migration 0010 have no item_type
-  // and count as content. The kind (main shelf) narrows further —
+  // The devices page is the catalog narrowed to the players
+  // themselves plus the storybook projectors' bundles (see
+  // isDevicesPageRow); rows from before migration 0010 have no
+  // item_type and count as content. The kind (main shelf) narrows further —
   // and because the brand chips derive from base, they can only
   // offer brands the chosen shelf actually has.
-  const baseAll = devicesOnly
-    ? catalog.filter((c) => c.item_type === 'device')
-    : catalog
+  const baseAll = devicesOnly ? catalog.filter(isDevicesPageRow) : catalog
   const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
   const kindCounts = { all: baseAll.length }
   for (const c of baseAll) {
@@ -531,9 +530,10 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         <>
           <h1>The devices</h1>
           <p className="lede">
-            The players themselves — a Toniebox, a Yoto Player, a LeapPad. Mark the
-            ones you already own so nobody gifts you a second, or wishlist the one
-            you're saving up for.
+            The players themselves — a Toniebox, a Yoto Player, a LeapPad — plus
+            every story collection for the storybook projectors. Mark the ones you
+            already own so nobody gifts you a second, or wishlist the one you're
+            saving up for.
           </p>
         </>
       ) : (

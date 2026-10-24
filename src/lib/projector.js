@@ -24,6 +24,17 @@ export function projectorBrand(key) {
   return PROJECTOR_BRANDS.find((b) => b.key === key) ?? null
 }
 
+// What belongs on the devices page: the players themselves,
+// plus the storybook projectors' bundles. A Dream Machine is
+// bought as a system — machine plus story collections — so
+// its collections and starter packs (and Moonlite's bundle
+// sets) sit beside the players there. Loose singles and reels
+// stay in the main catalog.
+export function isDevicesPageRow(item) {
+  if (!item) return false
+  return item.item_type === 'device' || (item.platform === 'projector' && !!item.is_bundle)
+}
+
 // Ordered sub-groups for section rendering: Moonlite first, then
 // Dream Machine, then anything unbranded (a hand-added item whose
 // wording names neither system) with no heading of its own.
