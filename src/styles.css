@@ -416,6 +416,30 @@ a { color: var(--accent-dark); }
 .support-shot img { width: 100%; border: 1px solid var(--line); border-radius: 10px; display: block; }
 .support-shot figcaption { font-size: 13px; color: #8b87ad; margin-top: 6px; }
 
+/* The main shelves (lib/kinds): big kind buttons above the
+   brand chips — Books / Board games / Story devices / Toys. */
+.kind-bar {
+  display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 6px;
+}
+.kind-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: #fff; color: var(--ink); cursor: pointer;
+  border: 2.5px solid var(--line); border-radius: 18px;
+  padding: 11px 18px;
+  font-family: Fredoka, sans-serif; font-weight: 600; font-size: 18px;
+  box-shadow: 0 3px 0 var(--line);
+}
+.kind-btn .kind-emoji { font-size: 22px; }
+.kind-btn .kind-count {
+  background: var(--soft); color: var(--ink-soft);
+  border-radius: 999px; padding: 1px 9px; font-size: 14px; font-weight: 800;
+}
+.kind-btn.active {
+  background: var(--accent); border-color: var(--accent-dark); color: #fff;
+  box-shadow: 0 3px 0 var(--accent-dark);
+}
+.kind-btn.active .kind-count { background: var(--sun); color: var(--ink); }
+
 /* Gift basket (public share page): a floating pill with the
    running total, a desktop rail of thumbnails when closed,
    and the full pane (below) when open. "Basket", not "cart",

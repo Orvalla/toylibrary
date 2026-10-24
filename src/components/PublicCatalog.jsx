@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { fetchCatalog } from '../lib/catalogFetch'
+import { inKind, kindOf } from '../lib/kinds'
+import KindBar from './KindBar'
 import ItemTile from './ItemTile'
 import AmazonLink from './AmazonLink'
 import ManufacturerLink from './ManufacturerLink'
@@ -39,6 +41,11 @@ export default function PublicCatalog({ devicesOnly = false }) {
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [platform, setPlatform] = useState(
     () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
+  )
+  // The main shelf (lib/kinds), mirroring the signed-in
+  // browser; the header's Board games link lands as ?kind=games.
+  const [kind, setKind] = useState(
+    () => new URLSearchParams(window.location.search).get('kind') ?? 'all'
   )
   const [category, setCategory] = useState('all')
   const [theme, setTheme] = useState('all')
@@ -94,7 +101,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   useEffect(() => {
     setPage(1)
-  }, [platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly])
+  }, [kind, platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly])
 
   const sectionDefaultOpen = (id) => {
     switch (id) {
@@ -128,7 +135,17 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   if (loading) return <main className="page"><p>Loading the catalog…</p></main>
 
-  const base = devicesOnly ? catalog.filter((c) => c.item_type === 'device') : catalog
+  const baseAll = devicesOnly ? catalog.filter((c) => c.item_type === 'device') : catalog
+  const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
+  const kindCounts = { all: baseAll.length }
+  for (const c of baseAll) {
+    const k = kindOf(c)
+    kindCounts[k] = (kindCounts[k] ?? 0) + 1
+  }
+  const pickKind = (k) => {
+    setKind(k)
+    setPlatform('all')
+  }
   const categoriesPresent = CATEGORIES.filter((cat) => base.some((c) => categoryOf(c) === cat))
   const themeCount = (k) =>
     base.reduce((n, c) => n + ((themeMap.get(c.id) ?? []).includes(k) ? 1 : 0), 0)
@@ -254,6 +271,8 @@ export default function PublicCatalog({ devicesOnly = false }) {
           </p>
         </>
       )}
+
+      {!devicesOnly && <KindBar counts={kindCounts} value={kind} onChange={pickKind} />}
 
       <section className="card guest-banner">
         <p>

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { fetchCatalog } from '../lib/catalogFetch'
+import { inKind, kindOf } from '../lib/kinds'
+import KindBar from './KindBar'
 import { useAuth } from '../lib/auth'
 import ItemTile, { OwnedBadge } from './ItemTile'
 import AmazonLink from './AmazonLink'
@@ -70,6 +72,12 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // The setup wizard links here per shelf (/catalog?platform=tonies).
   const [platform, setPlatform] = useState(
     () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
+  )
+  // The main shelf (lib/kinds): Books / Board games / Story
+  // devices / Toys & play, chosen above the brand chips. The
+  // header's Board games link lands here as ?kind=games.
+  const [kind, setKind] = useState(
+    () => new URLSearchParams(window.location.search).get('kind') ?? 'all'
   )
   const [category, setCategory] = useState('all')
   // Shopping theme (lib/themes): what the parent is shopping
@@ -202,7 +210,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Any change to what could be visible starts back at page 1.
   useEffect(() => {
     setPage(1)
-  }, [platform, category, theme, languages.join(','), ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
+  }, [kind, platform, category, theme, languages.join(','), ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Sam having Bluey doesn't
@@ -369,10 +377,22 @@ export default function CatalogBrowser({ devicesOnly = false }) {
 
   // The devices page is just the catalog narrowed to the players
   // themselves; rows from before migration 0010 have no item_type
-  // and count as content.
-  const base = devicesOnly
+  // and count as content. The kind (main shelf) narrows further —
+  // and because the brand chips derive from base, they can only
+  // offer brands the chosen shelf actually has.
+  const baseAll = devicesOnly
     ? catalog.filter((c) => c.item_type === 'device')
     : catalog
+  const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
+  const kindCounts = { all: baseAll.length }
+  for (const c of baseAll) {
+    const k = kindOf(c)
+    kindCounts[k] = (kindCounts[k] ?? 0) + 1
+  }
+  const pickKind = (k) => {
+    setKind(k)
+    setPlatform('all')
+  }
   const categoriesPresent = CATEGORIES.filter((cat) => base.some((c) => categoryOf(c) === cat))
   const themeCount = (k) =>
     base.reduce((n, c) => n + ((themeMap.get(c.id) ?? []).includes(k) ? 1 : 0), 0)
@@ -525,6 +545,8 @@ export default function CatalogBrowser({ devicesOnly = false }) {
           </p>
         </>
       )}
+
+      {!devicesOnly && <KindBar counts={kindCounts} value={kind} onChange={pickKind} />}
 
       {kids.length > 0 && (
         <form className="form" onSubmit={(e) => e.preventDefault()}>
