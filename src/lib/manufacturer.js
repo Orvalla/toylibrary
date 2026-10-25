@@ -73,6 +73,12 @@ const SITE_NAMES = {
   'unclegoose.com': 'Uncle Goose',
   'www.crayola.com': 'Crayola',
   'www.djeco.com': 'Djeco',
+  'store.stonemaiergames.com': 'Stonemaier Games',
+  'stonemaiergames.com': 'Stonemaier Games',
+  'shop.greaterthangames.com': 'Greater Than Games',
+  'greaterthangames.com': 'Greater Than Games',
+  'www.alderac.com': 'AEG',
+  'alderac.com': 'AEG',
 }
 
 export function siteNameForUrl(rawUrl) {

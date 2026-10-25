@@ -69,6 +69,9 @@ describe('platforms', () => {
       'unclegoose',
       'crayola',
       'djeco',
+      'stonemaier',
+      'greaterthangames',
+      'aeg',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {
