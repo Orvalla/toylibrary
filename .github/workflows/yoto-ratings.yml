@@ -1,0 +1,32 @@
+name: Yoto ratings (Trustpilot spec)
+
+# The §8.1 migration's full pass: rate every unrated Yoto row
+# through the learned Trustpilot spec (ingestor/specs/
+# yoto-trustpilot-rating.json) via the yoto branch of
+# backfill-ratings-stores.mjs. Dispatch-only; the script is
+# resumable (rated rows leave the queue), so a rerun after a
+# host strike continues where the last one stopped. The
+# weekly ingest's JSON-LD top-up remains the fallback path.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Dry run (resolve + call, change nothing)'
+        type: boolean
+        default: false
+
+jobs:
+  yoto-ratings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Rate Yoto rows via the Trustpilot spec
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node ingestor/backfill-ratings-stores.mjs --platform yoto --yoto-limit 100000 ${{ inputs.dry && '--dry-run' || '' }}

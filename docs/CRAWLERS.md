@@ -6,8 +6,9 @@ specs**, taught by [api-anything](https://github.com/goodnight000/api-anything)
 in a real browser, executed by our own disciplined caller.
 
 Status: Phase 1 design (2026-10-24). The architecture in §2–§7 is the
-plan Phases 2–3 implement. §10 lists the decisions that want an owner
-sanity-check before Phase 2 starts.
+plan Phases 2–3 implement. §10's decisions were all taken by the owner
+on 2026-10-24 (each per its recommendation); Phase 2 is executing §8
+under them.
 
 ---
 
@@ -526,13 +527,17 @@ with evidence, for that platform only.
   they consume spec outputs where a spec exists (e.g. a listings
   spec's images) but are not themselves specced.
 
-## 10. Decisions for the owner
+## 10. Decisions for the owner — ALL DECIDED 2026-10-24
+
+The owner took all three decisions, each per the design's
+recommendation ("Go with all three recommendations", 2026-10-24).
+They are recorded here as settled; Phase 2 executes under them.
 
 1. **Yoto SKU binding** (§8.1): per-variant SKUs via the
    Storefront GraphQL (pilot evidence; two calls per product,
    correct attribution) — vs the page's pooled `data-sku` (one
    call, wrong counts for pooled products). *Recommendation:
-   GraphQL binding.*
+   GraphQL binding.* **DECIDED: GraphQL binding.**
 2. **Spec-change gate** (§5/§6): every spec lands via PR review;
    should a *reteach* PR whose diff is wire-template-only **and**
    whose fresh-input verification passes be auto-mergeable, or
@@ -540,8 +545,36 @@ with evidence, for that platform only.
    *Recommendation: review for new specs and contract changes;
    auto-merge allowed for wire-only reteaches that pass
    verification — that's what makes healing faster than rot.*
+   **DECIDED: as recommended — wire-only reteach PRs with
+   passing fresh-input verification may auto-merge; everything
+   else is reviewed.**
 3. **Caller ownership** (§4): build `specall.mjs` and keep
    api-anything teach-only — vs adopting the tool's runtime with
    a spec-file UA edit (tier-1 only; heals overwrite the UA; its
    pacing/strike model isn't ours). *Recommendation: specall —
    this is the pilot's verdict, now backed by the tool's source.*
+   **DECIDED: build `specall.mjs`; api-anything stays teach-only.**
+
+### Phase 2 execution notes (2026-10-24, coordinator-verified live)
+
+- The §3 GraphQL step works **unauthenticated** against
+  `yoto-usa.myshopify.com` today (shop + product/variants queries
+  answered with no storefront token). The yoto branch treats a
+  GraphQL `product: null` (handle retired or not published to the
+  Storefront channel) as "fall back to the same store's
+  `/products/<handle>.js` variants" — same per-variant SKU data,
+  same binding semantics — and only a double miss leaves the row
+  unresolved.
+- The rating step was re-verified end-to-end before any wiring:
+  Mini set (PRMNXX02845/46/47 + PRMNXX04904) → 4.7 / 2,013;
+  Player PRP3 set → 4.8 / 807; 'Ohana (CRSTXX02617, resolved via
+  GraphQL) → 4.5 / 2; PRP4XX05512 → honest zeros. All exact
+  against the pilot.
+- **Known attribution limit:** the legacy player review sets
+  (Mini PRMNXX028xx, Player PRP3) belong to store products Yoto
+  has since retired (their handles resolve nowhere — US GraphQL
+  null, US .js 404, UK listing 404). Under the sanctioned binding
+  those two catalog rows stay unrated; the sets' aggregates
+  remain reachable only via the pooled page `data-sku` the
+  design rejected. The card catalog — the bulk of Yoto — resolves
+  cleanly per-variant.

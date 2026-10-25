@@ -41,6 +41,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extractAggregateRating } from '../supabase/functions/ingest-catalog/extract.js'
+import { createSpecCaller, loadSpec, callSpec, verifySpec } from './lib/specall.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
@@ -52,6 +53,23 @@ const DELAY_MS = 350
 const MAX_STRIKES = 3
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// --verify-specs: pre-flight for the spec-driven paths (today:
+// the Yoto/Trustpilot spec). Replays the spec's verified samples
+// live and exits 0/1 — the teach/reteach loop and the
+// yoto-ratings workflow run this before any crawl. Needs no
+// Supabase env: it only talks to the spec's own hosts.
+if (args.includes('--verify-specs')) {
+  const spec = loadSpec(join(HERE, 'specs', 'yoto-trustpilot-rating.json'))
+  const out = await verifySpec(createSpecCaller({}), spec)
+  for (const s of out.samples) {
+    console.log(
+      `${s.pass ? 'PASS' : 'FAIL'}  ${s.name}: observed=${JSON.stringify(s.observed)} expect=${JSON.stringify(s.expect)}`,
+    )
+  }
+  console.log(JSON.stringify({ spec: spec.id, ok: out.ok, stats: out.stats }))
+  process.exit(out.ok ? 0 : 1)
+}
 
 const URL_BASE = process.env.SUPABASE_URL
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -143,6 +161,14 @@ const queue = fullQueue.slice(qStart, qStart + qLimit)
 console.log(
   `rows to crawl: ${queue.length} (of ${rows.length} unrated product rows; yoto queued ${Math.min(yotoWork.length, yotoLimit)}/${yotoWork.length} with URLs)`,
 )
+// §8.1: Yoto rows leave the static-HTML queue entirely — Yoto
+// publishes no rating in HTML (Trustpilot widget, client-side).
+// They are rated through the learned spec instead (crawlYotoSpec
+// below): per-variant SKUs via the Storefront GraphQL, then the
+// Trustpilot aggregate. The HTML path remains the fallback for
+// every other platform.
+const htmlQueue = queue.filter((i) => i.platform !== 'yoto')
+const yotoQueue = queue.filter((i) => i.platform === 'yoto')
 
 // ---- crawl ---------------------------------------------------------------
 const updates = []
@@ -213,8 +239,126 @@ async function crawlHost(host, items) {
   }
 }
 
+// ---- Yoto via the Trustpilot spec (§8.1) --------------------------------
+// Resolution is always against the US store by handle (the last
+// path segment of the row's URL, whatever host the URL names):
+// SKUs are global product identifiers, so a UK-listed row
+// resolves through the US storefront when the handle exists
+// there. GraphQL product:null (retired / not published to the
+// Storefront channel) falls back to the same store's
+// /products/<handle>.js — identical per-variant SKU data. A
+// double miss leaves the row unresolved and unrated, counted.
+let yotoSpecError = null
+async function crawlYotoSpec(items) {
+  if (!items.length) return
+  const s = stat('yoto')
+  Object.assign(s, {
+    spec_calls: 0, spec_resolved: 0, spec_unresolved: 0,
+    spec_honest_zero: 0, spec_fallback: 0, spec_shape_drift: 0,
+  })
+  let spec
+  try {
+    spec = loadSpec(join(HERE, 'specs', 'yoto-trustpilot-rating.json'))
+  } catch (err) {
+    yotoSpecError = err
+    console.error(`yoto spec failed to load: ${err.message}`)
+    s.fetch_failed += items.length
+    return
+  }
+  const caller = createSpecCaller({})
+  const ratingStep = spec.steps.find((st) => st.name === 'rating')
+  const jsResolveSpec = {
+    spec_version: 1, id: 'yoto-shopify-js-resolve', platform: 'yoto',
+    purpose: 'detail', status: 'active',
+    steps: [{
+      name: 'resolve-skus-js',
+      request: {
+        method: 'GET',
+        url: 'https://yoto-usa.myshopify.com/products/{handle}.js',
+        headers: {},
+      },
+      params: [{ name: 'handle', bind: { from: 'row.source_url', take: 'last_path_segment' } }],
+      extract: { format: 'json', path: 'variants', pick: { skus: '[].sku' } },
+    }],
+    fields: { skus: 'skus' },
+  }
+  const ratingOnlySpec = (csv) => ({
+    spec_version: 1, id: 'yoto-trustpilot-rating#step', platform: 'yoto',
+    purpose: 'ratings', status: 'active',
+    steps: [{
+      ...ratingStep,
+      params: [{ name: 'skus', bind: { from: 'const', value: csv } }],
+    }],
+    fields: spec.fields,
+    write_rule: spec.write_rule,
+  })
+
+  await Promise.all(
+    items.map(async (item) => {
+      const row = { source_url: item.url }
+      let res = await callSpec(caller, spec, row)
+      let st = res.stats
+      if (!res.ok && st.empty_extract > 0 && !st.http_blocked && !st.fetch_failed && !st.skipped_stopped) {
+        // GraphQL could not see the product — try the .js shape
+        // of the same store before calling the row unresolved.
+        const js = await callSpec(caller, jsResolveSpec, row)
+        const skus = (js.values?.skus ?? []).filter((x) => typeof x === 'string' && x.trim())
+        if (!js.ok || !skus.length) {
+          // The fallback also missed — keep its transport
+          // failures visible in the row's accounting.
+          st = {
+            ...st,
+            calls: st.calls + js.stats.calls,
+            http_blocked: st.http_blocked + js.stats.http_blocked,
+            fetch_failed: st.fetch_failed + js.stats.fetch_failed,
+            skipped_stopped: st.skipped_stopped + js.stats.skipped_stopped,
+          }
+        }
+        if (js.ok && skus.length) {
+          s.spec_fallback++
+          res = await callSpec(caller, ratingOnlySpec(skus.join(',')), {})
+          st = {
+            ...res.stats,
+            calls: st.calls + js.stats.calls + res.stats.calls,
+            http_blocked: st.http_blocked + js.stats.http_blocked + res.stats.http_blocked,
+            fetch_failed: st.fetch_failed + js.stats.fetch_failed + res.stats.fetch_failed,
+            skipped_stopped: st.skipped_stopped + js.stats.skipped_stopped + res.stats.skipped_stopped,
+            shape_drift: st.shape_drift + js.stats.shape_drift + res.stats.shape_drift,
+            honest_zero: res.stats.honest_zero,
+          }
+        }
+      }
+      s.spec_calls += st.calls
+      s.http_blocked += st.http_blocked
+      s.fetch_failed += st.fetch_failed
+      s.skipped_stopped += st.skipped_stopped
+      s.spec_shape_drift += st.shape_drift
+      if (st.skipped_stopped > 0 && !res.ok) s.stopped = true
+      if (st.calls - st.http_blocked - st.fetch_failed > 0) s.fetched++
+      if (res.ok && res.values?.rating != null && res.values?.rating_count > 0) {
+        s.spec_resolved++
+        s.with_rating++
+        updates.push({ id: item.id, rating: res.values.rating, rating_count: res.values.rating_count })
+        await flushStoreUpdates()
+      } else if (st.honest_zero) {
+        s.spec_resolved++
+        s.spec_honest_zero++
+        s.rating_no_count++
+      } else {
+        s.spec_unresolved++
+      }
+    }),
+  )
+  const t = caller.totals()
+  console.log(
+    `yoto spec: rows=${items.length} resolved=${s.spec_resolved} rated=${s.with_rating} ` +
+      `honest_zero=${s.spec_honest_zero} unresolved=${s.spec_unresolved} js_fallback=${s.spec_fallback} ` +
+      `calls=${t.calls} blocked=${t.http_blocked} failed=${t.fetch_failed} skipped_stopped=${t.skipped_stopped}`,
+  )
+}
+
 const byHost = new Map()
-for (const item of queue) {
+for (const item of htmlQueue) {
   const host = new URL(item.url).host
   if (!byHost.has(host)) byHost.set(host, [])
   byHost.get(host).push(item)
@@ -231,6 +375,8 @@ for (const items of byHost.values()) {
 for (const item of queue) idToPlatform.set(item.id, item.platform)
 console.log(`hosts: ${[...byHost.entries()].map(([h, v]) => `${h}×${v.length}`).join(', ')}`)
 await Promise.all([...byHost.entries()].map(([host, items]) => crawlHost(host, items)))
+await crawlYotoSpec(yotoQueue)
+if (yotoSpecError) process.exitCode = 1
 
 // ---- write ----
 if (!dryRun) await flushStoreUpdates(true)
