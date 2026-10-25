@@ -130,7 +130,7 @@ export default function AdminPage() {
       <section className="card">
         <h2>❤️ Supporters</h2>
         <p className="muted">
-          When a donation lands in the PayPal, flip the family's supporter flag
+          When a donation lands in Ko-fi, flip the family's supporter flag
           by their account email. Supporters get the raised photo-scan limit.
         </p>
         <form

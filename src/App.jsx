@@ -19,7 +19,7 @@ import SupportWidget from './components/SupportWidget'
 import { donateUrl } from './lib/donate'
 
 // The footer line both layouts share. The Donate link renders
-// only once the owner has set the PayPal link (lib/donate).
+// only once the owner has set the donation link (lib/donate).
 function FooterLine() {
   const url = donateUrl()
   return (

@@ -64,7 +64,7 @@ export function PrivacyPage() {
         </p>
         <p>
           <strong>Donations:</strong> donations are handled entirely by
-          PayPal; we never receive or store your card details. If you donate,
+          Ko-fi and its payment processor Stripe; we never receive or store your card details. If you donate,
           we may mark your account as a supporter, which raises some usage
           limits as a thank-you.
         </p>
@@ -86,7 +86,7 @@ export function PrivacyPage() {
         <p>
           A short list of services run the site on our behalf: Supabase
           (database and sign-in), Fly.io (web hosting), Resend (sending
-          email), OpenAI (identifying items in shelf photos), PayPal
+          email), OpenAI (identifying items in shelf photos), Ko-fi and Stripe
           (donations), and Amazon (product links — some carry an affiliate
           tag that earns a small commission at no cost to the buyer; your
           family can switch that off in Settings). We don't share your

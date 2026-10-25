@@ -826,7 +826,7 @@ export default function SettingsPage() {
             <p>
               Toy Library is free, and it stays that way. If it's saved your
               family a duplicate gift or two, you can chip in toward the
-              server bills — every donation goes into the PayPal that pays
+              server bills — every donation goes through Ko-fi toward
               them, and donating raises your photo-scan limit as a thank-you.
             </p>
           )}
@@ -838,14 +838,14 @@ export default function SettingsPage() {
                 target="_blank"
                 rel="noreferrer"
               >
-                ❤️ Donate via PayPal
+                ❤️ Donate via Ko-fi
               </a>
             </p>
           )}
           {donateUrl() && profile.donated && (
             <p>
               <a href={donateUrl()} target="_blank" rel="noreferrer">
-                Donate again via PayPal
+                Donate again via Ko-fi
               </a>
             </p>
           )}
