@@ -10,7 +10,8 @@ describe('platforms', () => {
     // 0027_older_kids_platforms.sql,
     // 0028_round3_platforms.sql,
     // 0030_board_game_platforms.sql,
-    // 0033_round4_platforms.sql).
+    // 0033_round4_platforms.sql,
+    // 0051_crayola_platform.sql).
     const dbKeys = [
       'tonies',
       'leapfrog',
@@ -65,6 +66,7 @@ describe('platforms', () => {
       'tegu',
       'guidecraft',
       'unclegoose',
+      'crayola',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {
