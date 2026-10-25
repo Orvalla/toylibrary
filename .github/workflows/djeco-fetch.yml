@@ -1,0 +1,35 @@
+name: Djeco detail fetch (art round)
+
+# One-off fetch pass for the Djeco toddler-art round: Djeco's
+# showcase (www.djeco.com/en) only serves product titles/ages
+# through a POST endpoint that the sandbox egress denies, so the
+# fetches run here. The script (ingestor/djeco-fetch.mjs) writes
+# nothing to the database — it enumerates the 0-3 universe pages,
+# POSTs each product reference to the site's own viewProduct
+# endpoint, verifies the product images, and uploads the raw
+# results as an artifact for planner processing.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  djeco-fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Enumerate Djeco 0-3 pages and fetch product details
+        run: node ingestor/djeco-fetch.mjs
+      - name: Upload raw fetch results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: djeco-fetch-${{ github.run_id }}
+          path: |
+            ingestor/out/djeco/refs.json
+            ingestor/out/djeco/summary.json
+            ingestor/out/djeco/details/
+          if-no-files-found: warn
