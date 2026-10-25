@@ -6,38 +6,16 @@ name: Pilot — api-anything × Yoto Trustpilot
 # request that Yoto's pages fire at runtime — the ratings our
 # static-HTML crawler cannot see.
 #
-# Phases (workflow_dispatch input):
-#   outline — capture three Yoto pages and dump each request
-#             outline as a job artifact + log, for a human/agent
-#             to choose the request + fields from.
-#   teach   — run pilot/teach.sh (committed on this branch and
-#             revised between runs from the outline findings):
-#             re-capture inside the job, add the operation,
-#             call it with fresh sample inputs.
+# Trigger note: GitHub only registers workflow_dispatch for
+# workflows on the DEFAULT branch, so a branch-only pilot can't
+# be dispatched. This workflow therefore runs on PUSH to the
+# pilot branch and executes pilot/run.sh, which is committed on
+# the branch and revised between runs (outline first, then
+# teach + call once the outline has been read).
 
 on:
-  workflow_dispatch:
-    inputs:
-      phase:
-        description: Which pilot phase to run
-        type: choice
-        options: [outline, teach]
-        default: outline
-      url_a:
-        description: Page A (widget with data-sku)
-        default: 'https://us.yotoplay.com/players/yoto-mini-4'
-      url_b:
-        description: Page B (widget, empty data-sku)
-        default: 'https://us.yotoplay.com/players/yoto-player-4'
-      url_c:
-        description: Page C (card, no widget)
-        default: 'https://us.yotoplay.com/products/ohana-means-family'
-      example_a:
-        description: Example value expected in page A's data request
-        default: 'sku=PRP3XX02848'
-      example_b:
-        description: Example value expected in page B's requests (may match nothing)
-        default: 'sku=PRP4XX05512'
+  push:
+    branches: [pilot/api-anything]
 
 env:
   AA_COMMIT: 441e50905acea35f407127c2b8a4032e969288f7
@@ -67,37 +45,22 @@ jobs:
           CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           if [ -z "$CHROME" ]; then
             echo "No system Chrome; installing Playwright chromium"
-            PW="$(dirname "$(command -v api-anything)")/../lib/node_modules/api-anything/node_modules/.bin/playwright"
+            PW="$(npm root -g)/api-anything/node_modules/.bin/playwright"
             "$PW" install --with-deps chromium
             CHROME="$(ls -d ~/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)"
           fi
           echo "Using browser: $CHROME"
+          "$CHROME" --version || true
           echo "API_ANYTHING_BROWSER=$CHROME" >> "$GITHUB_ENV"
 
-      - name: 'Phase: outline captures'
-        if: inputs.phase == 'outline'
-        run: |
-          mkdir -p pilot-out
-          cap() { # name url example
-            echo "===== capture $1 : $2 (example $3) ====="
-            api-anything capture "$2" --example "$3" --outline > "pilot-out/$1.json" 2> "pilot-out/$1.err" || true
-            cat "pilot-out/$1.err" || true
-            head -c 6000 "pilot-out/$1.json"; echo
-          }
-          cap a "${{ inputs.url_a }}" "${{ inputs.example_a }}"
-          cap b "${{ inputs.url_b }}" "${{ inputs.example_b }}"
-          cap c "${{ inputs.url_c }}" "${{ inputs.example_a }}"
-          cp -r ~/.api-anything pilot-out/api-anything-home || true
-
-      - name: 'Phase: teach + call'
-        if: inputs.phase == 'teach'
-        run: bash pilot/teach.sh
+      - name: Run the pilot driver
+        run: bash pilot/run.sh
 
       - name: Upload pilot outputs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pilot-output-${{ github.run_id }}-${{ inputs.phase }}
+          name: pilot-output-${{ github.run_id }}
           path: |
             pilot-out
             ~/.api-anything
