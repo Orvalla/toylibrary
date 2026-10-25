@@ -133,7 +133,23 @@ describe('CatalogPage sorting', () => {
 })
 
 describe('CatalogPage — filter sections + child default sort', () => {
-  it('starts the platform section folded when scoped to books, with stage + age up front', async () => {
+  it('starts with every filter folded into the Filters group', async () => {
+    render(
+      <AuthProvider>
+        <Harness />
+      </AuthProvider>
+    )
+    // The group header is up front, with no chips behind it yet…
+    const group = await screen.findByRole('button', { name: /Filters/ })
+    expect(group).toHaveTextContent('Platform, category, age & more')
+    expect(screen.queryByText(/Tonies \/ Toniebox/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Ages 13+')).not.toBeInTheDocument()
+    // …and one tap unfolds the sections.
+    fireEvent.click(group)
+    expect(await screen.findByText(/Tonies \/ Toniebox/)).toBeInTheDocument()
+  })
+
+  it('names the active scope on the folded Filters header (books)', async () => {
     window.history.pushState({}, '', '/catalog?platform=books')
     try {
       render(
@@ -141,12 +157,18 @@ describe('CatalogPage — filter sections + child default sort', () => {
           <Harness />
         </AuthProvider>
       )
-      // Stage + age chips are visible immediately…
+      // Folded, the header still says where you are…
+      const group = await screen.findByRole('button', { name: /Filters/ })
+      expect(group).toHaveTextContent('Books')
+      expect(group).toHaveTextContent('1 active')
+      expect(screen.queryByText('📕 Young adult')).not.toBeInTheDocument()
+      // …open the group: stage + age are up front (scope
+      // defaults), the platform chips stay folded…
+      fireEvent.click(group)
       expect(await screen.findByText('📕 Young adult')).toBeInTheDocument()
       expect(screen.getByText('Ages 13+')).toBeInTheDocument()
-      // …the platform chips are folded away behind the header…
       expect(screen.queryByText(/Tonies \/ Toniebox/)).not.toBeInTheDocument()
-      // …and one tap on the header brings them back.
+      // …until the Platform header is tapped.
       fireEvent.click(screen.getByRole('button', { name: /Platform/ }))
       expect(await screen.findByText(/Tonies \/ Toniebox/)).toBeInTheDocument()
     } finally {

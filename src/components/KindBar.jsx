@@ -19,7 +19,9 @@ export default function KindBar({ counts, value, onChange }) {
             {k.emoji}
           </span>
           {k.label}
-          {counts?.[k.key] != null && <span className="kind-count">{counts[k.key]}</span>}
+          {counts?.[k.key] != null && (
+            <span className="kind-count">{counts[k.key].toLocaleString('en-US')}</span>
+          )}
         </button>
       ))}
     </div>

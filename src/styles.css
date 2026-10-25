@@ -101,6 +101,15 @@ a { color: var(--accent-dark); }
 .filter-section-chevron { color: var(--accent-dark); font-weight: 800; }
 .filter-section-body { padding: 0 10px 8px; }
 .filter-section-body .tabs { margin-bottom: 2px; }
+/* The outer folded group (FilterGroup): its body insets the
+   inner sections / form so the nesting reads at a glance. */
+.filter-group-body { padding: 2px 10px 6px; }
+.filter-group-body .filter-section { margin-bottom: 8px; }
+.filter-group-body .filter-section:last-child { margin-bottom: 2px; }
+.filter-group-badge {
+  background: var(--accent); color: #fff; white-space: nowrap;
+  border-radius: 999px; padding: 1px 9px; font-size: 13px; font-weight: 800;
+}
 
 /* ---------- the Book Library (/books) ---------- */
 .books-hero {
@@ -450,26 +459,37 @@ a { color: var(--accent-dark); }
 /* The main shelves (lib/kinds): big kind buttons above the
    brand chips — Books / Board games / Story devices / Toys. */
 .kind-bar {
-  display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 6px;
+  display: flex; flex-direction: column; gap: 8px; margin: 18px 0 6px;
 }
 .kind-btn {
-  display: inline-flex; align-items: center; gap: 9px;
+  display: flex; align-items: center; gap: 10px; width: 100%;
   background: #fff; color: var(--ink); cursor: pointer;
-  border: 2.5px solid var(--line); border-radius: 18px;
-  padding: 11px 18px;
-  font-family: Fredoka, sans-serif; font-weight: 600; font-size: 18px;
+  border: 2px solid var(--line); border-radius: 16px;
+  padding: 10px 14px;
+  font-family: Fredoka, sans-serif; font-weight: 600; font-size: 17px;
   box-shadow: 0 3px 0 var(--line);
 }
-.kind-btn .kind-emoji { font-size: 22px; }
+.kind-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--line); }
+.kind-btn .kind-emoji {
+  flex: 0 0 30px; text-align: center; font-size: 21px; line-height: 1;
+}
 .kind-btn .kind-count {
+  margin-left: auto; min-width: 46px; text-align: center;
   background: var(--soft); color: var(--ink-soft);
-  border-radius: 999px; padding: 1px 9px; font-size: 14px; font-weight: 800;
+  border-radius: 999px; padding: 2px 10px; font-size: 14px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 .kind-btn.active {
   background: var(--accent); border-color: var(--accent-dark); color: #fff;
   box-shadow: 0 3px 0 var(--accent-dark);
 }
+.kind-btn.active:active { box-shadow: 0 1px 0 var(--accent-dark); }
 .kind-btn.active .kind-count { background: var(--sun); color: var(--ink); }
+@media (min-width: 720px) {
+  .kind-bar { flex-direction: row; flex-wrap: wrap; }
+  .kind-btn { width: auto; }
+  .kind-btn .kind-count { margin-left: 2px; }
+}
 
 /* Gift basket (public share page): a floating pill with the
    running total, a desktop rail of thumbnails when closed,

@@ -23,6 +23,8 @@ import {
 } from '../lib/bundles'
 import { affinityFromItems, recommendForChild } from '../lib/recommend'
 import PhotoScan from '../components/PhotoScan'
+import { FilterGroup } from '../components/FilterSection'
+import GrowCatalog from '../components/GrowCatalog'
 import ProposalInbox from '../components/ProposalInbox'
 import TourGuide from '../components/TourGuide'
 
@@ -51,6 +53,10 @@ export default function DashboardPage() {
   )
   const [formChildTouched, setFormChildTouched] = useState(false)
   const [tab, setTab] = useState('have')
+  // The add section's three ways in (owner request 2026-10-24):
+  // search the stores / paste a link (both GrowCatalog panels)
+  // or the by-hand form — switched by chips inside one section.
+  const [addMode, setAddMode] = useState('search')
   const [form, setForm] = useState(EMPTY_FORM)
   const [photoFile, setPhotoFile] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -179,6 +185,50 @@ export default function DashboardPage() {
     // re-pages the whole catalog index and takes seconds, which
     // made every mutation look like it hadn't happened.
     if (data) setItems((prev) => [...prev, data])
+  }
+
+  // A product grown into the catalog from this page also lands
+  // on the open list — that's the point of having the grow tools
+  // here. `already` covers the "was already in the catalog" case:
+  // same landing, different note. A bulk collection add hands up
+  // no single item (called with nothing): those join the catalog
+  // only, and the note says where to find them.
+  async function putGrownOnList(item, already = false) {
+    if (!item) {
+      setMessage('Added to the catalog — find them in the catalog to put them on a list.')
+      return
+    }
+    setMessage('')
+    const { data, error } = await supabase
+      .from('items')
+      .insert({
+        owner_id: user.id,
+        list_type: tab,
+        platform: item.platform,
+        title: item.title,
+        details: item.details ?? '',
+        notes: '',
+        image_url: item.image_url ?? '',
+        asin: item.asin ?? null,
+        product_url: item.product_url ?? null,
+        child_id: form.child_id || null,
+      })
+      .select()
+      .single()
+    if (error) {
+      setMessage(
+        error.code === '23505'
+          ? `“${item.title}” is already on your ${tab === 'have' ? 'have' : 'wish'} list.`
+          : error.message
+      )
+      return
+    }
+    if (data) setItems((prev) => [...prev, data])
+    setMessage(
+      already
+        ? `“${item.title}” was already in the catalog — added to your ${tab === 'have' ? 'have' : 'wish'} list.`
+        : `“${item.title}” added to your ${tab === 'have' ? 'have' : 'wish'} list.`
+    )
   }
 
   async function removeItem(item) {
@@ -513,7 +563,31 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <form onSubmit={addItem} className="form inline-form" data-tour="add">
+      <FilterGroup
+        label="➕ Add an item"
+        summary="Search the stores, paste a link, or add by hand"
+        tourId="add"
+      >
+      <div className="tabs" role="group" aria-label="Ways to add">
+        <button className={addMode === 'search' ? 'active' : ''} onClick={() => setAddMode('search')}>
+          🔍 Search stores
+        </button>
+        <button className={addMode === 'link' ? 'active' : ''} onClick={() => setAddMode('link')}>
+          🔗 Paste a link
+        </button>
+        <button className={addMode === 'hand' ? 'active' : ''} onClick={() => setAddMode('hand')}>
+          ✍️ By hand
+        </button>
+      </div>
+      {addMode !== 'hand' && (
+        <GrowCatalog
+          mode={addMode}
+          onAdded={(item) => putGrownOnList(item)}
+          onExists={(item) => putGrownOnList(item, true)}
+        />
+      )}
+      {addMode === 'hand' && (
+      <form onSubmit={addItem} className="form inline-form">
         <select
           value={form.platform}
           onChange={(e) => setForm({ ...form, platform: e.target.value })}
@@ -570,6 +644,8 @@ export default function DashboardPage() {
         </label>
         <button className="btn">Add to {tab === 'have' ? 'have list' : 'wishlist'}</button>
       </form>
+      )}
+      </FilterGroup>
       {message && <p className="notice">{message}</p>}
 
       <ProposalInbox kids={kids} />

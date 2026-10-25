@@ -17,6 +17,14 @@ describe('KindBar', () => {
     expect(screen.getByRole('button', { name: /Toys & play/ })).toBeInTheDocument()
   })
 
+  it('formats big counts with thousands separators', () => {
+    render(
+      <KindBar counts={{ all: 18346, books: 7242 }} value="all" onChange={() => {}} />
+    )
+    expect(screen.getByRole('button', { name: /Everything/ })).toHaveTextContent('18,346')
+    expect(screen.getByRole('button', { name: /Books/ })).toHaveTextContent('7,242')
+  })
+
   it('marks the active shelf and reports picks', () => {
     const onChange = vi.fn()
     render(<KindBar counts={{}} value="books" onChange={onChange} />)

@@ -19,8 +19,17 @@ import { platformLabel } from '../lib/platforms'
 //
 // All writes happen in the function (service role, caller JWT
 // checked); this component only invokes it and renders the outcome.
-export default function GrowCatalog({ onAdded }) {
-  const [tab, setTab] = useState('search')
+//
+// Two embeddings: standalone on the catalog page (own heading +
+// Search stores / Paste a link tabs), or controlled via `mode`
+// ('search' | 'link') with no chrome of its own — the dashboard's
+// add section drives the same panels from its three add-type
+// chips. `onExists` fires when a "new" add turns out to already
+// be in the catalog (the dashboard uses it to still land the
+// item on the parent's list).
+export default function GrowCatalog({ onAdded, onExists, mode }) {
+  const [tab, setTab] = useState(mode ?? 'search')
+  const activeTab = mode ?? tab
   const [error, setError] = useState('')
 
   // Search tab state. `results === null` means "haven't searched yet".
@@ -81,6 +90,7 @@ export default function GrowCatalog({ onAdded }) {
       const data = await invoke({ mode: 'add', candidate })
       setAddStates((s) => ({ ...s, [key]: data.status }))
       if (data.status === 'added') onAdded?.(data.item)
+      if (data.status === 'exists') onExists?.(data.item)
     } catch (err) {
       setAddStates((s) => ({ ...s, [key]: undefined }))
       setError(err.message)
@@ -96,6 +106,7 @@ export default function GrowCatalog({ onAdded }) {
       const data = await invoke({ mode: 'url', url })
       setOutcome(data)
       if (data.status === 'added') onAdded?.(data.item)
+      if (data.status === 'exists') onExists?.(data.item)
       // A bulk import adds too many rows to hand up one by one —
       // the parent refetches the grid instead.
       if (data.status === 'collection' && data.added > 0) onAdded?.()
@@ -107,25 +118,29 @@ export default function GrowCatalog({ onAdded }) {
   }
 
   return (
-    <section className="grow-catalog">
-      <h2>Can't find a product? Grow the catalog</h2>
-      <p className="lede">
-        If a title isn't listed above yet, add it for everyone — search the stores we
-        track, or paste a link to the product page.
-      </p>
+    <section className={mode ? undefined : 'grow-catalog'}>
+      {mode == null && (
+        <>
+          <h2>Can't find a product? Grow the catalog</h2>
+          <p className="lede">
+            If a title isn't listed above yet, add it for everyone — search the stores we
+            track, or paste a link to the product page.
+          </p>
 
-      <div className="tabs">
-        <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
-          Search stores
-        </button>
-        <button className={tab === 'link' ? 'active' : ''} onClick={() => setTab('link')}>
-          Paste a link
-        </button>
-      </div>
+          <div className="tabs">
+            <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
+              Search stores
+            </button>
+            <button className={tab === 'link' ? 'active' : ''} onClick={() => setTab('link')}>
+              Paste a link
+            </button>
+          </div>
+        </>
+      )}
 
       {error && <p className="error">{error}</p>}
 
-      {tab === 'search' && (
+      {activeTab === 'search' && (
         <>
           <form className="form inline-form" onSubmit={doSearch}>
             <input
@@ -178,7 +193,7 @@ export default function GrowCatalog({ onAdded }) {
         </>
       )}
 
-      {tab === 'link' && (
+      {activeTab === 'link' && (
         <>
           <form className="form inline-form" onSubmit={addFromLink}>
             <input

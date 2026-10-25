@@ -15,7 +15,7 @@ import { THEMES, themesOf } from '../lib/themes'
 import { CATALOG_LANGUAGES, languageLabel, languagesVisible } from '../lib/language'
 import { PROJECTOR_BRANDS, isDevicesPageRow, projectorBrandOf } from '../lib/projector'
 import PlatformGrid from './PlatformGrid'
-import { FilterSection } from './CatalogBrowser'
+import { FilterGroup, FilterSection } from './FilterSection'
 import { amazonUrlFor } from '../lib/amazon'
 import {
   bundleInfoFor,
@@ -125,6 +125,32 @@ export default function PublicCatalog({ devicesOnly = false }) {
   const isSectionOpen = (id) => sectionOpen[id] ?? sectionDefaultOpen(id)
   const toggleSection = (id) =>
     setSectionOpen((prev) => ({ ...prev, [id]: !isSectionOpen(id) }))
+  // The folded Filters header (FilterGroup) still reports
+  // what's set: the active selections, first two named.
+  const activeFilters = []
+  if (platform !== 'all') activeFilters.push(platformLabel(platform))
+  if (platform === 'projector' && subBrand !== 'all')
+    activeFilters.push(
+      PROJECTOR_BRANDS.find((b) => b.key === subBrand)?.label ?? subBrand
+    )
+  if (!devicesOnly && category !== 'all') activeFilters.push(category)
+  if (!devicesOnly && theme !== 'all')
+    activeFilters.push(THEMES.find((t) => t.key === theme)?.label ?? theme)
+  if (!devicesOnly && languages.length > 0)
+    activeFilters.push(
+      languages.length === 1
+        ? languageLabel(languages[0])
+        : `${languages.length} languages`
+    )
+  if (platform === 'books' && stage !== 'all')
+    activeFilters.push(BOOK_STAGES.find((s) => s.key === stage)?.label ?? stage)
+  if (ageBand !== 'all')
+    activeFilters.push(AGE_BANDS.find((b) => b.key === ageBand)?.label ?? ageBand)
+  const filterSummary =
+    activeFilters.length === 0
+      ? 'Platform, category, age & more'
+      : activeFilters.slice(0, 2).join(' · ') +
+        (activeFilters.length > 2 ? ` · +${activeFilters.length - 2} more` : '')
 
   const contentsByBundle = useMemo(() => indexContents(bundleRows), [bundleRows])
   const catalogIndex = useMemo(() => indexCatalog(catalog), [catalog])
@@ -305,6 +331,11 @@ export default function PublicCatalog({ devicesOnly = false }) {
         </p>
       </section>
 
+      <FilterGroup
+        label="Filters"
+        summary={filterSummary}
+        badge={activeFilters.length > 0 ? `${activeFilters.length} active` : null}
+      >
       <FilterSection
         id="platform"
         label="Platform"
@@ -510,6 +541,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
           ))}
         </div>
       </FilterSection>
+      </FilterGroup>
 
       <input
         className="filter-input"

@@ -8,6 +8,7 @@ import ItemTile, { OwnedBadge } from './ItemTile'
 import AmazonLink from './AmazonLink'
 import ManufacturerLink from './ManufacturerLink'
 import GrowCatalog from './GrowCatalog'
+import { FilterGroup, FilterSection } from './FilterSection'
 import { PLATFORMS, platformLabel } from '../lib/platforms'
 import PlatformMark from './PlatformMark'
 import { CATEGORIES, categoryOf } from '../lib/categories'
@@ -39,31 +40,6 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // category chips — figures, books, cards, games, devices, audio) and
 // /devices shows just the players themselves (catalog rows with
 // item_type 'device', seeded by migration 0010).
-// One collapsible filter group: a header row (group name +
-// the current selection as a one-line summary + a chevron)
-// and the chip row when open. The summary keeps a folded
-// section informative — "Platform · Books" still says where
-// you are.
-export function FilterSection({ id, label, summary, open, onToggle, children }) {
-  return (
-    <div className="filter-section">
-      <button
-        type="button"
-        className="filter-section-head"
-        aria-expanded={open}
-        onClick={() => onToggle(id)}
-      >
-        <span className="filter-section-label">{label}</span>
-        <span className="filter-section-summary">{summary}</span>
-        <span className="filter-section-chevron" aria-hidden="true">
-          {open ? '▾' : '▸'}
-        </span>
-      </button>
-      {open && <div className="filter-section-body">{children}</div>}
-    </div>
-  )
-}
-
 export default function CatalogBrowser({ devicesOnly = false }) {
   const { user } = useAuth()
   const [catalog, setCatalog] = useState([])
@@ -138,6 +114,32 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   const isSectionOpen = (id) => sectionOpen[id] ?? sectionDefaultOpen(id)
   const toggleSection = (id) =>
     setSectionOpen((prev) => ({ ...prev, [id]: !isSectionOpen(id) }))
+  // The folded Filters header (FilterGroup) still reports
+  // what's set: the active selections, first two named.
+  const activeFilters = []
+  if (platform !== 'all') activeFilters.push(platformLabel(platform))
+  if (platform === 'projector' && subBrand !== 'all')
+    activeFilters.push(
+      PROJECTOR_BRANDS.find((b) => b.key === subBrand)?.label ?? subBrand
+    )
+  if (!devicesOnly && category !== 'all') activeFilters.push(category)
+  if (!devicesOnly && theme !== 'all')
+    activeFilters.push(THEMES.find((t) => t.key === theme)?.label ?? theme)
+  if (!devicesOnly && languages.length > 0)
+    activeFilters.push(
+      languages.length === 1
+        ? languageLabel(languages[0])
+        : `${languages.length} languages`
+    )
+  if (platform === 'books' && stage !== 'all')
+    activeFilters.push(BOOK_STAGES.find((s) => s.key === stage)?.label ?? stage)
+  if (ageBand !== 'all')
+    activeFilters.push(AGE_BANDS.find((b) => b.key === ageBand)?.label ?? ageBand)
+  const filterSummary =
+    activeFilters.length === 0
+      ? 'Platform, category, age & more'
+      : activeFilters.slice(0, 2).join(' · ') +
+        (activeFilters.length > 2 ? ` · +${activeFilters.length - 2} more` : '')
   // Default sort (owner request 2026-10-22): in a child's
   // view the Suggested sort — derived from that child's own
   // library — is the starting sort. Once the parent picks a
@@ -591,6 +593,11 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         </form>
       )}
 
+      <FilterGroup
+        label="Filters"
+        summary={filterSummary}
+        badge={activeFilters.length > 0 ? `${activeFilters.length} active` : null}
+      >
       <FilterSection
         id="platform"
         label="Platform"
@@ -796,6 +803,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         ))}
       </div>
       </FilterSection>
+      </FilterGroup>
 
       <input
         className="filter-input"
