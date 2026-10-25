@@ -793,3 +793,32 @@ backfilled in `catalog_items` from the ingestor snapshot —
 row has no URL in any source), so weekly's Step-2 selection
 admits Yoto rows and the §8.4 spec branch does live top-ups
 from the 2026-10-26 run on.
+
+## 11. Blocked-store discovery (2026-10-25) — LR + VTech outlines
+
+Owner-approved discovery pass (teach.yml outline mode, Actions
+egress) for the two blocked stores with plausible hidden endpoints:
+
+- **Learning Resources** — DEAD END confirmed. learningresources.com
+  serves a DataDome challenge (HTTP 403, 781-byte stub) to the
+  runner browser; the product page never loads, so no ratings
+  endpoint is observable (run 40206012567; outline verdict
+  "blocked: DataDome challenge page"). The Salsify experience
+  pages partially load from the local connection but carry no
+  ratings (8 fetched, 0 present). No maker-side route remains.
+- **VTech** — NO SPEC EXISTS. vtechkids.com loads fully in a real
+  browser (194 KB server-rendered document, 138 requests, run
+  40206016050) but fires NO ratings/review-widget request at all —
+  the only XHRs are cookie-consent calls. Any rating on the page
+  is baked into the HTML, and VTech's edge refuses plain-HTTP
+  clients from both egresses (sandbox re-check 2026-10-25:
+  connection dropped). Not specall-executable; the only maker-side
+  route would be real-browser fetching (the §10 exception class).
+
+REMAINING ROUTE for both (plus Fat Brain, §10-adjacent): ratings
+from a DIFFERENT SOURCE — retailer review aggregates. Walmart
+demonstrably carries these products' ratings with counts (sample:
+VTech Animal Rhymes Music Book 4.7 / 215+ reviews, largely
+Bazaarvoice-syndicated from the maker's own review pool). Owner
+decision pending; until then all three stores stay unrated and the
+weekly top-up keeps retrying them cheaply.
