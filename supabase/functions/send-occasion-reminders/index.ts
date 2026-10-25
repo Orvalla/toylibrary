@@ -3,7 +3,7 @@
 // A daily caller (GitHub Actions cron) hits this function with
 // the shared REMINDER_CRON_SECRET header. For every family
 // with reminders on and sharing enabled, it finds occasions
-// whose next occurrence falls within 14 days, and emails:
+// whose next occurrence falls within 17 days, and emails:
 //
 //   1. the account owner ONE digest covering all of them, and
 //   2. each gift-circle relative (migration 0020) who has an
@@ -35,9 +35,10 @@
 // the single day the occasion enters the 14-day window. Each
 // family instead has a stable slot (hash of the profile id,
 // SPREAD_DAYS slots): a family's occasions become sendable at
-// 14, 13, 12 or 11 days out depending on its slot, so a
+// 17, 16, 15 or 14 days out depending on its slot, so a
 // cluster spreads across four days while every reminder still
-// lands at least 11 days ahead. All of a family's channels
+// lands at least 14 days ahead (the extra lead is deliberate
+// insurance against holiday shipping delays). All of a family's channels
 // (owner digest, relatives, subscribers) share the slot, and
 // the dedupe log still guarantees one send per recipient per
 // occurrence — a missed day simply sends on the next run, and
@@ -51,7 +52,7 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const CRON_SECRET = Deno.env.get('REMINDER_CRON_SECRET') ?? ''
 const FROM = Deno.env.get('REMINDER_FROM') ?? 'Toy Library <reminders@toylibrary.store>'
 const SITE = Deno.env.get('PUBLIC_SITE_URL') ?? 'https://toylibrary.store'
-const WINDOW_DAYS = 14
+const WINDOW_DAYS = 17
 const SPREAD_DAYS = 4
 
 const corsHeaders = {

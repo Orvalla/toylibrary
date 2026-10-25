@@ -2,7 +2,8 @@ name: Occasion reminders
 
 # Daily nudge: asks the send-occasion-reminders Edge Function
 # to email owners whose children's gift occasions fall within
-# 14 days. The function dedupes per occurrence, so a repeat
+# 17 days (each family fires on one of four slot days, 17–14
+# days out). The function dedupes per occurrence, so a repeat
 # run is harmless. Dormant until RESEND_API_KEY is set as a
 # Supabase function secret.
 on:
