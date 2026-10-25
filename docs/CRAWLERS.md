@@ -578,3 +578,77 @@ They are recorded here as settled; Phase 2 executes under them.
   remain reachable only via the pooled page `data-sku` the
   design rejected. The card catalog — the bulk of Yoto — resolves
   cleanly per-variant.
+
+### Phase 2 results (2026-10-24/25)
+
+- **§8.0 Foundations — SHIPPED** (commits 406437a + af3c59a):
+  `ingestor/lib/specall.mjs` (27 tests), the specs registry
+  (`ingestor/specs/` incl. `native.json`), and the generalized
+  teach pipeline (`.github/workflows/teach.yml` +
+  `ingestor/teach/`, 16 converter tests; suite 55 files / 439
+  tests green).
+- **§8.1 Yoto — MIGRATED, gate passed.** Sample gate: verifySpec
+  4/4 live (Mini 4.7/2,013 · PRP3 4.8/807 · 'Ohana full chain
+  4.5/2 · PRP4 honest zeros); dry-run over 11 real rows → 7
+  rated / 2 honest zeros / 2 unresolved. Full pass (Actions run
+  40157222671, ~9.5 min): 1,572 rows, 1,571 queued (1 row has no
+  URL anywhere), **1,258 rated (0 → 80.0% of Yoto)**, 279 honest
+  zeros, 34 unresolved, 3,142 calls (exactly 2 per row: one
+  GraphQL + one Trustpilot), 0 blocked, 0 shape drift. Request
+  economy: the old HTML path spent 1 page fetch per row for a
+  guaranteed miss (Yoto publishes no rating in HTML); the spec
+  spends 2 calls per row and lands a rating for 80% of rows.
+  Popularity rescore followed (run 40158003205).
+- **§8.2 LeapFrog — STOPPED at the outline gate, by design.**
+  Outline capture (teach run 40158005754) on
+  `store.leapfrog.com/en-us/store/c` ranked exactly 5
+  candidates; none carries product data the adapter lacks: the
+  only JSON API candidate is `/rest/V1/data/…` (session/site
+  config), the rest are message bundles, a cookie-policy page,
+  and the page document itself — whose embedded PAGE_DATA block
+  (24 products of 415 total, page 1 only) the adapter already
+  parses. The remaining ~390 products are reachable only by
+  crawling per-product pages (the adapter's snowball), and the
+  pagination API the page config points at
+  (storeapi.leapfrog.com) does not resolve in public DNS. No
+  learnable request beats the adapter, so no spec, no migration;
+  LeapFrog stays `bespoke-html` in `native.json`.
+- **§8.3 Storypod — widget is Yotpo, not Okendo** (the §8.3
+  premise named Okendo; the outline evidence overrides it).
+  Discovery succeeded: outline capture (run 40158094046) caught
+  the real request on the Eddi product page —
+  `GET api-cdn.yotpo.com/v3/storefront/store/<public store
+  key>/product/<shopify product id>/ratings`, a stable
+  unauthenticated GET returning
+  `{bottomline:{averageScore, totalReviews}}`. Verified samples
+  (direct calls reproducing the endpoint exactly): The Gruffalo
+  **5.0 / 5**, The Little Engine Collection **5.0 / 5**, Owl
+  iCraftie **5.0 / 2**, The Eddi System **honest zeros**, Riley
+  Raccoon **honest zeros**. No full run (per §8.3). Teach,
+  however, failed twice (runs 40158271630, 40158393379): on
+  Craftie/book pages the widget's fetch never enters the tool's
+  ranked candidate set (it did on the Eddi player page), and
+  the tool's trigger steps have no scroll action to force the
+  lazy load (click/fill/press/wait/goto only — an 8 s wait did
+  not help). Phase 3 note: a production Yotpo spec is
+  hand-authorable exactly like Yoto's — step 1 resolves the
+  Shopify product id from the row's handle via
+  `/products/<handle>.js`, step 2 is the ratings GET with the
+  store key as a `const`; convert.mjs emits single-step specs
+  only, so this was never teach-producible as-is.
+- **§8.3 Tonies — Bazaarvoice is session-gated; this is the
+  documented runtime exception.** Outline (run 40158092073)
+  caught the widget's requests in-browser (200s): the
+  `apps.bazaarvoice.com/bfd/v1/clients/tonies/…/products.json`
+  aggregate call keyed by Shopify product id (confirmed:
+  9220712398999 = the sampled product's `.js` id). Replayed
+  outside a browser it cannot work: bare GET → **401
+  Unauthorized**; with Origin/Referer → **400 "'Bv-Bfd-Token'
+  is not sent or invalid"**. The token is minted by BV's loader
+  JS per session — not a public constant — so no spec our
+  caller can execute exists, and a teach would only borrow the
+  token from its capture (verification would false-green). Per
+  §8.3 this reopens the runtime-adoption question **for Tonies
+  only**, with this evidence; no teach was run and no samples
+  are claimed. (BV's classic Conversations API would need a
+  passkey only Tonies can issue.)
