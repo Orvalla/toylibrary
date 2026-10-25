@@ -5,10 +5,13 @@ today, what hurts, and the restructure that fixes it: **learned endpoint
 specs**, taught by [api-anything](https://github.com/goodnight000/api-anything)
 in a real browser, executed by our own disciplined caller.
 
-Status: Phase 1 design (2026-10-24). The architecture in §2–§7 is the
-plan Phases 2–3 implement. §10's decisions were all taken by the owner
-on 2026-10-24 (each per its recommendation); Phase 2 is executing §8
-under them.
+Status: PROGRAM COMPLETE (2026-10-25). The architecture in §2–§7 is
+live: Phase 2 shipped the specall caller, the specs registry, and the
+teach pipeline and migrated Yoto (§8.1, §10); Phase 3 unified the
+remaining transports, wired Storypod, and integrated the registry
+into weekly (§8.4, §10 close-out). §7 is the standing front door for
+new sources. §10's decisions were all taken by the owner on
+2026-10-24 (each per its recommendation).
 
 ---
 
@@ -437,6 +440,10 @@ Politeness applies to discovery too: outline/teach runs are a
 handful of page loads, and sampling honors the same spacing —
 discovery never becomes an unannounced bulk crawl.
 
+**Standing front door (program close-out, 2026-10-25):** this intake
+is how every new source joins the estate from now on — no new
+bespoke crawler is written without walking these steps first.
+
 ## 8. Migration plan (Phase 2, in order, each gated)
 
 ### 8.1 Yoto ratings via the Trustpilot spec (folds in the approved wiring)
@@ -504,6 +511,50 @@ with evidence, for that platform only.
   `native.json` + `specs/` together are the estate's inventory,
   and this doc is updated with Phase 2/3's measured numbers
   (requests per source before/after, failure modes removed).
+
+### 8.4 Phase 3 results (2026-10-25, coordinator-verified)
+
+- **One transport.** `backfill-ratings-stores.mjs`'s HTML path now
+  runs on specall's caller; the script's own fetchPage/crawlHost
+  queue is deleted. The Yoto spec runner was extracted to
+  `ingestor/lib/yoto-spec.mjs` and is shared by the backfill and
+  weekly. Equivalence proof for the swap: before/after dry-runs
+  over the same 44-row snapshot produced **byte-identical
+  stdout** (fetched 43, blocked 0, failed 1, rated 0 on both —
+  that host, Guidecraft, publishes no JSON-LD ratings). The
+  extraction/write code moved verbatim; post-refactor dry-runs
+  over KiwiCo's unrated residue fetched 20/20 with rated 0
+  because those pages carry no JSON-LD rating at all (rated
+  KiwiCo pages still do — spot-checked live), i.e. the residue
+  is non-yielding, not unextracted.
+- **Storypod via the hand-authored Yotpo spec** (§10). Sample
+  gate 5/5 under `verifySpec` (The Gruffalo 5.0/5, The Little
+  Engine Collection 5.0/5, Owl iCraftie 5.0/2; The Eddi System
+  and Riley Raccoon honest zeros). Full-queue dry run: 286 rows
+  → 193 rated / 92 honest zeros / 1 unresolved projected, 571
+  calls, 0 drift. Production: the Actions attempt was
+  host-blocked after 56 rows (3 strikes, runner egress; 40
+  written, 226 skipped — the discipline working as designed),
+  and the pass was completed from the local connection with the
+  same script and the same `set_ratings` RPC (+153). Final,
+  SQL-verified: **Storypod 0 → 193/286 rated (67.5%)**, 92
+  honest zeros, 1 unresolved; popularity rescored (reviews
+  component 6,203).
+- **Weekly integration.** Step 2 partitions Yoto rows to the
+  spec path (shared `rateYotoRows`, `set_ratings` flush, bounded
+  by the existing budget); any spec failure — load error,
+  non-`active` status, runner error — restores the full unrated
+  list to the JSON-LD queue, reproducing the pre-change queue
+  exactly. The JSON-LD path itself moved onto a shared specall
+  caller (the hand-rolled fetch + last-host delay are gone); the
+  `★ ratings:` summary line is unchanged. Data caveat: the
+  preserved selection currently admits **zero** Yoto content
+  rows — only 4 Yoto rows carry a `source_url` in
+  `catalog_items` at all (all devices); the backfill gets Yoto
+  URLs from `ingestor/out/catalog.json`. The branch is therefore
+  dormant-but-correct: it activates automatically if Yoto
+  `source_url`s are ever populated, and Monday's scheduled run
+  is unaffected either way (full `--dry` run green, no writes).
 
 ## 9. Non-goals (explicit)
 
@@ -652,3 +703,88 @@ They are recorded here as settled; Phase 2 executes under them.
   only**, with this evidence; no teach was run and no samples
   are claimed. (BV's classic Conversations API would need a
   passkey only Tonies can issue.)
+
+### Phase 3 close-out — final program numbers (2026-10-25)
+
+**Rated coverage (SQL-verified at each step):**
+
+| Point | Rated | Catalog | % |
+|---|---|---|---|
+| Before the restructure (post-enrichment baseline) | 4,752 | 18,448 | 25.8% |
+| After Phase 2 (Yoto via Trustpilot spec) | 6,010 | 18,448 | 32.6% |
+| After Phase 3 (Storypod via Yotpo spec) | **6,203** | 18,448 | **33.6%** |
+
+Program gain: **+1,451 rated rows (+30.5%)**, entirely from the
+two client-side-widget platforms that sat at 0 under HTML
+crawling (Yoto 0 → 1,258 of 1,572; Storypod 0 → 193 of 286).
+
+**Request economy (calls per rated datum):**
+
+| Path | Calls | Rated | Calls/datum |
+|---|---|---|---|
+| Yoto via spec (GraphQL + Trustpilot) | 3,142 | 1,258 | 2.50 |
+| Storypod via spec (`.js` + Yotpo), clean run | 571 | 193 | 2.96 |
+| Store HTML from local egress (retry) | 5,326 | 832 | 6.40 |
+| Store HTML from Actions egress (enrichment) | 10,871 | 372 | 29.2 |
+| Yoto via HTML (any egress) | 1,571 | 0 | ∞ — guaranteed miss |
+
+Specs run at exactly 2.00 calls/row; the per-datum figure above
+2.0 is the honest-zero share (products with no reviews cost the
+same 2 calls and correctly stay unrated). Actions egress remains
+the weak link for bulk work — it was host-blocked mid-pass on
+both the store crawl and the first Storypod attempt — while the
+spec endpoints themselves never blocked on either egress.
+
+**Failure modes retired:**
+
+- Three divergent implementations of the UA / 350 ms spacing /
+  3-strike discipline (backfill host-queue, weekly's ad-hoc
+  fetch loop, specall) → **one** (`specall`), shared by the
+  backfill, weekly, and every spec.
+- Guaranteed-miss page fetches for widget platforms, in both the
+  crawls and weekly's top-up budget.
+- Pooled-SKU rating misattribution (Yoto page `data-sku` pooled
+  2,820 reviews across products; the spec binds each product's
+  own variant SKUs — Mini's own set is 2,013).
+- Silent spec rot: drift now surfaces as `spec_*_shape_drift`
+  stats and sample-gate failures (`--verify-specs` re-verifies
+  all 9 samples before every ratings run), with the §5/§6
+  reteach path behind it.
+- Ratings bound to scraped page URLs, which break silently on
+  storefront restructures; specs bind to handles/ids instead.
+
+**What remains bespoke, and why:**
+
+- **LeapFrog** ratings/listings adapter — the §8.2 outline
+  verdict: no learnable request beats it; registered
+  `bespoke-html` in `native.json`.
+- **Lunii** adapter — sitemap-complete but fetch-heavy;
+  registered `bespoke-html`.
+- **Weekly's JSON-LD extraction** for hosts with no spec — the
+  extraction is bespoke, the transport is specall's.
+- **Books** — official APIs (Open Library / Google Books);
+  never specced by design.
+- **`ingest-catalog` Edge Function** — user-driven imports, out
+  of scope for the restructure by design.
+- **Tonies ratings — DECIDED / PARKED (owner, 2026-10-24).**
+  The runtime-adoption exception for the session-gated
+  Bazaarvoice token (evidence directly above) was put to the
+  owner and **declined**: Tonies' **483 rows stay unrated by
+  owner decision**. Not pending; revisit only if the owner
+  raises it.
+
+**Teach/reteach pipeline coherence (verified at close-out):**
+`teach.yml` is on main with outline/teach/reteach modes and the
+artifact-hygiene rules from §5; `ingestor/teach/convert.mjs`
+still enforces the contract freeze (a reteach may replace wire
+bindings/paths only — purpose, write rule, and field keys are
+frozen), and auto-merge remains gated on reteach + wire-only +
+fresh-input verification, exactly as decided in §10. Both
+production specs verify green under `--verify-specs`.
+
+**Open follow-ups (outside this program):** populate Yoto
+`source_url` in `catalog_items` if weekly's spec branch should
+do live top-ups (today it is dormant, §8.4); Djeco detail
+fetches from an Actions runner (toddler-art round); the three
+egress-blocked hosts (Fat Brain, Learning Resources, VTech,
+~150 rows) remain reachable only from non-runner connections.
