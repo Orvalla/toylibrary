@@ -1,0 +1,200 @@
+name: Teach — api-anything → spec PR
+
+# The generalized teach pipeline (docs/CRAWLERS.md §5): the pilot's
+# harness (branch pilot/api-anything, preserved as the reference
+# implementation) turned into a dispatchable workflow on main.
+#
+# api-anything is TEACH-ONLY and pinned by commit (owner decision 3):
+# it learns a site's request in a real browser; our own specall.mjs
+# executes the resulting spec at crawl time. A teach/reteach run ends
+# in a spec PR (branch spec/<site>-<op>) whose body is the teach
+# report — merging is what makes a spec live (owner decision 1).
+# The one exception: a reteach PR whose diff is wire-template-only
+# AND whose fresh-input verification passed gets auto-merge enabled
+# by the driver (owner decision 2).
+#
+# Artifact hygiene (§5): capture artifacts are heavy and sensitive —
+# the pilot's home-dir artifact was 63 MB and carried cookie values.
+# This workflow uploads ONLY the three named files in teach-out/
+# (outline JSON, learned site JSON, teach report). Never
+# ~/.api-anything wholesale, never browser profiles/session stores.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'outline (scout candidates) | teach (new spec PR) | reteach (heal an existing spec)'
+        type: choice
+        options: [outline, teach, reteach]
+        default: outline
+        required: true
+      site:
+        description: 'Site slug for api-anything (e.g. yoto) — also the spec id prefix'
+        type: string
+        required: true
+      op:
+        description: 'Operation name (e.g. product-rating). Required for teach/reteach'
+        type: string
+        required: false
+      trigger_url:
+        description: 'Page URL that fires the request, with {param} placeholders. Required unless reteach seeds it from the existing spec'
+        type: string
+        required: false
+      example:
+        description: 'Example args as space-separated k=v pairs (e.g. "sku=CRSTXX02617")'
+        type: string
+        required: false
+      example2:
+        description: 'A second, genuinely different example (same k=v format) — lets the tool separate params from nonces'
+        type: string
+        required: false
+      match:
+        description: 'Match pin for the request to learn: JSON ({"host":"…","path":"/x/*"}) or comma k=v (host=…,path=/x/*,method=GET,operationName=…)'
+        type: string
+        required: false
+      extract:
+        description: 'Recipe part 1 (JSON recipe): dot/bracket path into the response'
+        type: string
+        required: false
+      pick:
+        description: 'Recipe part 1 (JSON recipe): comma list of fields to keep, a.b or name=a.b'
+        type: string
+        required: false
+      html:
+        description: 'Recipe alternative: HTML recipe JSON {"items":"<css>","fields":{"name":"<css>"}}'
+        type: string
+        required: false
+      embedded:
+        description: 'Recipe alternative: regex whose group 1 marks where embedded JSON starts'
+        type: string
+        required: false
+      steps:
+        description: 'Optional trigger steps JSON ([{action,selector?,value?,ms?}]) for pages that fire the request only after interaction'
+        type: string
+        required: false
+      soft_from:
+        description: 'Optional neutral page to load first, then soft-navigate to the trigger (SPAs)'
+        type: string
+        required: false
+      verify:
+        description: 'REQUIRED for teach/reteach: fresh verification input as k=v pairs — must NOT be one of the examples'
+        type: string
+        required: false
+      bindings:
+        description: 'Param bindings JSON: {"param":{"from":"row.source_url","take":"last_path_segment"}} (from = row.<field> | step.<name>.<field> | const)'
+        type: string
+        required: false
+      platform:
+        description: 'Catalog platform for the spec (defaults to site; reteach seeds it from the existing spec)'
+        type: string
+        required: false
+      purpose:
+        description: 'Spec purpose (reteach seeds it from the existing spec)'
+        type: choice
+        options: [ratings, listings, detail, ages, images]
+        default: ratings
+        required: false
+      fields:
+        description: 'Fields mapping JSON: {"<extracted name>":"<catalog field>"} (defaults to identity over the pick names)'
+        type: string
+        required: false
+      write_rule:
+        description: 'Write rule (only rating_only_with_count_gt_0 exists; auto-applied when the recipe maps rating + count)'
+        type: string
+        required: false
+      description:
+        description: 'What the operation is for (stored on the learned op and the spec)'
+        type: string
+        required: false
+      public:
+        description: 'Comma-separated public-constant names (headers/fields whose value is the same for every visitor) to declare at teach time'
+        type: string
+        required: false
+      spec_id:
+        description: 'Spec id override (defaults to <site>-<op>)'
+        type: string
+        required: false
+
+env:
+  AA_COMMIT: 441e50905acea35f407127c2b8a4032e969288f7
+
+jobs:
+  teach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install api-anything (pinned)
+        run: |
+          set -e
+          git clone -q https://github.com/goodnight000/api-anything.git /tmp/aa
+          cd /tmp/aa && git checkout -q "$AA_COMMIT"
+          npm ci --no-audit --no-fund
+          npm install -g "$(npm pack --silent)"
+          api-anything --version
+
+      - name: Locate a Chromium for the teach tier
+        run: |
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "No system Chrome; installing Playwright chromium"
+            PW="$(npm root -g)/api-anything/node_modules/.bin/playwright"
+            "$PW" install --with-deps chromium
+            CHROME="$(ls -d ~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | head -1)"
+          fi
+          if [ -z "$CHROME" ]; then
+            echo "No Chromium found after fallback install" >&2
+            exit 1
+          fi
+          echo "Using browser: $CHROME"
+          "$CHROME" --version || true
+          echo "API_ANYTHING_BROWSER=$CHROME" >> "$GITHUB_ENV"
+
+      - name: Run the teach driver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEACH_MODE: ${{ inputs.mode }}
+          TEACH_SITE: ${{ inputs.site }}
+          TEACH_OP: ${{ inputs.op }}
+          TEACH_TRIGGER_URL: ${{ inputs.trigger_url }}
+          TEACH_EXAMPLE: ${{ inputs.example }}
+          TEACH_EXAMPLE2: ${{ inputs.example2 }}
+          TEACH_MATCH: ${{ inputs.match }}
+          TEACH_EXTRACT: ${{ inputs.extract }}
+          TEACH_PICK: ${{ inputs.pick }}
+          TEACH_HTML: ${{ inputs.html }}
+          TEACH_EMBEDDED: ${{ inputs.embedded }}
+          TEACH_STEPS: ${{ inputs.steps }}
+          TEACH_SOFT_FROM: ${{ inputs.soft_from }}
+          TEACH_VERIFY: ${{ inputs.verify }}
+          TEACH_BINDINGS: ${{ inputs.bindings }}
+          TEACH_PLATFORM: ${{ inputs.platform }}
+          TEACH_PURPOSE: ${{ inputs.purpose }}
+          TEACH_FIELDS: ${{ inputs.fields }}
+          TEACH_WRITE_RULE: ${{ inputs.write_rule }}
+          TEACH_DESCRIPTION: ${{ inputs.description }}
+          TEACH_PUBLIC: ${{ inputs.public }}
+          TEACH_SPEC_ID: ${{ inputs.spec_id }}
+        run: node ingestor/teach/run.mjs
+
+      - name: Upload teach outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: teach-output-${{ github.run_id }}
+          # STRICTLY these three files (§5) — never ~/.api-anything,
+          # never the browser profile or session store.
+          path: |
+            teach-out/outline.json
+            teach-out/learned-site.json
+            teach-out/teach-report.md
+          retention-days: 7
+          if-no-files-found: ignore
