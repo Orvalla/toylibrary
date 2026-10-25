@@ -72,6 +72,7 @@ const SITE_NAMES = {
   'guidecraft.com': 'Guidecraft',
   'unclegoose.com': 'Uncle Goose',
   'www.crayola.com': 'Crayola',
+  'www.djeco.com': 'Djeco',
 }
 
 export function siteNameForUrl(rawUrl) {

@@ -17,6 +17,7 @@ export const PLATFORMS = [
   { key: 'lovevery', label: 'Lovevery', emoji: '🌱', logo: '/logos/lovevery.png' },
   { key: 'melissaanddoug', label: 'Melissa & Doug', emoji: '🎭', logo: '/logos/melissaanddoug.png' },
   { key: 'crayola', label: 'Crayola', emoji: '🖍️', logo: '/logos/crayola.png' },
+  { key: 'djeco', label: 'Djeco', emoji: '🎨', logo: '/logos/djeco.png' },
   { key: 'littlepeople', label: 'Little People', emoji: '🧒', logo: '/logos/littlepeople.svg' },
   { key: 'brio', label: 'BRIO', emoji: '🚂', logo: '/logos/brio.svg' },
   { key: 'fatbrain', label: 'Fat Brain', emoji: '🌀', logo: '/logos/fatbrain.png' },
