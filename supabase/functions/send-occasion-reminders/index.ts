@@ -29,6 +29,19 @@
 // relative_id, relative sends with theirs (partial unique
 // indexes keep the two dedupe streams separate). `?dry=1`
 // returns the composed digests without sending or logging.
+//
+// Send spread (2026-10-25): clustered occasions (Christmas
+// above all) would otherwise fire every family's reminder on
+// the single day the occasion enters the 14-day window. Each
+// family instead has a stable slot (hash of the profile id,
+// SPREAD_DAYS slots): a family's occasions become sendable at
+// 14, 13, 12 or 11 days out depending on its slot, so a
+// cluster spreads across four days while every reminder still
+// lands at least 11 days ahead. All of a family's channels
+// (owner digest, relatives, subscribers) share the slot, and
+// the dedupe log still guarantees one send per recipient per
+// occurrence — a missed day simply sends on the next run, and
+// an occasion created inside the window sends immediately.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -39,6 +52,7 @@ const CRON_SECRET = Deno.env.get('REMINDER_CRON_SECRET') ?? ''
 const FROM = Deno.env.get('REMINDER_FROM') ?? 'Toy Library <reminders@toylibrary.store>'
 const SITE = Deno.env.get('PUBLIC_SITE_URL') ?? 'https://toylibrary.store'
 const WINDOW_DAYS = 14
+const SPREAD_DAYS = 4
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,6 +76,18 @@ function nextOccurrence(month: number, day: number, from: Date): Date {
   const start = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))
   if (d < start) d = new Date(Date.UTC(y + 1, month - 1, clamped))
   return d
+}
+
+// A family's stable slot in the send spread: FNV-1a over the
+// profile id, so the assignment is deterministic across runs
+// and needs no storage.
+function spreadSlot(id: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0) % SPREAD_DAYS
 }
 
 const dateKey = (d: Date) => d.toISOString().slice(0, 10)
@@ -148,6 +174,10 @@ Deno.serve(async (req) => {
 
     const now = new Date()
     const horizon = new Date(now.getTime() + WINDOW_DAYS * 86400000)
+    // Calendar-day distance (UTC midnights), so daysAway is the
+    // exact number of days until the occasion — the send-spread
+    // thresholds below are written in those terms.
+    const startOfToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
 
     // profile id -> [{ occasion, kid, date, daysAway }] — all
     // due entries; unsent filtering happens per recipient below.
@@ -157,7 +187,7 @@ Deno.serve(async (req) => {
       if (!kid) continue
       const date = nextOccurrence(occ.month, occ.day, now)
       if (date > horizon) continue
-      const daysAway = Math.round((date.getTime() - now.getTime()) / 86400000)
+      const daysAway = Math.round((date.getTime() - startOfToday) / 86400000)
       const entry = { occasion: occ, kid, date, daysAway }
       due.set(kid.owner_id, [...(due.get(kid.owner_id) ?? []), entry])
     }
@@ -165,8 +195,14 @@ Deno.serve(async (req) => {
     const digests: any[] = []
     let sentCount = 0
     for (const profile of profiles ?? []) {
-      const allEntries = due.get(profile.id)
-      if (!allEntries?.length) continue
+      // Send spread: only occasions at or inside this family's
+      // slot threshold are sendable today (see header). The
+      // per-recipient dedupe below does the rest.
+      const slot = spreadSlot(profile.id)
+      const allEntries = (due.get(profile.id) ?? []).filter(
+        (e: any) => e.daysAway <= WINDOW_DAYS - slot
+      )
+      if (!allEntries.length) continue
       if (!profile.occasion_reminders || !profile.share_enabled) continue
       const link = `https://${profile.share_slug}.toylibrary.store`
       const ownerName = profile.display_name || 'A Toy Library parent'
