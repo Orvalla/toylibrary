@@ -1,0 +1,35 @@
+name: Storypod ratings (Yotpo spec)
+
+# The Phase 3 pass: rate every unrated Storypod row through
+# the learned Yotpo spec (ingestor/specs/
+# storypod-yotpo-rating.json) via the storypod branch of
+# backfill-ratings-stores.mjs. Dispatch-only; the script is
+# resumable (rated rows leave the queue), so a rerun after a
+# host strike continues where the last one stopped. The
+# --verify-specs gate replays both specs' verified samples
+# before any crawl, so a drifted spec fails the run early.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Dry run (resolve + call, change nothing)'
+        type: boolean
+        default: false
+
+jobs:
+  storypod-ratings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify specs
+        run: node ingestor/backfill-ratings-stores.mjs --verify-specs
+      - name: Rate Storypod rows via the Yotpo spec
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node ingestor/backfill-ratings-stores.mjs --platform storypod ${{ inputs.dry && '--dry-run' || '' }}

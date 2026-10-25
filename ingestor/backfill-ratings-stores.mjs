@@ -12,9 +12,10 @@
 // Reality check (probed 2026-10-21): most stores never put the
 // number in static HTML — Tonies renders reviews through
 // Bazaarvoice, Yoto through Trustpilot, Storypod through
-// Okendo, all client-side. Osmo's JSON-LD carries it today.
+// Yotpo, all client-side. Osmo's JSON-LD carries it today.
 // This crawl therefore fills what is verifiably published and
-// reports the rest as gaps; it never guesses.
+// reports the rest as gaps; it never guesses. Yoto (Trustpilot)
+// and Storypod (Yotpo) are rated through learned specs, not HTML.
 //
 // Page URLs come from the row's source_url when present, else
 // from the ingestor's own output map (ingestor/out/catalog.json)
@@ -30,7 +31,7 @@
 // left off. A rating is written only with a count behind it.
 //
 // Fetch transport (Phase 3): both the static-HTML path below
-// and the Yoto spec path go through specall's caller
+// and the Yoto / Storypod spec paths go through specall's caller
 // (ingestor/lib/specall.mjs) — one implementation of the
 // discipline above. Its canonical UA applies to every fetch:
 // the UA string unifies to specall's CANONICAL_UA
@@ -49,7 +50,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extractAggregateRating } from '../supabase/functions/ingest-catalog/extract.js'
-import { createSpecCaller, loadSpec, verifySpec } from './lib/specall.mjs'
+import { callSpec, createSpecCaller, loadSpec, verifySpec } from './lib/specall.mjs'
 import { rateYotoRows } from './lib/yoto-spec.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -58,21 +59,30 @@ const dryRun = args.includes('--dry-run')
 const onlyPlatform = args.includes('--platform') ? args[args.indexOf('--platform') + 1] : null
 const yotoLimit = args.includes('--yoto-limit') ? Number(args[args.indexOf('--yoto-limit') + 1]) : 500
 
-// --verify-specs: pre-flight for the spec-driven paths (today:
-// the Yoto/Trustpilot spec). Replays the spec's verified samples
-// live and exits 0/1 — the teach/reteach loop and the
-// yoto-ratings workflow run this before any crawl. Needs no
-// Supabase env: it only talks to the spec's own hosts.
+// --verify-specs: pre-flight for the spec-driven paths (the
+// Yoto/Trustpilot spec and the Storypod/Yotpo spec). Replays
+// each spec's verified samples live and exits 0 only if every
+// spec is ok — the teach/reteach loop and the yoto-ratings /
+// storypod-ratings workflows run this before any crawl. Needs
+// no Supabase env: it only talks to the specs' own hosts.
 if (args.includes('--verify-specs')) {
-  const spec = loadSpec(join(HERE, 'specs', 'yoto-trustpilot-rating.json'))
-  const out = await verifySpec(createSpecCaller({}), spec)
-  for (const s of out.samples) {
-    console.log(
-      `${s.pass ? 'PASS' : 'FAIL'}  ${s.name}: observed=${JSON.stringify(s.observed)} expect=${JSON.stringify(s.expect)}`,
-    )
+  const specPaths = [
+    join(HERE, 'specs', 'yoto-trustpilot-rating.json'),
+    join(HERE, 'specs', 'storypod-yotpo-rating.json'),
+  ]
+  let allOk = true
+  for (const specPath of specPaths) {
+    const spec = loadSpec(specPath)
+    const out = await verifySpec(createSpecCaller({}), spec)
+    for (const s of out.samples) {
+      console.log(
+        `${s.pass ? 'PASS' : 'FAIL'}  ${s.name}: observed=${JSON.stringify(s.observed)} expect=${JSON.stringify(s.expect)}`,
+      )
+    }
+    console.log(JSON.stringify({ spec: spec.id, ok: out.ok, stats: out.stats }))
+    if (!out.ok) allOk = false
   }
-  console.log(JSON.stringify({ spec: spec.id, ok: out.ok, stats: out.stats }))
-  process.exit(out.ok ? 0 : 1)
+  process.exit(allOk ? 0 : 1)
 }
 
 const URL_BASE = process.env.SUPABASE_URL
@@ -169,10 +179,14 @@ console.log(
 // publishes no rating in HTML (Trustpilot widget, client-side).
 // They are rated through the learned spec instead (crawlYotoSpec
 // below): per-variant SKUs via the Storefront GraphQL, then the
-// Trustpilot aggregate. The HTML path remains the fallback for
-// every other platform.
-const htmlQueue = queue.filter((i) => i.platform !== 'yoto')
+// Trustpilot aggregate. Storypod rows leave it too — Storypod
+// publishes no rating in HTML either (Yotpo widget, client-side)
+// and is rated through its learned spec (crawlStorypodSpec
+// below). The HTML path remains the fallback for every other
+// platform.
+const htmlQueue = queue.filter((i) => i.platform !== 'yoto' && i.platform !== 'storypod')
 const yotoQueue = queue.filter((i) => i.platform === 'yoto')
+const storypodQueue = queue.filter((i) => i.platform === 'storypod')
 
 // ---- crawl ---------------------------------------------------------------
 const updates = []
@@ -286,6 +300,73 @@ async function crawlYotoSpec(items) {
   )
 }
 
+// ---- Storypod via the Yotpo spec -----------------------------------------
+// Mirrors crawlYotoSpec's accounting: rows run through
+// ingestor/specs/storypod-yotpo-rating.json via specall — step 1
+// resolves the Shopify product id from the row's handle
+// (/products/<handle>.js), step 2 is the Yotpo ratings GET.
+// The row passed to the spec is { source_url: item.url }:
+// item.url is the queue's resolved URL (many Storypod catalog
+// rows have source_url NULL in the DB, with the real URL in
+// product_url or the ingestor/out/catalog.json map; the queue
+// builder already resolved it into item.url — never read
+// item.source_url here).
+let storypodSpecError = null
+async function crawlStorypodSpec(items) {
+  if (!items.length) return
+  const s = stat('storypod')
+  Object.assign(s, {
+    spec_calls: 0, spec_resolved: 0, spec_unresolved: 0,
+    spec_honest_zero: 0, spec_shape_drift: 0,
+  })
+  let spec
+  try {
+    spec = loadSpec(join(HERE, 'specs', 'storypod-yotpo-rating.json'))
+  } catch (err) {
+    storypodSpecError = err
+    console.error(`storypod spec failed to load: ${err.message}`)
+    s.fetch_failed += items.length
+    return
+  }
+  const caller = createSpecCaller({})
+  let rated = 0
+  let honestZero = 0
+  let unresolved = 0
+  await Promise.all(
+    items.map(async (item) => {
+      const res = await callSpec(caller, spec, { source_url: item.url })
+      const st = res.stats
+      s.spec_calls += st.calls
+      s.http_blocked += st.http_blocked
+      s.fetch_failed += st.fetch_failed
+      s.skipped_stopped += st.skipped_stopped
+      s.spec_shape_drift += st.shape_drift
+      if (st.skipped_stopped > 0 && !res.ok) s.stopped = true
+      if (st.calls - st.http_blocked - st.fetch_failed > 0) s.fetched++
+      if (res.ok && res.values?.rating_count > 0) {
+        s.spec_resolved++
+        s.with_rating++
+        rated++
+        updates.push({ id: item.id, rating: res.values.rating, rating_count: res.values.rating_count })
+        await flushStoreUpdates()
+      } else if (st.honest_zero) {
+        s.spec_resolved++
+        s.spec_honest_zero++
+        s.rating_no_count++
+        honestZero++
+      } else {
+        s.spec_unresolved++
+        unresolved++
+      }
+    }),
+  )
+  const t = caller.totals()
+  console.log(
+    `storypod spec: rows=${items.length} resolved=${s.spec_resolved} rated=${rated} ` +
+      `honest_zero=${honestZero} unresolved=${unresolved} calls=${t.calls} blocked=${t.http_blocked} failed=${t.fetch_failed} skipped_stopped=${t.skipped_stopped}`,
+  )
+}
+
 const byHost = new Map()
 for (const item of htmlQueue) {
   const host = new URL(item.url).host
@@ -305,7 +386,9 @@ for (const item of queue) idToPlatform.set(item.id, item.platform)
 console.log(`hosts: ${[...byHost.entries()].map(([h, v]) => `${h}×${v.length}`).join(', ')}`)
 await Promise.all([...byHost.entries()].map(([, items]) => crawlHtmlHost(items)))
 await crawlYotoSpec(yotoQueue)
+await crawlStorypodSpec(storypodQueue)
 if (yotoSpecError) process.exitCode = 1
+if (storypodSpecError) process.exitCode = 1
 
 // ---- write ----
 if (!dryRun) await flushStoreUpdates(true)
