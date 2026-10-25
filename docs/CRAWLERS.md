@@ -782,9 +782,14 @@ frozen), and auto-merge remains gated on reteach + wire-only +
 fresh-input verification, exactly as decided in §10. Both
 production specs verify green under `--verify-specs`.
 
-**Open follow-ups (outside this program):** populate Yoto
-`source_url` in `catalog_items` if weekly's spec branch should
-do live top-ups (today it is dormant, §8.4); Djeco detail
+**Open follow-ups (outside this program):** Djeco detail
 fetches from an Actions runner (toddler-art round); the three
 egress-blocked hosts (Fat Brain, Learning Resources, VTech,
 ~150 rows) remain reachable only from non-runner connections.
+
+**Resolved 2026-10-24 (post-close-out):** Yoto `source_url`
+backfilled in `catalog_items` from the ingestor snapshot —
+1,571 of 1,572 rows now carry their store URL (the one missing
+row has no URL in any source), so weekly's Step-2 selection
+admits Yoto rows and the §8.4 spec branch does live top-ups
+from the 2026-10-26 run on.
