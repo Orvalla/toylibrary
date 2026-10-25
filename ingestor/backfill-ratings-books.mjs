@@ -22,41 +22,54 @@
 // average and at least one rating behind it. Rows whose work
 // has never been rated stay null — no number is better than a
 // made-up one. Prints a JSON summary plus the unmatched list.
+//
+// Transport (since the 2026-10-24 full-enrichment run): reads
+// and writes go over PostgREST with SUPABASE_URL +
+// SUPABASE_SERVICE_ROLE_KEY, writes through the set_ratings
+// RPC (migration 0050) — so the crawl runs as a GitHub
+// Actions job (enrich.yml). The old local sbq.py write path
+// is gone; run locally only with --dry-run.
 
-import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { getJson } from './lib/http.mjs'
 
-const HERE = dirname(fileURLToPath(import.meta.url))
-// sbq.py, not sb.py: this script reads whole rows back, and
-// sb.py truncates its printed result at 4000 characters.
-const SBQ = join(HERE, '..', '..', 'custom-connectors', 'custom.supabase', 'bin', 'sbq.py')
 const dryRun = process.argv.slice(2).includes('--dry-run')
-let ratingsEmitSeq = 0
 const DELAY_MS = 350 // Open Library is a public good — stay leisurely.
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-function sql(statement) {
-  // EMIT mode (RATINGS_EMIT=1): updates collected as files for
-  // direct application (node-spawned writes don't reach the
-  // real DB — overnight incident note).
-  if (process.env.RATINGS_EMIT === '1' && /^\s*update/i.test(statement)) {
-    const out = `/home/hatch/workspace/.emit/bookratings-${String(ratingsEmitSeq++).padStart(3, '0')}.sql`
-    writeFileSync(out, statement)
-    return [{ ok: 1 }]
+const URL_BASE = process.env.SUPABASE_URL
+const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!URL_BASE || !KEY) {
+  console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+  process.exit(1)
+}
+const headers = {
+  apikey: KEY,
+  Authorization: `Bearer ${KEY}`,
+  'Content-Type': 'application/json',
+}
+async function rest(path, options = {}) {
+  const res = await fetch(`${URL_BASE}/rest/v1/${path}`, { ...options, headers })
+  if (!res.ok) throw new Error(`REST ${path} -> ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  return res.status === 204 ? null : res.json()
+}
+async function fetchUnratedBookRows() {
+  const rows = []
+  for (let from = 0; ; from += 1000) {
+    const page = await rest(
+      `catalog_items?select=id,title,source_url` +
+        `&rating=is.null&platform=eq.books&order=title&limit=1000&offset=${from}`,
+    )
+    rows.push(...page)
+    if (page.length < 1000) return rows
   }
-  const file = `/tmp/ratings-books-${process.pid}.sql`
-  writeFileSync(file, statement)
-  const out = execFileSync('python3', [SBQ, file], {
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
+}
+async function applyRatingUpdates(chunk) {
+  await rest('rpc/set_ratings', {
+    method: 'POST',
+    body: JSON.stringify({ p_updates: chunk }),
   })
-  const parsed = JSON.parse(out)
-  if (parsed.status >= 300) throw new Error(`SQL failed (${parsed.status}): ${out.slice(0, 300)}`)
-  return parsed.result
 }
 
 // Same title folding as top-books.mjs keyOf (minus its alias map).
@@ -68,8 +81,6 @@ const norm = (s) =>
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^the /, '')
-
-const esc = (s) => String(s).replace(/'/g, "''")
 
 async function ratingForWork(olKey) {
   // olKey: "/works/OL123W"
@@ -105,10 +116,7 @@ async function findWorkByTitle(title) {
 // each invocation fits one foreground window.
 const allRows = process.env.BOOKS_RATINGS_SNAPSHOT
   ? JSON.parse(readFileSync(process.env.BOOKS_RATINGS_SNAPSHOT, 'utf8'))
-  : sql(
-      `select id, title, source_url from public.catalog_items
-       where platform = 'books' and rating is null order by title`,
-    )
+  : await fetchUnratedBookRows()
 const sliceStart = Number(process.env.BOOKS_RATINGS_START ?? 0)
 const sliceLimit = Number(process.env.BOOKS_RATINGS_LIMIT ?? allRows.length)
 const rows = allRows.slice(sliceStart, sliceStart + sliceLimit)
@@ -116,21 +124,17 @@ console.log(`books without a rating: ${allRows.length} (this run: ${rows.length}
 
 const updates = [] // {id, rating, rating_count, source_url?}
 const stats = { direct: 0, via_search: 0, unrated_works: 0, unmatched: [] }
+let appliedCount = 0
 
-// Flush-as-you-go: emit/apply in chunks of 20 during the loop
-// so a stopped run keeps the progress it already made.
-function flushUpdates(final = false) {
+// Flush-as-you-go: apply in chunks of 20 during the loop so
+// a stopped run keeps the progress it already made. Dry runs
+// keep the updates in memory and report them instead.
+async function flushUpdates(final = false) {
   if (!updates.length || (!final && updates.length < 20)) return
+  if (dryRun) return
   const chunk = updates.splice(0, updates.length)
-  const stmts = chunk
-    .map(
-      (u) =>
-        `update public.catalog_items set rating = ${u.rating}, rating_count = ${u.rating_count}` +
-        (u.source_url ? `, source_url = '${esc(u.source_url)}'` : '') +
-        ` where id = '${u.id}';`,
-    )
-    .join('\n')
-  sql(stmts)
+  await applyRatingUpdates(chunk)
+  appliedCount += chunk.length
 }
 
 for (const row of rows) {
@@ -142,7 +146,7 @@ for (const row of rows) {
       if (r) {
         updates.push({ id: row.id, ...r })
         stats.direct++
-        flushUpdates()
+        await flushUpdates()
       } else stats.unrated_works++
       continue
     }
@@ -156,7 +160,7 @@ for (const row of rows) {
     if (r) {
       updates.push({ id: row.id, ...r, source_url: `https://openlibrary.org${key}` })
       stats.via_search++
-      flushUpdates()
+      await flushUpdates()
     } else stats.unrated_works++
   } catch (err) {
     console.log(`  ! ${row.title}: ${err.message}`)
@@ -164,30 +168,19 @@ for (const row of rows) {
   }
 }
 
-console.log(`updates ready: ${updates.length} (direct ${stats.direct}, via search ${stats.via_search})`)
+console.log(
+  `updates ready: ${appliedCount + updates.length} (direct ${stats.direct}, via search ${stats.via_search})`,
+)
 console.log(`works with no ratings on Open Library: ${stats.unrated_works}`)
 console.log(`unmatched titles: ${stats.unmatched.length}`)
 for (const t of stats.unmatched) console.log(`  ? ${t}`)
 
-if (!dryRun && updates.length) {
-  for (let i = 0; i < updates.length; i += 40) {
-    const chunk = updates.slice(i, i + 40)
-    const stmts = chunk
-      .map(
-        (u) =>
-          `update public.catalog_items set rating = ${u.rating}, rating_count = ${u.rating_count}` +
-          (u.source_url ? `, source_url = '${esc(u.source_url)}'` : '') +
-          ` where id = '${u.id}';`,
-      )
-      .join('\n')
-    sql(stmts)
-  }
-}
+if (!dryRun) await flushUpdates(true)
 console.log(
   JSON.stringify({
     dry_run: dryRun,
     books_considered: rows.length,
-    updated: dryRun ? 0 : updates.length,
+    updated: dryRun ? 0 : appliedCount,
     direct: stats.direct,
     via_search: stats.via_search,
     unrated_works: stats.unrated_works,

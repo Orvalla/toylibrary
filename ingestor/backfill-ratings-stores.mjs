@@ -28,15 +28,21 @@
 // consecutive 403/429 responses. Rows already carrying a
 // rating are skipped, so a rerun resumes where a stopped one
 // left off. A rating is written only with a count behind it.
+//
+// Transport (since the 2026-10-24 full-enrichment run): reads
+// and writes go over PostgREST with SUPABASE_URL +
+// SUPABASE_SERVICE_ROLE_KEY, writes through the set_ratings
+// RPC (migration 0050) — the same shape as popularity.mjs,
+// so the crawl runs as a GitHub Actions job (enrich.yml).
+// The old local sbq.py write path is gone; run locally only
+// with --dry-run (reads work with the publishable key).
 
-import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extractAggregateRating } from '../supabase/functions/ingest-catalog/extract.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const SBQ = join(HERE, '..', '..', 'custom-connectors', 'custom.supabase', 'bin', 'sbq.py')
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const onlyPlatform = args.includes('--platform') ? args[args.indexOf('--platform') + 1] : null
@@ -47,26 +53,38 @@ const MAX_STRIKES = 3
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-let emitSeq = 0
-function sql(statement) {
-  // EMIT mode (RATINGS_EMIT=1): write statements are collected
-  // as files for direct application — writes made from inside
-  // node via sbq.py do not reach the real database (see the
-  // overnight DECISIONS.md incident note). Reads still execute.
-  if (process.env.RATINGS_EMIT === '1' && /^\s*update/i.test(statement)) {
-    const out = `/home/hatch/workspace/.emit/ratings-${String(emitSeq++).padStart(3, '0')}.sql`
-    writeFileSync(out, statement)
-    return [{ ok: 1 }]
+const URL_BASE = process.env.SUPABASE_URL
+const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+if (!URL_BASE || !KEY) {
+  console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required')
+  process.exit(1)
+}
+const headers = {
+  apikey: KEY,
+  Authorization: `Bearer ${KEY}`,
+  'Content-Type': 'application/json',
+}
+async function rest(path, options = {}) {
+  const res = await fetch(`${URL_BASE}/rest/v1/${path}`, { ...options, headers })
+  if (!res.ok) throw new Error(`REST ${path} -> ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  return res.status === 204 ? null : res.json()
+}
+async function fetchUnratedStoreRows() {
+  const rows = []
+  for (let from = 0; ; from += 1000) {
+    const page = await rest(
+      `catalog_items?select=id,platform,title,source_url,sort_order` +
+        `&rating=is.null&platform=neq.books&order=platform,sort_order,title&limit=1000&offset=${from}`,
+    )
+    rows.push(...page)
+    if (page.length < 1000) return rows
   }
-  const file = `/tmp/ratings-stores-${process.pid}.sql`
-  writeFileSync(file, statement)
-  const out = execFileSync('python3', [SBQ, file], {
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
+}
+async function applyRatingUpdates(chunk) {
+  await rest('rpc/set_ratings', {
+    method: 'POST',
+    body: JSON.stringify({ p_updates: chunk }),
   })
-  const parsed = JSON.parse(out)
-  if (parsed.status >= 300) throw new Error(`SQL failed (${parsed.status}): ${out.slice(0, 300)}`)
-  return parsed.result
 }
 
 const normTitle = (s) =>
@@ -87,11 +105,7 @@ for (const r of ingested) {
 // channel; STORES_START/LIMIT slice the queue per run.
 const rows = process.env.STORES_SNAPSHOT
   ? JSON.parse(readFileSync(process.env.STORES_SNAPSHOT, 'utf8'))
-  : sql(
-      `select id, platform, title, source_url, sort_order from public.catalog_items
-       where platform <> 'books' and rating is null
-       order by platform, sort_order, title`,
-    )
+  : await fetchUnratedStoreRows()
 const PLATFORM_ORDER = ['tonies', 'yoto', 'storypod', 'osmo', 'lunii', 'projector', 'leapfrog', 'vtech', 'other']
 const work = []
 const stats = new Map()
@@ -133,21 +147,15 @@ console.log(
 // ---- crawl ---------------------------------------------------------------
 const updates = []
 const idToPlatform = new Map()
-function flushStoreUpdates(final = false) {
+async function flushStoreUpdates(final = false) {
   if (!updates.length || (!final && updates.length < 20)) return
+  if (dryRun) return // counted at the end from the queue stats; nothing written
   const chunk = updates.splice(0, updates.length)
   for (const u of chunk) {
     const pf = idToPlatform.get(u.id)
     if (pf) stat(pf).updated++
   }
-  sql(
-    chunk
-      .map(
-        (u) =>
-          `update public.catalog_items set rating = ${u.rating}, rating_count = ${u.rating_count} where id = '${u.id}';`,
-      )
-      .join('\n'),
-  )
+  await applyRatingUpdates(chunk)
 }
 async function fetchPage(url) {
   const res = await fetch(url, {
@@ -201,7 +209,7 @@ async function crawlHost(host, items) {
     }
     s.with_rating++
     updates.push({ id: item.id, rating: found.rating, rating_count: found.rating_count })
-    flushStoreUpdates()
+    await flushStoreUpdates()
   }
 }
 
@@ -225,7 +233,7 @@ console.log(`hosts: ${[...byHost.entries()].map(([h, v]) => `${h}×${v.length}`)
 await Promise.all([...byHost.entries()].map(([host, items]) => crawlHost(host, items)))
 
 // ---- write ----
-if (!dryRun) flushStoreUpdates(true)
+if (!dryRun) await flushStoreUpdates(true)
 
 const summary = {}
 for (const [platform, s] of [...stats.entries()].sort(

@@ -1,0 +1,89 @@
+name: Full enrichment
+
+# One-off full-catalog enrichment (owner request 2026-10-24):
+# fill every missing store rating, book rating, and image,
+# then recompute popularity scores so the new data counts.
+# The three crawls run as parallel jobs (different hosts,
+# no shared state — each script only touches rows still
+# missing its data, so a rerun resumes cleanly). The weekly
+# ingest keeps the top-up cadence afterwards; this workflow
+# stays around for future full passes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Dry run (crawl and report, change nothing)'
+        type: boolean
+        default: false
+
+jobs:
+  store-ratings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Crawl store product pages for ratings
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node ingestor/backfill-ratings-stores.mjs --yoto-limit 100000 ${{ inputs.dry && '--dry-run' || '' }}
+
+  book-ratings:
+    # The books crawl is serial per runner (~2-5s a book:
+    # a search plus a ratings fetch, politely delayed), so
+    # the queue is quartered across four parallel runners by
+    # the script's own START/LIMIT slicing — each runner
+    # keeps Open Library's per-IP politeness, and a rerun
+    # resumes because rated rows leave the queue.
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [0, 1452, 2904, 4356]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch Open Library ratings for books (slice ${{ matrix.slice }})
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BOOKS_RATINGS_START: ${{ matrix.slice }}
+          BOOKS_RATINGS_LIMIT: 1452
+        run: node ingestor/backfill-ratings-books.mjs ${{ inputs.dry && '--dry-run' || '' }}
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fill missing images
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WEEKLY_DRY: ${{ inputs.dry && '1' || '' }}
+        run: node ingestor/backfill-images.mjs --limit 5000
+
+  rescore:
+    needs: [store-ratings, book-ratings]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Recompute popularity scores with the enriched data
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node ingestor/popularity.mjs ${{ inputs.dry && '--dry' || '' }}
