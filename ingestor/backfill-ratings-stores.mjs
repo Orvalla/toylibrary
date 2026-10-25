@@ -29,6 +29,14 @@
 // rating are skipped, so a rerun resumes where a stopped one
 // left off. A rating is written only with a count behind it.
 //
+// Fetch transport (Phase 3): both the static-HTML path below
+// and the Yoto spec path go through specall's caller
+// (ingestor/lib/specall.mjs) — one implementation of the
+// discipline above. Its canonical UA applies to every fetch:
+// the UA string unifies to specall's CANONICAL_UA
+// ('ToyLibraryIngestor/1.0 (contact via toylibrary.store)'),
+// replacing this script's former ratings-backfill UA variant.
+//
 // Transport (since the 2026-10-24 full-enrichment run): reads
 // and writes go over PostgREST with SUPABASE_URL +
 // SUPABASE_SERVICE_ROLE_KEY, writes through the set_ratings
@@ -41,18 +49,14 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { extractAggregateRating } from '../supabase/functions/ingest-catalog/extract.js'
-import { createSpecCaller, loadSpec, callSpec, verifySpec } from './lib/specall.mjs'
+import { createSpecCaller, loadSpec, verifySpec } from './lib/specall.mjs'
+import { rateYotoRows } from './lib/yoto-spec.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const onlyPlatform = args.includes('--platform') ? args[args.indexOf('--platform') + 1] : null
 const yotoLimit = args.includes('--yoto-limit') ? Number(args[args.indexOf('--yoto-limit') + 1]) : 500
-const UA = 'ToyLibraryIngestor/1.0 (ratings backfill; contact via toylibrary.store)'
-const DELAY_MS = 350
-const MAX_STRIKES = 3
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // --verify-specs: pre-flight for the spec-driven paths (today:
 // the Yoto/Trustpilot spec). Replays the spec's verified samples
@@ -183,51 +187,37 @@ async function flushStoreUpdates(final = false) {
   }
   await applyRatingUpdates(chunk)
 }
-async function fetchPage(url) {
-  const res = await fetch(url, {
-    headers: { 'user-agent': UA, accept: 'text/html' },
-    signal: AbortSignal.timeout(30000),
-    redirect: 'follow',
-  })
-  if (res.status === 403 || res.status === 429) return { blocked: res.status }
-  if (!res.ok) return { failed: res.status }
-  return { html: await res.text() }
-}
+// The static-HTML transport is specall's caller (Phase 3): the
+// per-host serialization, ≥350ms spacing and 3-strike drop live
+// there now, under the canonical UA. The 30s per-request timeout
+// this script's own fetch used to carry is preserved via the
+// fetchImpl wrapper.
+const htmlCaller = createSpecCaller({
+  fetchImpl: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(30000) }),
+})
 
-async function crawlHost(host, items) {
-  let strikes = 0
-  let lastStart = 0
-  for (let idx = 0; idx < items.length; idx++) {
-    const item = items[idx]
+async function crawlHtmlHost(items) {
+  for (const item of items) {
     const s = stat(item.platform)
-    if (strikes >= MAX_STRIKES) {
-      // Host is refusing us — abandon the rest of its queue
-      // rather than hammering it.
+    const res = await htmlCaller.request(item.url, { headers: { accept: 'text/html' } })
+    if (res.skipped) {
+      // Host was dropped after 3 strikes — the caller sent
+      // nothing; abandon the rest of its queue rather than
+      // hammering it (the remaining items each report skipped).
+      s.skipped_stopped++
       s.stopped = true
-      s.skipped_stopped += items.length - idx
-      break
-    }
-    const wait = DELAY_MS - (Date.now() - lastStart)
-    if (wait > 0) await sleep(wait)
-    lastStart = Date.now()
-    let res
-    try {
-      res = await fetchPage(item.url)
-    } catch {
-      res = { failed: 'network' }
+      continue
     }
     if (res.blocked) {
-      strikes++
       s.http_blocked++
       continue
     }
-    if (res.failed) {
+    if (!res.ok) {
       s.fetch_failed++
       continue
     }
-    strikes = 0
     s.fetched++
-    const found = extractAggregateRating(res.html)
+    const found = extractAggregateRating(res.text)
     if (!found) continue
     if (!found.rating_count) {
       s.rating_no_count++
@@ -240,14 +230,13 @@ async function crawlHost(host, items) {
 }
 
 // ---- Yoto via the Trustpilot spec (§8.1) --------------------------------
-// Resolution is always against the US store by handle (the last
-// path segment of the row's URL, whatever host the URL names):
-// SKUs are global product identifiers, so a UK-listed row
-// resolves through the US storefront when the handle exists
-// there. GraphQL product:null (retired / not published to the
-// Storefront channel) falls back to the same store's
-// /products/<handle>.js — identical per-variant SKU data. A
-// double miss leaves the row unresolved and unrated, counted.
+// Thin adapter over lib/yoto-spec.mjs's rateYotoRows (the spec
+// runner itself — US-store resolution by handle, the .js fallback
+// on a GraphQL miss — lives there, Phase 3). This adapter keeps
+// the consumer accounting: each returned row outcome maps onto
+// stat('yoto') exactly as the inline runner used to count it,
+// and rated rows arrive through onRating so the update buffer +
+// flush behave as before.
 let yotoSpecError = null
 async function crawlYotoSpec(items) {
   if (!items.length) return
@@ -256,103 +245,43 @@ async function crawlYotoSpec(items) {
     spec_calls: 0, spec_resolved: 0, spec_unresolved: 0,
     spec_honest_zero: 0, spec_fallback: 0, spec_shape_drift: 0,
   })
-  let spec
-  try {
-    spec = loadSpec(join(HERE, 'specs', 'yoto-trustpilot-rating.json'))
-  } catch (err) {
-    yotoSpecError = err
-    console.error(`yoto spec failed to load: ${err.message}`)
+  const result = await rateYotoRows({
+    items: items.map((item) => ({ id: item.id, url: item.url })),
+    onRating: async ({ id, rating, rating_count }) => {
+      updates.push({ id, rating, rating_count })
+      await flushStoreUpdates()
+    },
+  })
+  if (result.error) {
+    yotoSpecError = result.error
+    console.error(`yoto spec failed to load: ${result.error.message}`)
     s.fetch_failed += items.length
     return
   }
-  const caller = createSpecCaller({})
-  const ratingStep = spec.steps.find((st) => st.name === 'rating')
-  const jsResolveSpec = {
-    spec_version: 1, id: 'yoto-shopify-js-resolve', platform: 'yoto',
-    purpose: 'detail', status: 'active',
-    steps: [{
-      name: 'resolve-skus-js',
-      request: {
-        method: 'GET',
-        url: 'https://yoto-usa.myshopify.com/products/{handle}.js',
-        headers: {},
-      },
-      params: [{ name: 'handle', bind: { from: 'row.source_url', take: 'last_path_segment' } }],
-      extract: { format: 'json', path: 'variants', pick: { skus: '[].sku' } },
-    }],
-    fields: { skus: 'skus' },
+  for (const r of result.rows) {
+    s.spec_calls += r.calls
+    s.http_blocked += r.http_blocked
+    s.fetch_failed += r.fetch_failed
+    s.skipped_stopped += r.skipped_stopped
+    s.spec_shape_drift += r.shape_drift
+    if (r.skipped_stopped > 0 && !r.ok) s.stopped = true
+    if (r.calls - r.http_blocked - r.fetch_failed > 0) s.fetched++
+    if (r.usedFallback) s.spec_fallback++
+    if (r.outcome === 'rated') {
+      s.spec_resolved++
+      s.with_rating++
+    } else if (r.outcome === 'honest_zero') {
+      s.spec_resolved++
+      s.spec_honest_zero++
+      s.rating_no_count++
+    } else {
+      s.spec_unresolved++
+    }
   }
-  const ratingOnlySpec = (csv) => ({
-    spec_version: 1, id: 'yoto-trustpilot-rating#step', platform: 'yoto',
-    purpose: 'ratings', status: 'active',
-    steps: [{
-      ...ratingStep,
-      params: [{ name: 'skus', bind: { from: 'const', value: csv } }],
-    }],
-    fields: spec.fields,
-    write_rule: spec.write_rule,
-  })
-
-  await Promise.all(
-    items.map(async (item) => {
-      const row = { source_url: item.url }
-      let res = await callSpec(caller, spec, row)
-      let st = res.stats
-      if (!res.ok && st.empty_extract > 0 && !st.http_blocked && !st.fetch_failed && !st.skipped_stopped) {
-        // GraphQL could not see the product — try the .js shape
-        // of the same store before calling the row unresolved.
-        const js = await callSpec(caller, jsResolveSpec, row)
-        const skus = (js.values?.skus ?? []).filter((x) => typeof x === 'string' && x.trim())
-        if (!js.ok || !skus.length) {
-          // The fallback also missed — keep its transport
-          // failures visible in the row's accounting.
-          st = {
-            ...st,
-            calls: st.calls + js.stats.calls,
-            http_blocked: st.http_blocked + js.stats.http_blocked,
-            fetch_failed: st.fetch_failed + js.stats.fetch_failed,
-            skipped_stopped: st.skipped_stopped + js.stats.skipped_stopped,
-          }
-        }
-        if (js.ok && skus.length) {
-          s.spec_fallback++
-          res = await callSpec(caller, ratingOnlySpec(skus.join(',')), {})
-          st = {
-            ...res.stats,
-            calls: st.calls + js.stats.calls + res.stats.calls,
-            http_blocked: st.http_blocked + js.stats.http_blocked + res.stats.http_blocked,
-            fetch_failed: st.fetch_failed + js.stats.fetch_failed + res.stats.fetch_failed,
-            skipped_stopped: st.skipped_stopped + js.stats.skipped_stopped + res.stats.skipped_stopped,
-            shape_drift: st.shape_drift + js.stats.shape_drift + res.stats.shape_drift,
-            honest_zero: res.stats.honest_zero,
-          }
-        }
-      }
-      s.spec_calls += st.calls
-      s.http_blocked += st.http_blocked
-      s.fetch_failed += st.fetch_failed
-      s.skipped_stopped += st.skipped_stopped
-      s.spec_shape_drift += st.shape_drift
-      if (st.skipped_stopped > 0 && !res.ok) s.stopped = true
-      if (st.calls - st.http_blocked - st.fetch_failed > 0) s.fetched++
-      if (res.ok && res.values?.rating != null && res.values?.rating_count > 0) {
-        s.spec_resolved++
-        s.with_rating++
-        updates.push({ id: item.id, rating: res.values.rating, rating_count: res.values.rating_count })
-        await flushStoreUpdates()
-      } else if (st.honest_zero) {
-        s.spec_resolved++
-        s.spec_honest_zero++
-        s.rating_no_count++
-      } else {
-        s.spec_unresolved++
-      }
-    }),
-  )
-  const t = caller.totals()
+  const t = result.totals
   console.log(
-    `yoto spec: rows=${items.length} resolved=${s.spec_resolved} rated=${s.with_rating} ` +
-      `honest_zero=${s.spec_honest_zero} unresolved=${s.spec_unresolved} js_fallback=${s.spec_fallback} ` +
+    `yoto spec: rows=${t.rows} resolved=${t.resolved} rated=${t.rated} ` +
+      `honest_zero=${t.honest_zero} unresolved=${t.unresolved} js_fallback=${t.usedFallback} ` +
       `calls=${t.calls} blocked=${t.http_blocked} failed=${t.fetch_failed} skipped_stopped=${t.skipped_stopped}`,
   )
 }
@@ -374,7 +303,7 @@ for (const items of byHost.values()) {
 }
 for (const item of queue) idToPlatform.set(item.id, item.platform)
 console.log(`hosts: ${[...byHost.entries()].map(([h, v]) => `${h}×${v.length}`).join(', ')}`)
-await Promise.all([...byHost.entries()].map(([host, items]) => crawlHost(host, items)))
+await Promise.all([...byHost.entries()].map(([, items]) => crawlHtmlHost(items)))
 await crawlYotoSpec(yotoQueue)
 if (yotoSpecError) process.exitCode = 1
 
