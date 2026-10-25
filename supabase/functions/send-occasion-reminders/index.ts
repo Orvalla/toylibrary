@@ -3,7 +3,7 @@
 // A daily caller (GitHub Actions cron) hits this function with
 // the shared REMINDER_CRON_SECRET header. For every family
 // with reminders on and sharing enabled, it finds occasions
-// whose next occurrence falls within 17 days, and emails:
+// whose next occurrence falls within the send window, and emails:
 //
 //   1. the account owner ONE digest covering all of them, and
 //   2. each gift-circle relative (migration 0020) who has an
@@ -38,7 +38,13 @@
 // 17, 16, 15 or 14 days out depending on its slot, so a
 // cluster spreads across four days while every reminder still
 // lands at least 14 days ahead (the extra lead is deliberate
-// insurance against holiday shipping delays). All of a family's channels
+// insurance against holiday shipping delays). The spread is
+// adaptive: it holds the peak day near 100 firing families, so
+// once the sender count passes 400 the window gains a fifth
+// day (sends start a day earlier), then a sixth past 500, and
+// so on up to a 14-day spread — the last slot always lands
+// exactly 14 days out, so nobody's reminder is ever later than
+// two weeks ahead. All of a family's channels
 // (owner digest, relatives, subscribers) share the slot, and
 // the dedupe log still guarantees one send per recipient per
 // occurrence — a missed day simply sends on the next run, and
@@ -52,8 +58,14 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const CRON_SECRET = Deno.env.get('REMINDER_CRON_SECRET') ?? ''
 const FROM = Deno.env.get('REMINDER_FROM') ?? 'Toy Library <reminders@toylibrary.store>'
 const SITE = Deno.env.get('PUBLIC_SITE_URL') ?? 'https://toylibrary.store'
-const WINDOW_DAYS = 17
-const SPREAD_DAYS = 4
+// Send spread shape: BASE_SPREAD_DAYS slot days ending exactly
+// MIN_LEAD_DAYS before the occasion; one extra slot day (and
+// one more day of window) per FAMILIES_PER_DAY senders beyond
+// the base, capped at MAX_SPREAD_DAYS.
+const MIN_LEAD_DAYS = 14
+const BASE_SPREAD_DAYS = 4
+const MAX_SPREAD_DAYS = 14
+const FAMILIES_PER_DAY = 100
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -82,13 +94,13 @@ function nextOccurrence(month: number, day: number, from: Date): Date {
 // A family's stable slot in the send spread: FNV-1a over the
 // profile id, so the assignment is deterministic across runs
 // and needs no storage.
-function spreadSlot(id: string): number {
+function spreadSlot(id: string, spreadDays: number): number {
   let h = 0x811c9dc5
   for (let i = 0; i < id.length; i++) {
     h ^= id.charCodeAt(i)
     h = Math.imul(h, 0x01000193)
   }
-  return (h >>> 0) % SPREAD_DAYS
+  return (h >>> 0) % spreadDays
 }
 
 const dateKey = (d: Date) => d.toISOString().slice(0, 10)
@@ -173,8 +185,22 @@ Deno.serve(async (req) => {
       ])
     }
 
+    // Adaptive spread: one slot day per FAMILIES_PER_DAY
+    // reminder-enabled families (floored at BASE_SPREAD_DAYS,
+    // capped at MAX_SPREAD_DAYS). The window is the spread plus
+    // the fixed minimum lead, so the last slot always fires
+    // exactly MIN_LEAD_DAYS before the occasion.
+    const senderCount = (profiles ?? []).filter(
+      (p: any) => p.occasion_reminders && p.share_enabled
+    ).length
+    const spreadDays = Math.min(
+      MAX_SPREAD_DAYS,
+      Math.max(BASE_SPREAD_DAYS, Math.ceil(senderCount / FAMILIES_PER_DAY))
+    )
+    const windowDays = MIN_LEAD_DAYS + spreadDays - 1
+
     const now = new Date()
-    const horizon = new Date(now.getTime() + WINDOW_DAYS * 86400000)
+    const horizon = new Date(now.getTime() + windowDays * 86400000)
     // Calendar-day distance (UTC midnights), so daysAway is the
     // exact number of days until the occasion — the send-spread
     // thresholds below are written in those terms.
@@ -199,9 +225,9 @@ Deno.serve(async (req) => {
       // Send spread: only occasions at or inside this family's
       // slot threshold are sendable today (see header). The
       // per-recipient dedupe below does the rest.
-      const slot = spreadSlot(profile.id)
+      const slot = spreadSlot(profile.id, spreadDays)
       const allEntries = (due.get(profile.id) ?? []).filter(
-        (e: any) => e.daysAway <= WINDOW_DAYS - slot
+        (e: any) => e.daysAway <= windowDays - slot
       )
       if (!allEntries.length) continue
       if (!profile.occasion_reminders || !profile.share_enabled) continue
@@ -385,6 +411,7 @@ Deno.serve(async (req) => {
     return json({
       configured: Boolean(RESEND_API_KEY),
       dry,
+      spread: { senderCount, spreadDays, windowDays },
       dueProfiles: digests.length,
       sent: sentCount,
       digests,
