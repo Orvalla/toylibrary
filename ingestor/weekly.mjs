@@ -54,7 +54,14 @@ const headers = {
 async function rest(path, options = {}) {
   const res = await fetch(`${URL_BASE}/rest/v1/${path}`, { ...options, headers })
   if (!res.ok) throw new Error(`REST ${path} -> ${res.status}: ${(await res.text()).slice(0, 200)}`)
-  return res.status === 204 ? null : res.json()
+  if (res.status === 204) return null
+  // PostgREST can answer a successful write with an empty body (201,
+  // return=minimal); res.json() on that throws 'Unexpected end of JSON
+  // input' AFTER the write has committed — it killed the 2026-10-26 run
+  // right after the net-new inserts landed. Read the body as text and
+  // only parse when there is one.
+  const text = await res.text()
+  return text ? JSON.parse(text) : null
 }
 
 async function allRows(select, extra = '') {
