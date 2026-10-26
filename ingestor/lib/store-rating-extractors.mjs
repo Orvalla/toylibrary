@@ -23,6 +23,15 @@
 //     #productDetailShowReviewsForm (BRIO) or .review-wrapper
 //     block (Ravensburger games), because recommendation cards
 //     on the same page carry identical star-summary blocks.
+//   - Mudpuppy (Judge.me): the per-product rating + count pair
+//     is server-rendered into the page's jdgm-prev-badge div
+//     (data-average-rating / data-number-of-reviews), with the
+//     jdgm-rev-widg div carrying an identical pair as fallback
+//     (JUDGEME-PROBE.md: 10 samples, 8 populated, badge and
+//     widget agreed on every one). The widget container carries
+//     SHOP-WIDE data-shop-average-rating / data-shop-review-
+//     count attributes — never read those (the Lovevery trap
+//     in Judge.me dress).
 
 // Read the balanced {...} span starting at `start` (which must
 // point at a '{'). Brace counting ignores string state: in the
@@ -149,6 +158,34 @@ export function extractRavensburgerRating(html) {
   return null
 }
 
+// Judge.me (Mudpuppy): the aggregate pair lives in data
+// attributes on two divs — jdgm-prev-badge (primary) and
+// jdgm-rev-widg (fallback, identical values where both render).
+// Zero-review products render NEITHER div (the reviews
+// container is present but empty), so a missing pair is an
+// honest zero → null. Attribute reads are scoped to the
+// opening tag of a div whose class tokens name one of the two
+// carriers, which is what keeps the container's shop-wide
+// data-shop-* attributes out: they sit on a different element
+// under different attribute names.
+export function extractJudgemeRating(html) {
+  if (!html) return null
+  for (const [marker, extractor] of [
+    ['jdgm-prev-badge', 'judgeme-badge'],
+    ['jdgm-rev-widg', 'judgeme-widget'],
+  ]) {
+    for (const m of html.matchAll(/<div\b[^>]*>/g)) {
+      const tag = m[0]
+      const cls = tag.match(/\bclass\s*=\s*(['"])(.*?)\1/)
+      if (!cls || !cls[2].split(/\s+/).includes(marker)) continue
+      const avg = tag.match(/\bdata-average-rating\s*=\s*(['"])([\d.]+)\1/)
+      const num = tag.match(/\bdata-number-of-reviews\s*=\s*(['"])(\d+)\1/)
+      if (avg && num) return ratingPair(avg[2], num[2], extractor)
+    }
+  }
+  return null
+}
+
 // Dispatcher used by backfill-ratings-stores.mjs's HTML path.
 // Returns null for platforms/hosts with no bespoke extractor —
 // the caller then falls back to JSON-LD extraction.
@@ -172,6 +209,9 @@ export function extractStoreRating(platform, url, html) {
   }
   if (platform === 'eeboo') {
     return extractMetafieldReviews(html)
+  }
+  if (platform === 'mudpuppy') {
+    return extractJudgemeRating(html)
   }
   if (platform === 'brio' || platform === 'ravensburger') {
     return extractRavensburgerRating(html)

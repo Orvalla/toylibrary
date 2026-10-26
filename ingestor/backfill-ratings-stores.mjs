@@ -12,9 +12,10 @@
 // Beyond JSON-LD, lib/store-rating-extractors.mjs routes a few
 // platforms to bespoke static-HTML extractors (Moonlite's
 // Klaviyo MetafieldReviews blob, HABA/eeBoo reviews metafields,
-// ravensburger.us's scoped native-review block) — see that
-// module for the source notes. --samples N prints extraction
-// samples per platform for dry-run reports.
+// ravensburger.us's scoped native-review block, Mudpuppy's
+// Judge.me badge attributes) — see that module for the source
+// notes. --samples N prints extraction samples per platform
+// for dry-run reports.
 //
 // Reality check (probed 2026-10-21): most stores never put the
 // number in static HTML — Tonies renders reviews through
@@ -259,9 +260,9 @@ async function crawlHtmlHost(items) {
     s.fetched++
     // Platform-specific static-HTML extractors first (Moonlite
     // Klaviyo metafield, HABA/eeBoo reviews metafield,
-    // ravensburger.us scoped native reviews — lib/
-    // store-rating-extractors.mjs); JSON-LD remains the fallback
-    // for every other store.
+    // ravensburger.us scoped native reviews, Mudpuppy Judge.me
+    // badge — lib/store-rating-extractors.mjs); JSON-LD remains
+    // the fallback for every other store.
     const found = extractStoreRating(item.platform, item.url, res.text) ?? extractAggregateRating(res.text)
     if (!found) continue
     if (!found.rating_count) {
