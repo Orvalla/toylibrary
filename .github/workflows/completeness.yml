@@ -1,0 +1,199 @@
+name: Catalog completeness sweep
+
+# The recurring completeness sweep (RECON Part C, 2026-10-25):
+# one brand per run, worked in RECON rollout order, against the
+# queues defined by the catalog_completeness_gaps view
+# (migration 0054). A brand visit does what routes exist for it
+# TODAY — store/spec ratings backfill, bundle-contents manifests
+# (dry-runner output; mappings are applied separately), image
+# top-up — and prints an explicit report line for every route
+# that is not built yet, so a skipped route is never a silent
+# skip. New routes join the rotation only after their samples
+# gate (dry-first), per RECON Part A.
+#
+# Rotation is derived from the gaps view at runtime — no stored
+# cursor: the first platform in rollout order that still has
+# gaps (unrated, unmapped bundles, missing images, age gaps) is
+# next week's brand.
+#
+# Deliberately NOT in the rotation:
+#   - The BGG slate (devir, asmodee, renegade, aeg, capstone,
+#     blueorange, greaterthangames, stonemaier): board-game
+#     ratings and publisher ages wait for the BoardGameGeek API
+#     token (owner decision 2026-10-25); crawling them now
+#     would burn the run budget for data BGG serves directly.
+#     Thames & Kosmos IS in the rotation — ~198 of its rows are
+#     science kits, worked here; only its ~88 board games are
+#     BGG slate, and the ratings crawl simply finds what the
+#     kits' pages carry.
+#   - books: ratings/images run under enrich.yml's own routes,
+#     and books are excluded from the product_url gap by design.
+#   - lovevery: RECON found no per-product rating source (its
+#     only figure is a program-wide aggregate) — nothing to do.
+#   - tonies: ratings parked by owner decision (2026-10-24).
+#
+# Per-run caps: one platform's ratings queue, bundle manifests
+# for that platform, 200 image top-ups — sized to stay near the
+# ~3,500-call / 120-minute budget under the estate discipline
+# the ingestor scripts already implement.
+
+on:
+  schedule:
+    # Wednesdays ~15:00 UTC (weekly-ingest is Monday, the DB
+    # backup Sunday — the sweep gets its own day).
+    - cron: '23 15 * * 3'
+  workflow_dispatch:
+    inputs:
+      brand:
+        description: 'Platform to work, or "next" for the rotation pick'
+        type: string
+        default: 'next'
+      dry:
+        description: 'Dry run (crawl and report, change nothing)'
+        type: boolean
+        default: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Pick the brand (rotation from the gaps view)
+        id: pick
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WANT: ${{ inputs.brand || 'next' }}
+        run: |
+          set -euo pipefail
+          # RECON Part A rollout order.
+          ORDER="melissaanddoug crayola projector haba eeboo mudpuppy brio ravensburger thamesandkosmos kiwico yoto storypod lunii hape leapfrog janod letoyvan unclegoose"
+          curl -s "$SUPABASE_URL/rest/v1/catalog_completeness_gaps?select=*" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" > gaps.json
+          BRAND=$(python3 - "$WANT" $ORDER <<'PY'
+          import json, sys
+          want, order = sys.argv[1], sys.argv[2:]
+          gaps = {r['platform']: r for r in json.load(open('gaps.json'))}
+          def has_gaps(p):
+              r = gaps.get(p)
+              return bool(r) and (r['unrated'] or r['unmapped_bundles'] or r['missing_image'] or r['age_no_data'])
+          if want != 'next':
+              print(want)
+          else:
+              print(next((p for p in order if has_gaps(p)), ''))
+          PY
+          )
+          if [ -z "$BRAND" ]; then
+            echo "## Completeness sweep — no platform in the rotation has gaps left 🎉" >> "$GITHUB_STEP_SUMMARY"
+            echo "brand=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "brand=$BRAND" >> "$GITHUB_OUTPUT"
+          python3 - "$BRAND" <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, sys
+          r = next((x for x in json.load(open('gaps.json')) if x['platform'] == sys.argv[1]), {})
+          print(f"## Completeness sweep — {sys.argv[1]}")
+          print(f"- gaps at pick: unrated={r.get('unrated','?')} · unmapped bundles={r.get('unmapped_bundles','?')} "
+                f"· missing images={r.get('missing_image','?')} · age_no_data={r.get('age_no_data','?')} "
+                f"· missing product_url={r.get('missing_product_url','?')} (of {r.get('total_rows','?')} rows)")
+          PY
+
+      - name: Ratings — store/spec backfill for the brand
+        id: ratings
+        if: steps.pick.outputs.brand != '' && !contains('devir asmodee renegade aeg capstone blueorange greaterthangames stonemaier', steps.pick.outputs.brand)
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -uo pipefail
+          mkdir -p completeness-report
+          node ingestor/backfill-ratings-stores.mjs --platform "${{ steps.pick.outputs.brand }}" ${{ inputs.dry && '--dry-run' || '' }} \
+            2>&1 | tee completeness-report/ratings.log
+          FILLED=$(grep -o 'updated=[0-9]*' completeness-report/ratings.log | awk -F= '{s+=$2} END {print s+0}')
+          echo "filled=$FILLED" >> "$GITHUB_OUTPUT"
+          echo "- ratings (store/spec backfill): filled $FILLED" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ratings — BGG slate (stub)
+        if: steps.pick.outputs.brand != '' && contains('devir asmodee renegade aeg capstone blueorange greaterthangames stonemaier', steps.pick.outputs.brand)
+        run: |
+          echo "- ratings: SKIPPED — ${{ steps.pick.outputs.brand }} is BGG slate; game ratings + publisher ages wait for the BoardGameGeek API token (owner decision 2026-10-25)" >> "$GITHUB_STEP_SUMMARY"
+
+      # --- Not-yet-built rating routes: explicit no-ops -------
+      # Each prints its report line instead of silently skipping.
+      # A route leaves this section when its samples gate passes
+      # and the real step lands (RECON Part A order).
+      - name: Ratings — Bazaarvoice teach (stub)
+        if: contains('melissaanddoug crayola projector', steps.pick.outputs.brand)
+        run: |
+          echo "- ratings: Bazaarvoice route not built yet for ${{ steps.pick.outputs.brand }} (RECON A.1 — one teach pattern, three deployments; samples gate first)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Ratings — review-metafield parse (stub)
+        if: contains('projector haba eeboo', steps.pick.outputs.brand)
+        run: |
+          echo "- ratings: storefront review-metafield parse not built yet for ${{ steps.pick.outputs.brand }} (RECON A.2/A.3 — Klaviyo/Yotpo/MetafieldReviews blobs)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Ratings — Judge.me teach (stub)
+        if: steps.pick.outputs.brand == 'mudpuppy'
+        run: |
+          echo "- ratings: Judge.me teach not built yet for mudpuppy (RECON A.6)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Ratings — native first-party reviews (stub)
+        if: contains('brio ravensburger', steps.pick.outputs.brand)
+        run: |
+          echo "- ratings: native first-party review parse not built yet for ${{ steps.pick.outputs.brand }} (RECON A.5 — ravensburger.us server-rendered reviews)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Ratings — retailer different-source wave (stub)
+        if: contains('lunii hape leapfrog janod letoyvan unclegoose', steps.pick.outputs.brand)
+        run: |
+          echo "- ratings: no review system on the maker's own storefront — the retailer different-source wave is not built yet for ${{ steps.pick.outputs.brand }} (RECON A.8, runs last)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bundle contents — dry-run manifests
+        if: contains('thamesandkosmos kiwico eeboo', steps.pick.outputs.brand)
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -uo pipefail
+          # Manifests only — the runner never writes. Passes are
+          # the apply list for a separate, reviewed step; the
+          # manifests ride along as this run's artifact.
+          node ingestor/bundle-contents.mjs --platform "${{ steps.pick.outputs.brand }}" --out completeness-report
+          echo "- bundle contents: manifest for ${{ steps.pick.outputs.brand }} in the run artifact (pass = apply list, excluded = bundle_contents_no_data candidates)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Bundle contents (stub)
+        if: steps.pick.outputs.brand != '' && !contains('thamesandkosmos kiwico eeboo', steps.pick.outputs.brand)
+        run: |
+          echo "- bundle contents: no extractor route for ${{ steps.pick.outputs.brand }} yet — its unmapped bundles stay queued in the gaps view" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Images — top-up (all brands, capped)
+        if: steps.pick.outputs.brand != ''
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WEEKLY_DRY: ${{ inputs.dry && '1' || '' }}
+        run: |
+          node ingestor/backfill-images.mjs --limit 200 2>&1 | tee completeness-report/images.log
+          echo "- images: top-up pass ran (limit 200, unscoped — the image queue is global)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Product URLs (stub)
+        if: steps.pick.outputs.brand != ''
+        run: |
+          echo "- product URLs: backfill-product-urls.mjs is a planner (it emits SQL for a reviewed foreground apply) — no CI route; the brand's missing_product_url count stays visible in the gaps view" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Popularity rescore (only when ratings landed)
+        if: steps.ratings.outputs.filled != '' && steps.ratings.outputs.filled != '0'
+        env:
+          SUPABASE_URL: https://seskzmdgazqfuryrtgmg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          node ingestor/popularity.mjs ${{ inputs.dry && '--dry' || '' }}
+          echo "- popularity: rescored (${{ steps.ratings.outputs.filled }} new ratings)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the run report
+        if: always() && steps.pick.outputs.brand != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: completeness-${{ steps.pick.outputs.brand }}-${{ github.run_number }}
+          path: completeness-report/
+          if-no-files-found: ignore

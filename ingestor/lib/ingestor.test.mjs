@@ -4,7 +4,7 @@ import { mapShopifyProduct } from './shopify.mjs'
 import { extractOg, extractProductUrls, mapLeapfrogPage, parsePageData, parsePageDataBlock, mapPageDataProduct } from './leapfrog.mjs'
 import { decodeNumericEntities, extractSitemapUrls, mapLuniiPage } from './lunii.mjs'
 import { dedupeCatalog, catalogToSql } from './output.mjs'
-import { SOURCES } from './sources.mjs'
+import { SOURCES, isBundleRow } from './sources.mjs'
 
 const tonies = SOURCES.find((s) => s.id === 'tonies')
 const moonlite = SOURCES.find((s) => s.id === 'moonlite')
@@ -86,6 +86,7 @@ describe('shopify mapping (fixtures modelled on the live littletikes.com feed)',
       platform: 'projector',
       title: 'Random House The Berenstain Bears - 3 Pack Collection',
       details: 'Dream Machine story collection',
+      is_bundle: true,
       image_url: 'https://cdn.shopify.com/x.jpg',
     })
   })
@@ -143,10 +144,13 @@ describe('shopify mapping (fixtures modelled on the live us.yotoplay.com feed)',
   it('keeps card packs as packs', () => {
     expect(
       mapShopifyProduct(yoto, { ...base, product_type: 'bundle', title: "Daniel Tiger's Neighborhood: Daniel & Friends Pack" })
-    ).toMatchObject({ details: 'Yoto Card pack' })
+    ).toMatchObject({ details: 'Yoto Card pack', is_bundle: true })
     expect(
       mapShopifyProduct(yoto, { ...base, product_type: 'soft-bundle', title: 'Pixar Audio Collection: Volume 2' })
-    ).toMatchObject({ details: 'Yoto Card pack' })
+    ).toMatchObject({ details: 'Yoto Card pack', is_bundle: true })
+    expect(
+      mapShopifyProduct(yoto, { ...base, product_type: 'single-card', title: 'The Gruffalo' })
+    ).toMatchObject({ details: 'Yoto Card', is_bundle: false })
   })
 
   it('drops players, hardware bundles, accessories, gift cards and club', () => {
@@ -199,10 +203,13 @@ describe('shopify mapping (fixtures modelled on the live storypod.com feed)', ()
   it('keeps content bundles — none of them includes the player', () => {
     expect(
       mapShopifyProduct(storypod, { ...base, product_type: 'Content Bundle', title: 'Daniel Tiger Bundle' })
-    ).toMatchObject({ details: 'Content bundle' })
+    ).toMatchObject({ details: 'Content bundle', is_bundle: true })
     expect(
       mapShopifyProduct(storypod, { ...base, product_type: 'Content Bundle', title: 'Recordable Token 5 Pack' })
-    ).toMatchObject({ details: 'Content bundle' })
+    ).toMatchObject({ details: 'Content bundle', is_bundle: true })
+    expect(
+      mapShopifyProduct(storypod, { ...base, product_type: 'Tokens', title: 'The Gruffalo' })
+    ).toMatchObject({ details: 'Token', is_bundle: false })
   })
 
   it('rescues the untyped single Recordable Token, drops the other untyped listings', () => {
@@ -260,6 +267,27 @@ describe('shopify mapping (fixtures modelled on the live playosmo.com feed)', ()
     drop('', 'Math Wizard Series') // bundle of the individually listed games
     drop('game', 'Pretend Play Bundle') // ditto for the Little Genius games
     drop('', 'Free $20 Mystery Gift with Your Purchase!')
+  })
+})
+
+describe('the bundle signal (lib/sources.mjs isBundleRow)', () => {
+  it('reads the same type/title evidence as the details text', () => {
+    expect(isBundleRow(yoto, { product_type: 'bundle', title: 'Any Pack', details: 'Yoto Card pack' })).toBe(true)
+    expect(isBundleRow(yoto, { product_type: 'soft-bundle', title: 'Any Pack', details: 'Yoto Card pack' })).toBe(true)
+    expect(isBundleRow(yoto, { product_type: 'single-card', title: 'The Gruffalo', details: 'Yoto Card' })).toBe(false)
+    expect(isBundleRow(storypod, { product_type: 'Content Bundle', title: 'Daniel Tiger Bundle', details: 'Content bundle' })).toBe(true)
+    expect(isBundleRow(storypod, { product_type: 'Tokens', title: 'The Gruffalo', details: 'Token' })).toBe(false)
+    // Little Tikes has no bundle types — the details string the
+    // title rule produces is the signal.
+    expect(isBundleRow(littletikes, { product_type: 'preschool toys', title: 'X Collection', details: 'Dream Machine story collection' })).toBe(true)
+    expect(isBundleRow(littletikes, { product_type: 'preschool toys', title: 'X', details: 'Dream Machine story cartridge' })).toBe(false)
+  })
+
+  it('never signals for sources that exclude bundles outright, or for no source', () => {
+    expect(isBundleRow(tonies, { product_type: 'Audiobook', title: 'Goosebumps Book Tonies - 4 Pack', details: 'Audiobook Tonie' })).toBe(false)
+    expect(isBundleRow(osmo, { product_type: 'game', title: 'Pretend Play Bundle', details: 'Osmo game' })).toBe(false)
+    expect(isBundleRow(null, { product_type: 'bundle', title: 'X', details: 'Yoto Card pack' })).toBe(false)
+    expect(isBundleRow(undefined, {})).toBe(false)
   })
 })
 

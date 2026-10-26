@@ -61,6 +61,7 @@ export const SOURCES = [
     detailsByTitle: [
       { match: /collection|colección|\bpack\b/i, details: 'Dream Machine story collection' },
     ],
+    bundleDetails: ['Dream Machine story collection'],
     details: 'Dream Machine story cartridge',
   },
   {
@@ -83,6 +84,7 @@ export const SOURCES = [
       bundle: 'Yoto Card pack',
       'soft-bundle': 'Yoto Card pack',
     },
+    bundleTypes: ['bundle', 'soft-bundle'],
     stripTitleSuffix: '',
   },
   {
@@ -115,6 +117,7 @@ export const SOURCES = [
       Puzzles: 'Puzzle',
       'Trivia Decks': 'Trivia deck',
     },
+    bundleTypes: ['Content Bundle'],
     detailsByTitle: [{ match: /^recordable token$/i, details: 'Token' }],
     stripTitleSuffix: '',
   },
@@ -160,3 +163,21 @@ export const SOURCES = [
     maxProducts: 400,
   },
 ]
+
+// The bundle signal, parallel to detailsByType: a source declares
+// which of its products are bundles — by product_type
+// (bundleTypes), by the details text the mapping produces
+// (bundleDetails), or by title (bundleTitle) — using the same
+// evidence that already drives the details strings. Sources that
+// exclude bundles outright (tonies, moonlite, osmo above) declare
+// nothing and never signal. Adapters attach the verdict to each
+// mapped row as is_bundle, so an insert path can never stock a
+// pack as a plain single by forgetting the flag (the leak the
+// completeness recon found in weekly ingest — RECON Part B.2).
+export function isBundleRow(source, { product_type = '', title = '', details = '' } = {}) {
+  if (!source) return false
+  if (source.bundleTypes?.includes(product_type)) return true
+  if (source.bundleDetails?.includes(details)) return true
+  if (source.bundleTitle && source.bundleTitle.test(title)) return true
+  return false
+}

@@ -285,6 +285,7 @@ describe('normalizeShopifyProduct', () => {
       platform: 'tonies',
       title: 'Bluey',
       details: 'Tonie figure',
+      is_bundle: false,
       image_url: 'https://cdn.shopify.com/bluey.png',
       age_min_years: null,
       age_max_years: null,
@@ -303,6 +304,7 @@ describe('normalizeShopifyProduct', () => {
       platform: 'leapfrog',
       title: 'LeapStart: 3D',
       details: 'Activity Book',
+      is_bundle: false,
       image_url: 'https://cdn.example.com/leap.jpg',
       age_min_years: null,
       age_max_years: null,
@@ -316,6 +318,7 @@ describe('normalizeShopifyProduct', () => {
       platform: 'other',
       title: 'Plain Thing',
       details: '',
+      is_bundle: false,
       image_url: null,
       age_min_years: null,
       age_max_years: null,
@@ -328,6 +331,22 @@ describe('normalizeShopifyProduct', () => {
     expect(normalizeShopifyProduct(null, 'tonies')).toBeNull()
     expect(normalizeShopifyProduct({}, 'tonies')).toBeNull()
     expect(normalizeShopifyProduct({ product: { title: '  ' } }, 'tonies')).toBeNull()
+  })
+
+  it('flags the pack product types as bundles from the type signal', () => {
+    for (const [type, details] of [
+      ['bundle', 'Yoto Card pack'],
+      ['soft-bundle', 'Yoto Card pack'],
+      ['Content Bundle', 'Content bundle'],
+    ]) {
+      const row = normalizeShopifyProduct({ title: 'Some Pack', product_type: type, images: [] }, 'yoto')
+      expect(row?.details).toBe(details)
+      expect(row?.is_bundle).toBe(true)
+    }
+    expect(
+      normalizeShopifyProduct({ title: 'Single Card', product_type: 'single-card', images: [] }, 'yoto')
+        ?.is_bundle,
+    ).toBe(false)
   })
 })
 
@@ -467,6 +486,7 @@ describe('planCollectionImport', () => {
         platform: 'tonies',
         title: 'Disney Frozen: Elsa',
         details: 'Tonie figure',
+        is_bundle: false,
         image_url: 'https://cdn.shopify.com/x.jpg',
         age_min_years: null,
         age_max_years: null,
@@ -478,6 +498,7 @@ describe('planCollectionImport', () => {
         platform: 'tonies',
         title: 'Toniebox 2',
         details: 'Toniebox',
+        is_bundle: false,
         image_url: 'https://cdn.shopify.com/x.jpg',
         age_min_years: null,
         age_max_years: null,
@@ -512,6 +533,7 @@ describe('planCollectionImport', () => {
         platform: 'projector',
         title: 'Dr. Seuss Cat in The Hat Collection',
         details: 'Dream Machine story collection',
+        is_bundle: true,
         image_url: 'https://cdn.shopify.com/x.jpg',
         age_min_years: null,
         age_max_years: null,
@@ -523,6 +545,7 @@ describe('planCollectionImport', () => {
         platform: 'projector',
         title: 'Harper Collins Digger the Dinosaur',
         details: 'Dream Machine story cartridge',
+        is_bundle: false,
         image_url: 'https://cdn.shopify.com/x.jpg',
         age_min_years: null,
         age_max_years: null,
@@ -533,6 +556,18 @@ describe('planCollectionImport', () => {
     ])
     expect(plan.alreadyPresent).toBe(0)
     expect(plan.skippedFiltered).toBe(0)
+  })
+
+  it('plans a Yoto pack as a bundle from its product type', () => {
+    const products = [
+      { title: "Daniel Tiger's Neighborhood: Daniel & Friends Pack", product_type: 'bundle', handle: 'dt-pack', images: img, tags: [] },
+      { title: 'The Gruffalo', product_type: 'single-card', handle: 'gruffalo', images: img, tags: [] },
+    ]
+    const plan = planCollectionImport(products, [], 'yoto', 'https://us.yotoplay.com')
+    expect(plan.toAdd.map((r) => [r.title, r.is_bundle])).toEqual([
+      ["Daniel Tiger's Neighborhood: Daniel & Friends Pack", true],
+      ['The Gruffalo', false],
+    ])
   })
 
   it('rescues the Storypod Recordable Token details, and matches ingestor titles as present', () => {
@@ -546,6 +581,7 @@ describe('planCollectionImport', () => {
         platform: 'storypod',
         title: 'Recordable Token',
         details: 'Token',
+        is_bundle: false,
         image_url: null,
         age_min_years: null,
         age_max_years: null,
@@ -624,6 +660,7 @@ describe('planRowImport', () => {
       {
         title: 'The Gruffalo',
         details: 'Story',
+        is_bundle: false,
         image_url: 'https://x/g.jpg',
         source_url: 'https://s/g',
         age_min_years: null,
@@ -639,6 +676,27 @@ describe('planRowImport', () => {
   it('applies the same title tidying as collection imports', () => {
     const plan = planRowImport([{ title: 'Bluey Tonie', source_url: 'https://s/b' }], [], 'tonies')
     expect(plan.toAdd[0].title).toBe('Bluey')
+  })
+
+  it('carries the bundle flag through — from the row, or from a bundle details string', () => {
+    const flagged = planRowImport(
+      [{ title: 'Some Pack', details: '', is_bundle: true, source_url: 'https://s/p' }],
+      [],
+      'yoto',
+    )
+    expect(flagged.toAdd[0].is_bundle).toBe(true)
+    const byDetails = planRowImport(
+      [{ title: 'Daniel Tiger Bundle', details: 'Content bundle', source_url: 'https://s/d' }],
+      [],
+      'storypod',
+    )
+    expect(byDetails.toAdd[0].is_bundle).toBe(true)
+    const plain = planRowImport(
+      [{ title: 'Single Card', details: 'Yoto Card', source_url: 'https://s/c' }],
+      [],
+      'yoto',
+    )
+    expect(plain.toAdd[0].is_bundle).toBe(false)
   })
 
   it('skips untitled rows and in-list repeats', () => {

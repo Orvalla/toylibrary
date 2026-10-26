@@ -28,6 +28,7 @@ import { ingestLunii } from './lib/lunii.mjs'
 import { ageForRow } from './lib/ages.mjs'
 import { createSpecCaller, loadSpec } from './lib/specall.mjs'
 import { rateYotoRows } from './lib/yoto-spec.mjs'
+import { extractBundleContents } from './lib/bundle-contents.mjs'
 import { extractAggregateRating } from '../supabase/functions/ingest-catalog/extract.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -36,6 +37,7 @@ const URL_BASE = process.env.SUPABASE_URL
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const DRY = process.argv.includes('--dry') || process.env.WEEKLY_DRY === '1'
 const RATINGS_BUDGET = Number(process.env.WEEKLY_RATINGS_BUDGET ?? 300)
+const BUNDLE_CONTENTS_BUDGET = Number(process.env.WEEKLY_BUNDLE_BUDGET ?? 25)
 const ADAPTERS = { shopify: ingestShopify, leapfrog: ingestLeapfrog, lunii: ingestLunii }
 
 if (!URL_BASE || !KEY) {
@@ -107,6 +109,11 @@ async function main() {
       source_url: row.source_url ?? '',
       product_url: row.source_url || null,
       item_type: 'content',
+      // The bundle signal the adapters computed from the same
+      // type/title evidence as the details text (lib/sources.mjs):
+      // a net-new pack must land as a bundle, not a plain single
+      // (the completeness recon's standing leak — RECON B.2).
+      is_bundle: row.is_bundle === true,
       sort_order: sort,
       ...ageForRow(row),
     })
@@ -116,6 +123,95 @@ async function main() {
     for (let i = 0; i < fresh.length; i += 200) {
       await rest('catalog_items', { method: 'POST', body: JSON.stringify(fresh.slice(i, i + 200)) })
     }
+  }
+
+  // ---- Step 1b: contents for just-inserted bundles -------------------
+  // Bounded to this run's new bundle rows (a handful a week).
+  // The shared extractor (lib/bundle-contents.mjs) applies the
+  // exact-count bar: a pass writes the contents pairs, an
+  // "excluded" verdict (quantity pack, contents not published)
+  // sets bundle_contents_no_data so the sweep never re-queues
+  // the row, and a failure simply leaves the bundle for the
+  // completeness sweep's per-brand queue.
+  const newBundles = fresh.filter((f) => f.is_bundle)
+  if (newBundles.length) {
+    const bundleCaller = createSpecCaller({
+      fetchImpl: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(15000) }),
+    })
+    const pools = new Map()
+    const poolFor = async (platform) => {
+      if (!pools.has(platform)) {
+        pools.set(
+          platform,
+          await allRows(
+            'id,title,source_url',
+            `&platform=eq.${platform}&is_bundle=eq.false&item_type=neq.device`,
+          ),
+        )
+      }
+      return pools.get(platform)
+    }
+    let mapped = 0
+    let flagged = 0
+    let left = 0
+    for (const b of newBundles.slice(0, BUNDLE_CONTENTS_BUDGET)) {
+      try {
+        let bundleId = null
+        if (!DRY) {
+          const found = await rest(
+            `catalog_items?platform=eq.${b.platform}&title=eq.${encodeURIComponent(b.title)}&select=id`,
+          )
+          bundleId = found?.[0]?.id ?? null
+        }
+        let bodyHtml = ''
+        if (b.source_url) {
+          const js = await bundleCaller.request(`${b.source_url}.js`, {
+            headers: { accept: 'application/json' },
+          })
+          if (js.ok) {
+            try {
+              bodyHtml = JSON.parse(js.text)?.description ?? ''
+            } catch {
+              bodyHtml = ''
+            }
+          }
+          if (!bodyHtml) {
+            const page = await bundleCaller.request(b.source_url, { headers: { accept: 'text/html' } })
+            if (page.ok) bodyHtml = page.text
+          }
+        }
+        const out = extractBundleContents(
+          { platform: b.platform, title: b.title, bodyHtml, pageText: bodyHtml },
+          await poolFor(b.platform),
+        )
+        if (out.verdict === 'pass') {
+          if (bundleId) {
+            await rest('bundle_contents', {
+              method: 'POST',
+              body: JSON.stringify(
+                out.contents.map((c) => ({ bundle_id: bundleId, content_id: c.catalog_id })),
+              ),
+            })
+          }
+          mapped += 1
+        } else if (out.verdict === 'excluded') {
+          if (bundleId) {
+            await rest(`catalog_items?id=eq.${bundleId}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ bundle_contents_no_data: true }),
+            })
+          }
+          flagged += 1
+        } else {
+          left += 1
+        }
+      } catch {
+        left += 1 // one bad page never blocks the run
+      }
+    }
+    say(
+      `▦ bundle contents: ${mapped} new bundles mapped, ${flagged} flagged contents-not-published, ${left} left for the sweep (of ${newBundles.length} new bundles)`,
+    )
   }
 
   // ---- Step 2: ratings top-up ---------------------------------------------

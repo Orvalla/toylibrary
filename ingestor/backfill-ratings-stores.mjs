@@ -7,7 +7,14 @@
 // extract.js → extractAggregateRating).
 //
 //   node ingestor/backfill-ratings-stores.mjs [--dry-run]
-//        [--platform tonies] [--yoto-limit 500]
+//        [--platform tonies] [--yoto-limit 500] [--samples N]
+//
+// Beyond JSON-LD, lib/store-rating-extractors.mjs routes a few
+// platforms to bespoke static-HTML extractors (Moonlite's
+// Klaviyo MetafieldReviews blob, HABA/eeBoo reviews metafields,
+// ravensburger.us's scoped native-review block) — see that
+// module for the source notes. --samples N prints extraction
+// samples per platform for dry-run reports.
 //
 // Reality check (probed 2026-10-21): most stores never put the
 // number in static HTML — Tonies renders reviews through
@@ -52,12 +59,31 @@ import { fileURLToPath } from 'node:url'
 import { extractAggregateRating } from '../supabase/functions/ingest-catalog/extract.js'
 import { callSpec, createSpecCaller, loadSpec, verifySpec } from './lib/specall.mjs'
 import { rateYotoRows } from './lib/yoto-spec.mjs'
+import { extractStoreRating } from './lib/store-rating-extractors.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const onlyPlatform = args.includes('--platform') ? args[args.indexOf('--platform') + 1] : null
 const yotoLimit = args.includes('--yoto-limit') ? Number(args[args.indexOf('--yoto-limit') + 1]) : 500
+// --samples N: print up to N extraction samples per platform
+// (rated hits and zero pairs separately) as SAMPLE/ZERO lines —
+// the dry-run evidence format for new store extractors.
+const samplesPerPlatform = args.includes('--samples') ? Number(args[args.indexOf('--samples') + 1]) : 0
+const sampleCounts = new Map()
+function printSample(kind, item, found) {
+  if (!samplesPerPlatform) return
+  const key = `${kind}:${item.platform}`
+  const n = (sampleCounts.get(key) ?? 0) + 1
+  sampleCounts.set(key, n)
+  if (n > samplesPerPlatform) return
+  console.log(
+    `${kind} ${JSON.stringify({
+      platform: item.platform, title: item.title, rating: found.rating,
+      rating_count: found.rating_count, extractor: found.extractor ?? 'json-ld', url: item.url,
+    })}`,
+  )
+}
 
 // --verify-specs: pre-flight for the spec-driven paths (the
 // Yoto/Trustpilot spec and the Storypod/Yotpo spec). Replays
@@ -231,12 +257,19 @@ async function crawlHtmlHost(items) {
       continue
     }
     s.fetched++
-    const found = extractAggregateRating(res.text)
+    // Platform-specific static-HTML extractors first (Moonlite
+    // Klaviyo metafield, HABA/eeBoo reviews metafield,
+    // ravensburger.us scoped native reviews — lib/
+    // store-rating-extractors.mjs); JSON-LD remains the fallback
+    // for every other store.
+    const found = extractStoreRating(item.platform, item.url, res.text) ?? extractAggregateRating(res.text)
     if (!found) continue
     if (!found.rating_count) {
       s.rating_no_count++
+      printSample('ZERO', item, found)
       continue
     }
+    printSample('SAMPLE', item, found)
     s.with_rating++
     updates.push({ id: item.id, rating: found.rating, rating_count: found.rating_count })
     await flushStoreUpdates()

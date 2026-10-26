@@ -240,6 +240,7 @@ async function upsertCatalogItem(
     details: string
     image_url: string | null
     source_url: string | null
+    is_bundle?: boolean
     age_min_years?: number | null
     age_max_years?: number | null
     rating?: number | null
@@ -269,6 +270,12 @@ async function upsertCatalogItem(
         platform: row.platform,
         title: row.title,
         details: row.details ?? '',
+        // The bundle flag the normaliser computed from the
+        // product's type (extract.js) — a pasted pack link must
+        // stock the pack as a bundle, not a plain single.
+        // Contents stay unmapped here; the completeness sweep
+        // picks the row up from the gaps view (migration 0054).
+        is_bundle: row.is_bundle === true,
         // catalog_items.image_url is NOT NULL; '' is its "no photo"
         // value and the tiles fall back to platform art for it.
         image_url: row.image_url ?? '',
@@ -361,6 +368,11 @@ async function insertCatalogRows(
       platform,
       title: row.title.slice(0, TITLE_CAP),
       details: row.details ?? '',
+      // Same bundle signal as the single-add path: the planners
+      // in extract.js stamp is_bundle from the product type /
+      // details evidence, and the insert must not drop it.
+      // Contents are the sweep's job, never the request path's.
+      is_bundle: row.is_bundle === true,
       image_url: row.image_url ?? '',
       age_min_years: row.age_min_years ?? null,
       age_max_years: row.age_max_years ?? null,

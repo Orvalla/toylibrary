@@ -1,5 +1,6 @@
 import { getJson } from './http.mjs'
 import { cleanTitle, stripPrefix, stripSuffix } from './normalize.mjs'
+import { isBundleRow } from './sources.mjs'
 
 // Shopify adapter: walks the public /products.json feed (250/page)
 // and maps the products a source config asks for into catalog rows:
@@ -18,6 +19,10 @@ import { cleanTitle, stripPrefix, stripSuffix } from './normalize.mjs'
 //   detailsByTitle  [{ match, details }] — first matching rule wins,
 //                   tested against the final title
 //   details         fallback details text
+//   bundleTypes / bundleDetails / bundleTitle — the bundle signal
+//                   (lib/sources.mjs isBundleRow): the mapped row
+//                   carries is_bundle so inserts stock packs as
+//                   bundles, never as plain singles.
 
 export function mapShopifyProduct(source, p) {
   if (source.includeTypes && !source.includeTypes.includes(p.product_type ?? '')) return null
@@ -47,6 +52,7 @@ export function mapShopifyProduct(source, p) {
     details,
     image_url: p.images?.[0]?.src ?? '',
     source_url: `${source.base}/products/${p.handle}`,
+    is_bundle: isBundleRow(source, { product_type: p.product_type ?? '', title, details }),
   }
 }
 

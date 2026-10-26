@@ -444,6 +444,27 @@ const DETAILS_BY_TYPE = {
   game: 'Osmo game',
 }
 
+// The bundle signal, from the same type evidence DETAILS_BY_TYPE
+// already encodes: these product_types ARE packs (their details
+// text says so), and these details strings — however a row
+// acquired them, including the title rules in
+// applyCollectionTitleRules — mean the row is a bundle. Insert
+// paths stamp is_bundle from this so a parent adding a pack can
+// never stock it as a plain single (the completeness recon's
+// leak: insertCatalogRows never set the flag at all). Contents
+// are NOT extracted here — the completeness sweep owns those,
+// via the catalog_completeness_gaps queue (migration 0054).
+const BUNDLE_TYPES = new Set(['bundle', 'soft-bundle', 'Content Bundle'])
+const BUNDLE_DETAILS = new Set(['Yoto Card pack', 'Content bundle', 'Dream Machine story collection'])
+
+export function isBundleType(type) {
+  return BUNDLE_TYPES.has(cleanText(type))
+}
+
+export function isBundleDetails(details) {
+  return BUNDLE_DETAILS.has(cleanText(details))
+}
+
 // One product from a Shopify /products/<handle>.json response
 // ({ product: {...} } — or the product object itself) → catalog row.
 // No filtering here, unlike the bulk ingestor: the user asked for
@@ -467,6 +488,7 @@ export function normalizeShopifyProduct(json, platform) {
     platform,
     title,
     details: DETAILS_BY_TYPE[type] ?? type,
+    is_bundle: isBundleType(type),
     image_url: fixImageUrl(image),
     age_min_years: ages?.age_min_years ?? null,
     age_max_years: ages?.age_max_years ?? null,
@@ -701,6 +723,10 @@ export function planCollectionImport(products, existingTitles, platform, origin 
       continue
     }
     const row = applyCollectionTitleRules(platform, { ...normalised })
+    // The title rules can mint a bundle details string the raw
+    // type never carried (a Dream Machine collection) — the
+    // details text is bundle evidence too.
+    row.is_bundle = row.is_bundle === true || isBundleDetails(row.details)
     if (isBlockedTitle(row.title)) {
       blockedContent++
       continue
@@ -789,6 +815,7 @@ export function planRowImport(rows, existingTitles, platform) {
     const row = applyCollectionTitleRules(platform, {
       title,
       details: cleanText(raw.details ?? ''),
+      is_bundle: raw?.is_bundle === true,
       image_url: fixImageUrl(raw.image_url) ?? '',
       source_url: typeof raw.source_url === 'string' ? raw.source_url : '',
       age_min_years: typeof raw.age_min_years === 'number' ? raw.age_min_years : null,
@@ -796,6 +823,7 @@ export function planRowImport(rows, existingTitles, platform) {
       rating: typeof raw.rating === 'number' ? raw.rating : null,
       rating_count: typeof raw.rating_count === 'number' ? raw.rating_count : null,
     })
+    row.is_bundle = row.is_bundle || isBundleDetails(row.details)
     const key = row.title.toLowerCase()
     if (!key) continue
     if (existing.has(key) || seen.has(key)) {
