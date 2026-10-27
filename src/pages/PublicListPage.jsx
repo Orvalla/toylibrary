@@ -10,6 +10,7 @@ import { noteSharePageVisit } from '../lib/amazon'
 import { groupByChild } from '../lib/children'
 import { formatISODate, formatOccasionLine, occasionTitle, occasionWhen } from '../lib/occasions'
 import { defaultChildId, subscribePayload, subscribeResultMessage } from '../lib/giftSubscribe'
+import { findOwned, ownedAdvice } from '../lib/ownedMatch'
 
 // The page gift-givers see. No login: the data comes from the
 // get_shared_list() RPC, which only exposes the two lists for this slug.
@@ -18,6 +19,9 @@ export default function PublicListPage({ slugOverride } = {}) {
   const { slug: routeSlug } = useParams()
   const slug = slugOverride ?? routeSlug
   const [data, setData] = useState(undefined) // undefined = loading, null = unavailable
+  // A failed request is not the same as an unavailable link: a flaky
+  // phone connection must not read as "the family turned sharing off".
+  const [loadError, setLoadError] = useState(false)
   const [query, setQuery] = useState('')
   // The gift cart: a per-slug list in this browser's localStorage.
   // Collecting items here changes nothing on the family's lists;
@@ -74,11 +78,13 @@ export default function PublicListPage({ slugOverride } = {}) {
     e.preventDefault()
     setSubState('sending')
     setSubMsg('')
-    const { data, error } = await supabase.rpc(
+    // `result` (not `data`): the page's own list state is also called
+    // `data`, and shadowing it made the child lookup below always empty.
+    const { data: result, error } = await supabase.rpc(
       'subscribe_gift_list',
       subscribePayload({ slug, email: subEmail, familyScope, childId: subChild }),
     )
-    const code = error ? 'error' : data
+    const code = error ? 'error' : result
     setSubMsg(
       subscribeResultMessage(code, {
         familyScope,
@@ -89,11 +95,18 @@ export default function PublicListPage({ slugOverride } = {}) {
   }
 
   const load = useCallback(() => {
-    supabase.rpc('get_shared_list', { p_slug: slug }).then(({ data, error }) => {
+    supabase.rpc('get_shared_list', { p_slug: slug }).then(({ data: list, error }) => {
+      if (error) {
+        // Keep whatever is already on screen; only a first load with
+        // nothing to show gets the retry screen.
+        setLoadError(true)
+        return
+      }
+      setLoadError(false)
       // An affiliate-opted-out family's list turns the tag off
       // in this browser for good (lib/amazon).
-      if (!error) noteSharePageVisit(data)
-      setData(error ? null : data)
+      noteSharePageVisit(list)
+      setData(list)
     })
     supabase.rpc('get_shared_proposals', { p_slug: slug }).then(({ data }) => {
       setProposals(Array.isArray(data) ? data : [])
@@ -102,16 +115,25 @@ export default function PublicListPage({ slugOverride } = {}) {
 
   useEffect(load, [load])
 
-  const owned = useMemo(() => {
-    if (!data || !query.trim()) return null
-    const q = query.trim().toLowerCase()
-    return data.have.filter(
-      (i) =>
-        i.title.toLowerCase().includes(q) ||
-        (i.details ?? '').toLowerCase().includes(q)
-    )
-  }, [data, query])
+  // null = nothing typed (or too short to judge); [] = no match.
+  const owned = useMemo(() => (data ? findOwned(data.have, query) : null), [data, query])
 
+  if (loadError && data === undefined)
+    return (
+      <main className="page narrow">
+        <h1>We couldn't load this page</h1>
+        <p>It looks like a connection hiccup, not a problem with the link. Please try again.</p>
+        <button
+          className="btn"
+          onClick={() => {
+            setLoadError(false)
+            load()
+          }}
+        >
+          Try again
+        </button>
+      </main>
+    )
   if (data === undefined) return <main className="page narrow"><p>Loading…</p></main>
   if (data === null)
     return (
@@ -157,43 +179,6 @@ export default function PublicListPage({ slugOverride } = {}) {
         </p>
       )}
 
-      {kids.length > 0 && subState !== 'done' && (
-        <section className="card subscribe-card">
-          <h2>📬 Never miss a birthday</h2>
-          <p>
-            Leave your email and we'll send you this wishlist a couple of weeks before{' '}
-            {familyScope ? "each child's birthday and holidays" : "the big days"} — the
-            link, a heads-up, nothing else. Unsubscribe any time.
-          </p>
-          <form onSubmit={onSubscribe} className="subscribe-form">
-            {!familyScope && kids.length > 1 && (
-              <label>
-                Remind me about{' '}
-                <select value={subChild ?? ''} onChange={(e) => setSubChild(e.target.value)}>
-                  {kids.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <input
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={subEmail}
-              onChange={(e) => setSubEmail(e.target.value)}
-              aria-label="Your email"
-            />
-            <button className="btn btn-small" disabled={subState === 'sending'}>
-              {subState === 'sending' ? 'Signing up…' : 'Remind me'}
-            </button>
-          </form>
-          {subMsg && <p className="notice">{subMsg}</p>}
-        </section>
-      )}
-      {subState === 'done' && <p className="notice">📬 {subMsg}</p>}
 
       <GiftBasket
         entries={cart}
@@ -217,7 +202,12 @@ export default function PublicListPage({ slugOverride } = {}) {
               {owned
                 .map((i) => (i.child_name ? `“${i.title}” (on ${i.child_name}'s shelf)` : `“${i.title}”`))
                 .join(', ')}{' '}
-              — best pick something else.
+              — {ownedAdvice(owned)}
+            </p>
+          ) : data.have.length === 0 ? (
+            <p className="verdict">
+              🤔 Nothing has been logged on the shelf yet, so we can't tell whether they
+              have it. Check the wishlist below, or ask the parents.
             </p>
           ) : (
             <p className="verdict safe">
@@ -283,6 +273,46 @@ export default function PublicListPage({ slugOverride } = {}) {
       ) : (
         <ClaimableWishlist slug={slug} items={data.wishlist} onChanged={load} cartIds={cartIds} onToggleCart={toggleCart} />
       )}
+
+      {/* After the wishlist on purpose: a first-time grandparent came for
+          the list, not to hand over an email address. */}
+      {kids.length > 0 && subState !== 'done' && (
+        <section className="card subscribe-card">
+          <h2>📬 Never miss a birthday</h2>
+          <p>
+            Leave your email and we'll send you this wishlist a couple of weeks before{' '}
+            {familyScope ? "each child's birthday and holidays" : "the big days"} — the
+            link, a heads-up, nothing else. Unsubscribe any time.
+          </p>
+          <form onSubmit={onSubscribe} className="subscribe-form">
+            {!familyScope && kids.length > 1 && (
+              <label>
+                Remind me about{' '}
+                <select value={subChild ?? ''} onChange={(e) => setSubChild(e.target.value)}>
+                  {kids.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <input
+              type="email"
+              required
+              placeholder="you@example.com"
+              value={subEmail}
+              onChange={(e) => setSubEmail(e.target.value)}
+              aria-label="Your email"
+            />
+            <button className="btn btn-small" disabled={subState === 'sending'}>
+              {subState === 'sending' ? 'Signing up…' : 'Remind me'}
+            </button>
+          </form>
+          {subMsg && <p className="notice">{subMsg}</p>}
+        </section>
+      )}
+      {subState === 'done' && <p className="notice">📬 {subMsg}</p>}
 
       <ApprovedGifts proposals={proposals} />
       <SuggestGift slug={slug} kids={data.children ?? []} />

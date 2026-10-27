@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { alreadyOwnedMessage, isAlreadyOwned } from '../lib/itemErrors'
 import { loadCatalog } from '../lib/catalogCache'
 import { inKind, kindOf } from '../lib/kinds'
 import KindBar from './KindBar'
@@ -298,9 +299,11 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       .single()
     if (error) {
       setMessage(
-        error.code === '23505'
-          ? `“${entry.title}” is already on that list.`
-          : error.message
+        isAlreadyOwned(error)
+          ? alreadyOwnedMessage(entry.title)
+          : error.code === '23505'
+            ? `“${entry.title}” is already on that list.`
+            : error.message
       )
       return
     }

@@ -62,4 +62,34 @@ describe('ClaimableWishlist', () => {
     await screen.findByText(/I'll get this — claim it/)
     expect(screen.queryByText(/Held for you until/)).not.toBeInTheDocument()
   })
+
+  // Review 2026-10-26: unguarded localStorage calls blanked the whole
+  // gift page in browsers that block storage, and lost the undo token
+  // right after a successful claim.
+  it('still renders the wishlist when localStorage is blocked', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError')
+    })
+    try {
+      render(<ClaimableWishlist slug="fam-x" items={[unclaimed]} onChanged={() => {}} />)
+      expect(screen.getByText(/I'll get this — claim it/)).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('says so when a successful claim cannot be remembered in this browser', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    try {
+      supabase.rpc.mockResolvedValueOnce({ data: { ok: true, token: 'tok' }, error: null })
+      render(<ClaimableWishlist slug="fam-x" items={[unclaimed]} onChanged={() => {}} />)
+      fireEvent.click(screen.getByText(/I'll get this — claim it/))
+      fireEvent.click(screen.getByText(/Confirm claim/))
+      expect(await screen.findByText(/can't remember your claim/)).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })

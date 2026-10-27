@@ -1,16 +1,29 @@
 name: Deploy to Fly.io
 
-# Deploys after CI passes on main. Migrations are applied separately with
+# Deploys only AFTER the CI workflow has passed on main. (This file used
+# to say that in a comment while actually triggering on every push, so a
+# red build still shipped.) Migrations are applied separately with
 # `supabase db push` (see README) — this workflow only ships the front end.
+#
+# workflow_dispatch stays available for a deliberate manual redeploy.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Skip when CI failed or was cancelled. A manual dispatch has no CI run
+    # to check, so it always proceeds.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Build exactly the commit CI tested, not whatever main is now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 

@@ -228,6 +228,18 @@ async function nextSortOrder(
   return (data?.sort_order ?? 0) + 1
 }
 
+// Rule 3: a rating is only stored with a positive review count
+// behind it. Anything else is stored as "no rating" (the database
+// trigger from migration 0057 enforces the same thing).
+function ratingPair(
+  rating: unknown,
+  count: unknown,
+): { rating: number | null; rating_count: number | null } {
+  const r = typeof rating === 'number' && Number.isFinite(rating) ? rating : null
+  const c = typeof count === 'number' && Number.isInteger(count) && count > 0 ? count : null
+  return r !== null && c !== null ? { rating: r, rating_count: c } : { rating: null, rating_count: null }
+}
+
 // Insert a catalog row unless (platform, title) already exists, and
 // report which happened. Only a genuine insert is logged — the
 // additions log is a record of who grew the catalog, not of attempts.
@@ -281,8 +293,7 @@ async function upsertCatalogItem(
         image_url: row.image_url ?? '',
         age_min_years: row.age_min_years ?? null,
         age_max_years: row.age_max_years ?? null,
-        rating: row.rating ?? null,
-        rating_count: row.rating_count ?? null,
+        ...ratingPair(row.rating, row.rating_count),
         product_url: row.source_url ?? null,
         source_url: row.source_url,
         logo_url: faviconUrlFor(row.source_url),
@@ -376,8 +387,7 @@ async function insertCatalogRows(
       image_url: row.image_url ?? '',
       age_min_years: row.age_min_years ?? null,
       age_max_years: row.age_max_years ?? null,
-      rating: row.rating ?? null,
-      rating_count: row.rating_count ?? null,
+      ...ratingPair(row.rating, row.rating_count),
       product_url: row.source_url ?? sourceUrl ?? null,
       source_url: row.source_url ?? sourceUrl,
       logo_url: faviconUrlFor(row.source_url ?? sourceUrl),
@@ -919,13 +929,28 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
     return value.trim()
   }
 
+  // The product link becomes the public "manufacturer link" every
+  // gift-giver sees (Rule 4), so it must point at one of the stores
+  // live search actually queries — never at a host the client picked.
+  // A candidate that came from search always satisfies this.
+  const storeHosts = new Set(STORES.map((store) => new URL(store.origin).hostname))
+  const storeUrl = (value: unknown): string | null => {
+    const url = optionalUrl(value)
+    if (url === null) return null
+    const host = new URL(url).hostname.toLowerCase().replace(/\.+$/, '')
+    if (!storeHosts.has(host)) {
+      throw new HttpError(400, "That product's link isn't on a store the catalog adds from.")
+    }
+    return url
+  }
+
   return json(
     await upsertCatalogItem(admin, userId, {
       platform: platformForProduct(c.platform, title),
       title,
       details: cleanText(typeof c.details === 'string' ? c.details : '').slice(0, TITLE_CAP),
       image_url: optionalUrl(c.image_url),
-      source_url: optionalUrl(c.source_url),
+      source_url: storeUrl(c.source_url),
     }),
   )
 }

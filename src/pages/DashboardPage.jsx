@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { alreadyOwnedMessage, isAlreadyOwned } from '../lib/itemErrors'
 import { loadCatalog } from '../lib/catalogCache'
 import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
@@ -171,9 +172,11 @@ export default function DashboardPage() {
       // The unique index items_no_duplicates_idx is the last line of defence
       // against the exact problem this app solves.
       setMessage(
-        error.code === '23505'
-          ? `“${form.title}” is already on your ${tab === 'have' ? 'have' : 'wish'} list for that platform.`
-          : error.message
+        isAlreadyOwned(error)
+          ? alreadyOwnedMessage(form.title)
+          : error.code === '23505'
+            ? `“${form.title}” is already on your ${tab === 'have' ? 'have' : 'wish'} list for that platform.`
+            : error.message
       )
       return
     }
@@ -217,9 +220,11 @@ export default function DashboardPage() {
       .single()
     if (error) {
       setMessage(
-        error.code === '23505'
-          ? `“${item.title}” is already on your ${tab === 'have' ? 'have' : 'wish'} list.`
-          : error.message
+        isAlreadyOwned(error)
+          ? alreadyOwnedMessage(item.title)
+          : error.code === '23505'
+            ? `“${item.title}” is already on your ${tab === 'have' ? 'have' : 'wish'} list.`
+            : error.message
       )
       return
     }
@@ -364,9 +369,11 @@ export default function DashboardPage() {
       .single()
     if (error) {
       setMessage(
-        error.code === '23505'
-          ? `“${entry.title}” is already on that list.`
-          : error.message
+        isAlreadyOwned(error)
+          ? alreadyOwnedMessage(entry.title)
+          : error.code === '23505'
+            ? `“${entry.title}” is already on that list.`
+            : error.message
       )
       return
     }
@@ -465,7 +472,13 @@ export default function DashboardPage() {
       .select()
       .single()
     if (error) {
-      setMessage(error.code === '23505' ? `“${entry.title}” is already on a list.` : error.message)
+      setMessage(
+        isAlreadyOwned(error)
+          ? alreadyOwnedMessage(entry.title)
+          : error.code === '23505'
+            ? `“${entry.title}” is already on a list.`
+            : error.message
+      )
       return
     }
     if (data) setItems((prev) => [...prev, data])

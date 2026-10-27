@@ -51,6 +51,14 @@
 // an occasion created inside the window sends immediately.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  esc,
+  isSendableToday,
+  nextOccurrence,
+  spreadDaysFor,
+  spreadSlot,
+  windowDaysFor,
+} from './dates.js'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -58,15 +66,6 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const CRON_SECRET = Deno.env.get('REMINDER_CRON_SECRET') ?? ''
 const FROM = Deno.env.get('REMINDER_FROM') ?? 'Toy Library <reminders@toylibrary.store>'
 const SITE = Deno.env.get('PUBLIC_SITE_URL') ?? 'https://toylibrary.store'
-// Send spread shape: BASE_SPREAD_DAYS slot days ending exactly
-// MIN_LEAD_DAYS before the occasion; one extra slot day (and
-// one more day of window) per FAMILIES_PER_DAY senders beyond
-// the base, capped at MAX_SPREAD_DAYS.
-const MIN_LEAD_DAYS = 14
-const BASE_SPREAD_DAYS = 4
-const MAX_SPREAD_DAYS = 14
-const FAMILIES_PER_DAY = 100
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
@@ -78,29 +77,6 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
-}
-
-// Next occurrence of a month/day on or after `from` (local
-// dates as UTC to keep it timezone-simple), Feb 29 → Feb 28.
-function nextOccurrence(month: number, day: number, from: Date): Date {
-  const y = from.getUTCFullYear()
-  const clamped = month === 2 && day === 29 ? 28 : day
-  let d = new Date(Date.UTC(y, month - 1, clamped))
-  const start = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))
-  if (d < start) d = new Date(Date.UTC(y + 1, month - 1, clamped))
-  return d
-}
-
-// A family's stable slot in the send spread: FNV-1a over the
-// profile id, so the assignment is deterministic across runs
-// and needs no storage.
-function spreadSlot(id: string, spreadDays: number): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return (h >>> 0) % spreadDays
 }
 
 const dateKey = (d: Date) => d.toISOString().slice(0, 10)
@@ -124,6 +100,27 @@ async function sendViaResend(to: string, subject: string, text: string, html: st
   return true
 }
 
+// Read a whole table (or filtered slice) in pages of 1,000, in a
+// stable order so no row is skipped or repeated between pages.
+async function fetchAll(
+  admin: ReturnType<typeof createClient>,
+  table: string,
+  columns: string,
+  orderBy: string[],
+  filter?: (query: any) => any,
+): Promise<any[]> {
+  const rows: any[] = []
+  for (let from = 0; ; from += 1000) {
+    let query: any = admin.from(table).select(columns)
+    if (filter) query = filter(query)
+    for (const column of orderBy) query = query.order(column)
+    const { data, error } = await query.range(from, from + 999)
+    if (error) throw new Error(`read ${table} failed: ${error.message}`)
+    rows.push(...(data ?? []))
+    if (!data || data.length < 1000) return rows
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   try {
@@ -133,71 +130,71 @@ Deno.serve(async (req) => {
     const dry = new URL(req.url).searchParams.get('dry') === '1'
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    const [
-      { data: profiles },
-      { data: children },
-      { data: occasions },
-      { data: sent },
-      { data: relatives },
-      { data: relLinks },
-      { data: subscribers },
-    ] = await Promise.all([
-      admin.from('profiles').select('id, display_name, share_slug, share_enabled, occasion_reminders'),
-      admin.from('children').select('id, owner_id, name'),
-      admin.from('occasions').select('id, child_id, label, month, day'),
-      admin.from('occasion_reminder_log').select('occasion_id, occurrence_date, relative_id, subscriber_id'),
-      admin.from('relatives').select('id, owner_id, name, email, notify_email, unsubscribe_token'),
-      admin.from('gift_subscribers').select('id, profile_id, child_id, email, scope, unsubscribe_token'),
-      admin.from('relative_children').select('relative_id, child_id'),
-    ])
+    // PostgREST caps every response at 1,000 rows (supabase/config.toml
+    // max_rows). Unpaged reads here used to truncate silently — and a
+    // truncated dedupe log means the same email goes out again every
+    // day — so every table is read page by page, and a failed read
+    // aborts the run instead of looking like "no rows".
+    const today = new Date()
+    const logSince = dateKey(new Date(today.getTime() - 2 * 86400000))
+    const [profiles, children, occasions, sent, relatives, relLinks, subscribers] =
+      await Promise.all([
+        fetchAll(admin, 'profiles', 'id, display_name, share_slug, share_enabled, occasion_reminders', ['id']),
+        fetchAll(admin, 'children', 'id, owner_id, name', ['id']),
+        fetchAll(admin, 'occasions', 'id, child_id, label, month, day', ['id']),
+        // Only recent occurrences can still matter for dedupe.
+        fetchAll(
+          admin,
+          'occasion_reminder_log',
+          'occasion_id, occurrence_date, relative_id, subscriber_id',
+          ['id'],
+          (q: any) => q.gte('occurrence_date', logSince),
+        ),
+        fetchAll(admin, 'relatives', 'id, owner_id, name, email, notify_email, unsubscribe_token', ['id']),
+        fetchAll(admin, 'relative_children', 'relative_id, child_id', ['relative_id', 'child_id']),
+        fetchAll(admin, 'gift_subscribers', 'id, profile_id, child_id, email, scope, unsubscribe_token', ['id']),
+      ])
 
     // Two dedupe streams: owner digests (relative_id NULL) and
     // per-relative emails.
     const ownerSent = new Set(
-      (sent ?? []).filter((r: any) => !r.relative_id).map((r: any) => `${r.occasion_id}|${r.occurrence_date}`)
+      sent.filter((r: any) => !r.relative_id).map((r: any) => `${r.occasion_id}|${r.occurrence_date}`)
     )
     const relativeSent = new Set(
-      (sent ?? [])
+      sent
         .filter((r: any) => r.relative_id)
         .map((r: any) => `${r.occasion_id}|${r.occurrence_date}|${r.relative_id}`)
     )
-    const kidById = new Map((children ?? []).map((c: any) => [c.id, c]))
+    const kidById = new Map(children.map((c: any) => [c.id, c]))
     const linksByRelative = new Map<string, Set<string>>()
-    for (const row of relLinks ?? []) {
+    for (const row of relLinks) {
       const set = linksByRelative.get(row.relative_id) ?? new Set<string>()
       set.add(row.child_id)
       linksByRelative.set(row.relative_id, set)
     }
     const relativesByOwner = new Map<string, any[]>()
-    for (const rel of relatives ?? []) {
+    for (const rel of relatives) {
       relativesByOwner.set(rel.owner_id, [...(relativesByOwner.get(rel.owner_id) ?? []), rel])
     }
     const subscriberSent = new Set(
-      (sent ?? [])
+      sent
         .filter((r: any) => r.subscriber_id)
         .map((r: any) => `${r.occasion_id}|${r.occurrence_date}|${r.subscriber_id}`)
     )
     const subscribersByProfile = new Map<string, any[]>()
-    for (const sub of subscribers ?? []) {
+    for (const sub of subscribers) {
       subscribersByProfile.set(sub.profile_id, [
         ...(subscribersByProfile.get(sub.profile_id) ?? []),
         sub,
       ])
     }
 
-    // Adaptive spread: one slot day per FAMILIES_PER_DAY
-    // reminder-enabled families (floored at BASE_SPREAD_DAYS,
-    // capped at MAX_SPREAD_DAYS). The window is the spread plus
-    // the fixed minimum lead, so the last slot always fires
-    // exactly MIN_LEAD_DAYS before the occasion.
-    const senderCount = (profiles ?? []).filter(
-      (p: any) => p.occasion_reminders && p.share_enabled
-    ).length
-    const spreadDays = Math.min(
-      MAX_SPREAD_DAYS,
-      Math.max(BASE_SPREAD_DAYS, Math.ceil(senderCount / FAMILIES_PER_DAY))
-    )
-    const windowDays = MIN_LEAD_DAYS + spreadDays - 1
+    // Adaptive spread (see dates.js): one slot day per 100 senders
+    // beyond the base, and the last slot always lands exactly 14 days
+    // before the occasion.
+    const senderCount = profiles.filter((p: any) => p.occasion_reminders && p.share_enabled).length
+    const spreadDays = spreadDaysFor(senderCount)
+    const windowDays = windowDaysFor(spreadDays)
 
     const now = new Date()
     const horizon = new Date(now.getTime() + windowDays * 86400000)
@@ -209,7 +206,7 @@ Deno.serve(async (req) => {
     // profile id -> [{ occasion, kid, date, daysAway }] — all
     // due entries; unsent filtering happens per recipient below.
     const due = new Map<string, any[]>()
-    for (const occ of occasions ?? []) {
+    for (const occ of occasions) {
       const kid = kidById.get(occ.child_id)
       if (!kid) continue
       const date = nextOccurrence(occ.month, occ.day, now)
@@ -221,13 +218,13 @@ Deno.serve(async (req) => {
 
     const digests: any[] = []
     let sentCount = 0
-    for (const profile of profiles ?? []) {
+    for (const profile of profiles) {
       // Send spread: only occasions at or inside this family's
       // slot threshold are sendable today (see header). The
       // per-recipient dedupe below does the rest.
       const slot = spreadSlot(profile.id, spreadDays)
-      const allEntries = (due.get(profile.id) ?? []).filter(
-        (e: any) => e.daysAway <= windowDays - slot
+      const allEntries = (due.get(profile.id) ?? []).filter((e: any) =>
+        isSendableToday(e.daysAway, windowDays, slot),
       )
       if (!allEntries.length) continue
       if (!profile.occasion_reminders || !profile.share_enabled) continue
@@ -240,6 +237,7 @@ Deno.serve(async (req) => {
         .sort((a: any, b: any) => a.date - b.date)
       if (entries.length) {
         const lines = entries.map(entryLine)
+        const htmlLines = entries.map((e: any) => esc(entryLine(e)))
         const text = [
           `Hi ${profile.display_name || 'there'},`,
           '',
@@ -256,7 +254,7 @@ Deno.serve(async (req) => {
         ].join('\n')
         const html = `<div style="font-family:system-ui,sans-serif;color:#2E2A55;max-width:560px">
         <h2 style="margin:0 0 8px">A gift occasion is coming up 🎁</h2>
-        <p style="margin:0 0 12px">${lines.join('<br>')}</p>
+        <p style="margin:0 0 12px">${htmlLines.join('<br>')}</p>
         <p style="margin:0 0 16px">Share the wishlist before family starts shopping:</p>
         <p style="margin:0 0 16px"><a href="${link}" style="background:#FF5A5F;color:#fff;padding:11px 22px;border-radius:999px;text-decoration:none;font-weight:700">Open the wishlist</a></p>
         <p style="color:#6f6a94;font-size:13px">Anyone with the link can claim a gift so nothing gets bought twice. Turn these reminders off any time in Settings.</p>
@@ -295,6 +293,7 @@ Deno.serve(async (req) => {
           .sort((a: any, b: any) => a.date - b.date)
         if (!relEntries.length) continue
         const lines = relEntries.map(entryLine)
+        const htmlLines = relEntries.map((e: any) => esc(entryLine(e)))
         const unsub = `${SITE}/unsubscribe?t=${rel.unsubscribe_token}`
         const text = [
           `Hi ${rel.name},`,
@@ -310,10 +309,10 @@ Deno.serve(async (req) => {
         ].join('\n')
         const html = `<div style="font-family:system-ui,sans-serif;color:#2E2A55;max-width:560px">
         <h2 style="margin:0 0 8px">A gift occasion is coming up 🎁</h2>
-        <p style="margin:0 0 12px">${ownerName} shares the kids' wishlists on Toy Library so family never buys the same gift twice. Coming up:</p>
-        <p style="margin:0 0 12px">${lines.join('<br>')}</p>
+        <p style="margin:0 0 12px">${esc(ownerName)} shares the kids' wishlists on Toy Library so family never buys the same gift twice. Coming up:</p>
+        <p style="margin:0 0 12px">${htmlLines.join('<br>')}</p>
         <p style="margin:0 0 16px"><a href="${link}" style="background:#FF5A5F;color:#fff;padding:11px 22px;border-radius:999px;text-decoration:none;font-weight:700">Open the wishlist</a></p>
-        <p style="color:#6f6a94;font-size:13px">Claim anything you buy on the list and it is marked as taken for everyone else. You are getting this because ${ownerName} added you to their gift circle. <a href="${unsub}">Unsubscribe</a>.</p>
+        <p style="color:#6f6a94;font-size:13px">Claim anything you buy on the list and it is marked as taken for everyone else. You are getting this because ${esc(ownerName)} added you to their gift circle. <a href="${unsub}">Unsubscribe</a>.</p>
       </div>`
         const subject =
           relEntries.length === 1
@@ -357,6 +356,7 @@ Deno.serve(async (req) => {
         // email already went to this address, skip the duplicate.
         if (emailedEmails.has(sub.email.toLowerCase())) continue
         const lines = subEntries.map(entryLine)
+        const htmlLines = subEntries.map((e: any) => esc(entryLine(e)))
         const unsub = `${SITE}/unsubscribe?t=${sub.unsubscribe_token}`
         const text = [
           'Hi there,',
@@ -372,8 +372,8 @@ Deno.serve(async (req) => {
         ].join('\n')
         const html = `<div style="font-family:system-ui,sans-serif;color:#2E2A55;max-width:560px">
         <h2 style="margin:0 0 8px">A gift occasion is coming up 🎁</h2>
-        <p style="margin:0 0 12px">You asked for a heads-up before the big days on ${ownerName}'s Toy Library wishlist. Coming up:</p>
-        <p style="margin:0 0 12px">${lines.join('<br>')}</p>
+        <p style="margin:0 0 12px">You asked for a heads-up before the big days on ${esc(ownerName)}'s Toy Library wishlist. Coming up:</p>
+        <p style="margin:0 0 12px">${htmlLines.join('<br>')}</p>
         <p style="margin:0 0 16px"><a href="${link}" style="background:#FF5A5F;color:#fff;padding:11px 22px;border-radius:999px;text-decoration:none;font-weight:700">Open the wishlist</a></p>
         <p style="color:#6f6a94;font-size:13px">Claim anything you buy on the list and it is marked as taken for everyone else. <a href="${unsub}">Unsubscribe</a>.</p>
       </div>`

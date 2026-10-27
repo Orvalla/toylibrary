@@ -29,6 +29,7 @@ import { ageForRow } from './lib/ages.mjs'
 import { createSpecCaller, loadSpec } from './lib/specall.mjs'
 import { rateYotoRows } from './lib/yoto-spec.mjs'
 import { extractBundleContents } from './lib/bundle-contents.mjs'
+import { ratingPatch } from './lib/rating-patch.mjs'
 import { extractAggregateRating } from '../supabase/functions/ingest-catalog/extract.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -288,14 +289,19 @@ async function main() {
     try {
       const res = await pageCaller.request(row.source_url, { headers: { accept: 'text/html' } })
       if (!res.ok) continue
+      // extractAggregateRating returns { rating, rating_count } and
+      // already refuses a rating that has no count behind it (Rule 3).
+      // (This used to read `rating.count` — undefined — so ratings were
+      // saved without counts and re-queued every week.)
       const rating = extractAggregateRating(res.text)
-      if (rating && !DRY) {
+      const patch = ratingPatch(rating)
+      if (patch && !DRY) {
         await rest(`catalog_items?id=eq.${row.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ rating: rating.rating, rating_count: rating.count }),
+          body: JSON.stringify(patch),
         })
       }
-      if (rating) rated += 1
+      if (patch) rated += 1
     } catch {
       // one bad page never blocks the run
     }

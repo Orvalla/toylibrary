@@ -99,15 +99,22 @@ function ipv4IsPrivate(host) {
 function ipv6IsPrivate(host) {
   const h = host.toLowerCase()
   if (h === '::1' || h === '::') return true
-  if (h.startsWith('fe8') || h.startsWith('fe9') || h.startsWith('fea') || h.startsWith('feb'))
-    return true // link-local fe80::/10
+  if (/^fe[89ab]/.test(h)) return true // link-local fe80::/10
+  if (/^fe[c-f]/.test(h)) return true // site-local fec0::/10 (deprecated, still routable on some nets)
   if (h.startsWith('fc') || h.startsWith('fd')) return true // unique local fc00::/7
+  if (h.startsWith('ff')) return true // multicast ff00::/8
   if (h.startsWith('::ffff:')) {
     // IPv4-mapped — judge the embedded IPv4 address.
     return ipv4IsPrivate(h.slice('::ffff:'.length)) ?? true
   }
+  if (h.startsWith('64:ff9b:')) return true // NAT64 — embeds an IPv4 address
+  if (h.startsWith('2002:')) return true // 6to4 — embeds an IPv4 address
+  if (h.startsWith('::')) return true // IPv4-compatible forms such as ::7f00:1
   return false
 }
+
+// Suffixes that only ever name private / internal hosts.
+const INTERNAL_SUFFIXES = ['.localhost', '.local', '.internal', '.localdomain', '.lan', '.home.arpa']
 
 export function isSafeFetchUrl(rawUrl) {
   let url
@@ -119,13 +126,17 @@ export function isSafeFetchUrl(rawUrl) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
   if (url.username || url.password) return false
   // URL keeps IPv6 literals bracketed in .hostname in some runtimes.
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  // A trailing dot ("localhost.") is the same host to the resolver,
+  // so it is stripped before any comparison.
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '')
   if (!host) return false
-  if (host === 'localhost' || host.endsWith('.localhost')) return false
-  if (host.endsWith('.local')) return false
   const v4 = ipv4IsPrivate(host)
   if (v4 !== null) return v4 === false
   if (host.includes(':')) return !ipv6IsPrivate(host)
+  // Public sites have a dotted name; single-label hosts ("metadata",
+  // "localhost", "intranet") only resolve on private networks.
+  if (!host.includes('.')) return false
+  if (INTERNAL_SUFFIXES.some((suffix) => host.endsWith(suffix))) return false
   return true
 }
 
@@ -207,7 +218,7 @@ export function isBlockedHost(rawUrl) {
   } catch {
     return false
   }
-  const host = url.hostname.toLowerCase().replace(/^www\./, '')
+  const host = url.hostname.toLowerCase().replace(/\.+$/, '').replace(/^www\./, '')
   const tld = host.split('.').pop() ?? ''
   if (ADULT_TLDS.has(tld)) return true
   return ADULT_HOSTS.some((d) => host === d || host.endsWith(`.${d}`))
@@ -349,9 +360,10 @@ function parseRatingCount(raw) {
 // publishes for search engines. Returns
 // { rating, rating_count } with rating on the usual 0–5 scale
 // (rescaled when the block declares a different bestRating),
-// rounded to one decimal; rating_count is null when the block
-// carries a value but no usable count. Null when no Product on
-// the page publishes a sane rating — many stores load their
+// rounded to one decimal. Null when the block carries a value but
+// no usable count (a rating never travels without the number of
+// reviews behind it), and null when no Product on the page
+// publishes a sane rating — many stores load their
 // reviews through a widget (Bazaarvoice, Trustpilot, Okendo)
 // and never put the number in the static HTML at all.
 // One Product node's aggregateRating, normalised (see
@@ -366,9 +378,13 @@ export function aggRatingOf(product) {
   const best = Number(agg.bestRating ?? 5)
   if (Number.isFinite(best) && best > 5) value = (value * 5) / best
   if (value > 5) return null
+  // Rule 3: a rating is only ever reported with a review count behind
+  // it. A bare ratingValue is treated as "no rating published".
+  const rating_count = parseRatingCount(agg.ratingCount) ?? parseRatingCount(agg.reviewCount)
+  if (rating_count === null) return null
   return {
     rating: Math.round(value * 10) / 10,
-    rating_count: parseRatingCount(agg.ratingCount) ?? parseRatingCount(agg.reviewCount),
+    rating_count,
   }
 }
 

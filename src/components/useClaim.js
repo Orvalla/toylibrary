@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatISODate } from '../lib/occasions'
+import { safeGet, safeRemove, safeSet } from '../lib/safeStorage'
 
 // Anonymous wishlist claiming, shared by the wishlist tiles
 // and the gift cart so a gift-giver can claim from either
@@ -24,7 +25,7 @@ export function useClaim(slug, item, onChanged) {
   const [note, setNote] = useState('')
 
   useEffect(() => {
-    setMine(Boolean(localStorage.getItem(claimTokenKey(item.id))))
+    setMine(Boolean(safeGet(claimTokenKey(item.id))))
   }, [item.id, item.claimed])
 
   async function claim() {
@@ -41,16 +42,22 @@ export function useClaim(slug, item, onChanged) {
       return
     }
     if (data?.ok) {
-      localStorage.setItem(claimTokenKey(item.id), data.token)
+      // The claim is already recorded server-side. If this browser
+      // can't keep the undo token (private mode, blocked storage),
+      // say so instead of throwing — the claim must not look lost.
+      const saved = safeSet(claimTokenKey(item.id), data.token)
+      setMine(saved)
       setClaiming(false)
       // Claims expire (usually the day after the child's next
       // occasion): say how long the hold lasts so it never feels
       // arbitrary when the item opens up again.
-      if (data.expires_at) {
-        setNote(
-          `Held for you until ${formatISODate(data.expires_at)} — after that it opens up again so the list stays current.`
-        )
-      }
+      const hold = data.expires_at
+        ? `Held for you until ${formatISODate(data.expires_at)} — after that it opens up again so the list stays current.`
+        : ''
+      const warning = saved
+        ? ''
+        : " This browser can't remember your claim, so you won't be able to undo it from here — ask the family if you need it released."
+      setNote(`${hold}${warning}`.trim())
       onChanged()
     } else if (data?.reason === 'already_claimed') {
       setNote('Someone just claimed this one — refreshing the list.')
@@ -61,7 +68,7 @@ export function useClaim(slug, item, onChanged) {
   }
 
   async function unclaim() {
-    const token = localStorage.getItem(claimTokenKey(item.id))
+    const token = safeGet(claimTokenKey(item.id))
     if (!token) return
     setBusy(true)
     const { data } = await supabase.rpc('unclaim_wishlist_item', {
@@ -71,7 +78,7 @@ export function useClaim(slug, item, onChanged) {
     })
     setBusy(false)
     if (data?.ok) {
-      localStorage.removeItem(claimTokenKey(item.id))
+      safeRemove(claimTokenKey(item.id))
       setMine(false)
       onChanged()
     } else {

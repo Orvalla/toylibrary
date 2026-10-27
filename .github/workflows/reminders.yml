@@ -21,7 +21,11 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.REMINDER_CRON_SECRET }}
         run: |
-          curl -sS -X POST \
+          # --fail-with-body: a 401 / 500 from the function must FAIL
+          # the run. Plain `curl -sS` exits 0 on any HTTP status, so a
+          # wrong secret or a crashed run used to look green while no
+          # reminders went out.
+          curl -sS --fail-with-body --retry 2 --retry-delay 10 -X POST \
             -H "x-cron-secret: $CRON_SECRET" \
             -H 'Content-Type: application/json' \
             -d '{}' \

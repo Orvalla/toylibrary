@@ -89,6 +89,30 @@ describe('isSafeFetchUrl', () => {
   it('rejects URLs carrying credentials', () => {
     expect(isSafeFetchUrl('https://user:pass@example.com/')).toBe(false)
   })
+
+  // Review 2026-10-26 (EDIT-LIST E3): every one of these used to pass.
+  it('treats a trailing dot as the same host', () => {
+    expect(isSafeFetchUrl('http://localhost./')).toBe(false)
+    expect(isSafeFetchUrl('http://printer.local./')).toBe(false)
+    expect(isSafeFetchUrl('https://example.com./page')).toBe(true)
+  })
+
+  it('rejects IPv6 forms that embed a private IPv4 address or are site-local', () => {
+    expect(isSafeFetchUrl('http://[::127.0.0.1]/')).toBe(false)
+    expect(isSafeFetchUrl('http://[::ffff:127.0.0.1]/')).toBe(false)
+    expect(isSafeFetchUrl('http://[64:ff9b::7f00:1]/')).toBe(false)
+    expect(isSafeFetchUrl('http://[2002:7f00:1::1]/')).toBe(false)
+    expect(isSafeFetchUrl('http://[fec0::1]/')).toBe(false)
+    expect(isSafeFetchUrl('http://[ff02::1]/')).toBe(false)
+    expect(isSafeFetchUrl('https://[2606:4700:4700::1111]/')).toBe(true)
+  })
+
+  it('rejects single-label and internal hostnames', () => {
+    expect(isSafeFetchUrl('http://metadata/')).toBe(false)
+    expect(isSafeFetchUrl('http://metadata.google.internal/')).toBe(false)
+    expect(isSafeFetchUrl('http://router.lan/')).toBe(false)
+    expect(isSafeFetchUrl('http://intranet/')).toBe(false)
+  })
 })
 
 describe('extractFromJsonLd', () => {
@@ -206,13 +230,13 @@ describe('extractAggregateRating', () => {
     expect(extractAggregateRating(html)).toEqual({ rating: 4.6, rating_count: 40 })
   })
 
-  it('returns a rating with a null count when the count is unusable', () => {
+  it('returns null when the count is unusable (a rating needs a count behind it)', () => {
     const html = `
       <script type="application/ld+json">
       {"@type":"Product","name":"Countless",
        "aggregateRating":{"@type":"AggregateRating","ratingValue":5,"reviewCount":"lots"}}
       </script>`
-    expect(extractAggregateRating(html)).toEqual({ rating: 5, rating_count: null })
+    expect(extractAggregateRating(html)).toBeNull()
   })
 
   it('returns null when no Product publishes a rating', () => {
@@ -380,6 +404,28 @@ describe('normalizeSuggestResult', () => {
     expect(normalizeSuggestResult(store, { ...product, url: '/pages/about' })).toBeNull()
     expect(normalizeSuggestResult(store, null)).toBeNull()
     expect(normalizeSuggestResult(store, { url: '/products/x' })).toBeNull()
+  })
+
+  // The E4 guard in ingest-catalog's handleAdd (storeUrl) throws on a
+  // source_url whose host is not one of the STORES origins. That is
+  // only safe because every candidate built here carries the store's
+  // own origin: the URL is `${store.origin}${path}` with the path
+  // reduced to a pathname, whatever host the store's suggest endpoint
+  // returned (www / regional variants included). If this ever stops
+  // holding, the throw starts breaking legitimate search-adds — this
+  // test is the alarm. (Claude↔Elise review agreement, 2026-10-26.)
+  it('always lands the candidate on the store origin, whatever host the store returned', () => {
+    for (const returned of [
+      'https://www.tonies.com/products/x',
+      'https://uk.tonies.com/products/x?tracking=1',
+      'http://us.tonies.com/products/x',
+      '/products/x',
+    ]) {
+      const row = normalizeSuggestResult(store, { ...product, url: returned })
+      expect(row).not.toBeNull()
+      expect(new URL(row.source_url).hostname).toBe(new URL(store.origin).hostname)
+      expect(row.source_url.startsWith(store.origin)).toBe(true)
+    }
   })
 })
 
@@ -782,6 +828,8 @@ describe('content guard', () => {
   it('blocks adult retailer hosts, subdomains and adult TLDs', () => {
     expect(isBlockedHost('https://www.adamandeve.com/products/x')).toBe(true)
     expect(isBlockedHost('https://shop.lovehoney.com/x')).toBe(true)
+    // Trailing-dot hostnames name the same site.
+    expect(isBlockedHost('https://lovehoney.com./x')).toBe(true)
     expect(isBlockedHost('https://gifts.example.xxx/x')).toBe(true)
     expect(isBlockedHost('https://notadamandeve.com/x')).toBe(false)
     expect(isBlockedHost('https://us.tonies.com/products/x')).toBe(false)

@@ -35,15 +35,22 @@ function ipv4IsPrivate(host) {
 function ipv6IsPrivate(host) {
   const h = host.toLowerCase()
   if (h === '::1' || h === '::') return true
-  if (h.startsWith('fe8') || h.startsWith('fe9') || h.startsWith('fea') || h.startsWith('feb'))
-    return true // link-local fe80::/10
+  if (/^fe[89ab]/.test(h)) return true // link-local fe80::/10
+  if (/^fe[c-f]/.test(h)) return true // site-local fec0::/10 (deprecated, still routable on some nets)
   if (h.startsWith('fc') || h.startsWith('fd')) return true // unique local fc00::/7
+  if (h.startsWith('ff')) return true // multicast ff00::/8
   if (h.startsWith('::ffff:')) {
     // IPv4-mapped — judge the embedded IPv4 address.
     return ipv4IsPrivate(h.slice('::ffff:'.length)) ?? true
   }
+  if (h.startsWith('64:ff9b:')) return true // NAT64 — embeds an IPv4 address
+  if (h.startsWith('2002:')) return true // 6to4 — embeds an IPv4 address
+  if (h.startsWith('::')) return true // IPv4-compatible forms such as ::7f00:1
   return false
 }
+
+// Suffixes that only ever name private / internal hosts.
+const INTERNAL_SUFFIXES = ['.localhost', '.local', '.internal', '.localdomain', '.lan', '.home.arpa']
 
 export function isSafeFetchUrl(rawUrl) {
   let url
@@ -55,13 +62,17 @@ export function isSafeFetchUrl(rawUrl) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
   if (url.username || url.password) return false
   // URL keeps IPv6 literals bracketed in .hostname in some runtimes.
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  // A trailing dot ("localhost.") is the same host to the resolver,
+  // so it is stripped before any comparison.
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '')
   if (!host) return false
-  if (host === 'localhost' || host.endsWith('.localhost')) return false
-  if (host.endsWith('.local')) return false
   const v4 = ipv4IsPrivate(host)
   if (v4 !== null) return v4 === false
   if (host.includes(':')) return !ipv6IsPrivate(host)
+  // Public sites have a dotted name; single-label hosts ("metadata",
+  // "localhost", "intranet") only resolve on private networks.
+  if (!host.includes('.')) return false
+  if (INTERNAL_SUFFIXES.some((suffix) => host.endsWith(suffix))) return false
   return true
 }
 
@@ -143,7 +154,7 @@ export function isBlockedHost(rawUrl) {
   } catch {
     return false
   }
-  const host = url.hostname.toLowerCase().replace(/^www\./, '')
+  const host = url.hostname.toLowerCase().replace(/\.+$/, '').replace(/^www\./, '')
   const tld = host.split('.').pop() ?? ''
   if (ADULT_TLDS.has(tld)) return true
   return ADULT_HOSTS.some((d) => host === d || host.endsWith(`.${d}`))
