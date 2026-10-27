@@ -8,6 +8,7 @@ import CatalogPage from './pages/CatalogPage'
 import DevicesPage from './pages/DevicesPage'
 import BooksPage from './pages/BooksPage'
 import SteamPage from './pages/SteamPage'
+import ArtPage from './pages/ArtPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/PasswordPages'
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="/books" element={<BooksPage />} />
         <Route path="/devices" element={<DevicesPage />} />
         <Route path="/steam" element={<SteamPage />} />
+        <Route path="/art" element={<ArtPage />} />
         <Route
           path="/settings"
           element={

@@ -17,6 +17,7 @@ import { THEMES, themesOf } from '../lib/themes'
 import { CATALOG_LANGUAGES, languageLabel, languagesVisible, normalizePrefs } from '../lib/language'
 import { PROJECTOR_BRANDS, isDevicesPageRow, projectorBrandOf } from '../lib/projector'
 import { isSteamRow } from '../lib/steam'
+import { isArtRow } from '../lib/art'
 import BundleNote from './BundleNote'
 import PlatformGrid from './PlatformGrid'
 import {
@@ -38,14 +39,15 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // to add instead of typing; anything already owned carries the green
 // checkmark — the whole point of the app, applied at add time.
 //
-// Three pages share this browser: /catalog shows everything (with
+// Four pages share this browser: /catalog shows everything (with
 // category chips — figures, books, cards, games, devices, audio),
 // /devices shows just the players themselves (catalog rows with
-// item_type 'device', seeded by migration 0010), and /steam shows
-// the STEAM shelf (lib/steam's isSteamRow). The two focused pages
+// item_type 'device', seeded by migration 0010), /steam shows
+// the STEAM shelf (lib/steam's isSteamRow) and /art shows the
+// Arts & Crafts shelf (lib/art's isArtRow). The focused pages
 // narrow the base and drop the category/interest/language filters.
-export default function CatalogBrowser({ devicesOnly = false, steamOnly = false }) {
-  const focusedPage = devicesOnly || steamOnly
+export default function CatalogBrowser({ devicesOnly = false, steamOnly = false, artOnly = false }) {
+  const focusedPage = devicesOnly || steamOnly || artOnly
   const { user } = useAuth()
   const [catalog, setCatalog] = useState([])
   const [mine, setMine] = useState([])
@@ -219,7 +221,7 @@ export default function CatalogBrowser({ devicesOnly = false, steamOnly = false 
   // Any change to what could be visible starts back at page 1.
   useEffect(() => {
     setPage(1)
-  }, [kind, platform, category, theme, languages.join(','), ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly, steamOnly])
+  }, [kind, platform, category, theme, languages.join(','), ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly, steamOnly, artOnly])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Sam having Bluey doesn't
@@ -397,7 +399,9 @@ export default function CatalogBrowser({ devicesOnly = false, steamOnly = false 
     ? catalog.filter(isDevicesPageRow)
     : steamOnly
       ? catalog.filter(isSteamRow)
-      : catalog
+      : artOnly
+        ? catalog.filter(isArtRow)
+        : catalog
   const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
   const kindCounts = { all: baseAll.length }
   for (const c of baseAll) {
@@ -579,6 +583,15 @@ export default function CatalogBrowser({ devicesOnly = false, steamOnly = false 
             Science, technology, engineering, art and maths — electronics kits,
             robots, experiments and building sets from the makers themselves.
             Mark the ones already on your shelf, or wishlist the next project.
+          </p>
+        </>
+      ) : artOnly ? (
+        <>
+          <h1>Arts & Crafts</h1>
+          <p className="lede">
+            The truly pure art — paints, crayons, craft kits and sticker books
+            from Crayola, Melissa & Doug, Djeco and friends. Mark the ones
+            already on your shelf, or wishlist the next rainy-day project.
           </p>
         </>
       ) : (
@@ -827,7 +840,7 @@ export default function CatalogBrowser({ devicesOnly = false, steamOnly = false 
 
       <input
         className="filter-input"
-        placeholder={devicesOnly ? 'Search devices…' : steamOnly ? 'Search STEAM toys…' : 'Search the catalog…'}
+        placeholder={devicesOnly ? 'Search devices…' : steamOnly ? 'Search STEAM toys…' : artOnly ? 'Search arts & crafts…' : 'Search the catalog…'}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -859,7 +872,9 @@ export default function CatalogBrowser({ devicesOnly = false, steamOnly = false 
             ? 'No devices match. Try another search.'
             : steamOnly
               ? 'No STEAM toys match. Try another search.'
-              : 'Nothing matches. Try another search — or grow the catalog below.'}
+              : artOnly
+                ? 'No arts & crafts match. Try another search.'
+                : 'Nothing matches. Try another search — or grow the catalog below.'}
         </p>
       )}
 

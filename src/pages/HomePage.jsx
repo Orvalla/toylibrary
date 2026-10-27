@@ -63,6 +63,18 @@ export default function HomePage() {
         </Link>
       </section>
 
+      <section className="books-hero home-books">
+        <h2>🎨 And the pure art, on its own shelf</h2>
+        <p>
+          Paints, crayons, craft kits and sticker books — Crayola, Melissa
+          &amp; Doug's craft lines, Djeco's colouring kits — gathered in one
+          place for the next rainy-day project.
+        </p>
+        <Link to="/art" className="btn">
+          Explore Arts &amp; Crafts
+        </Link>
+      </section>
+
       <div className="card-grid">
         <div className="card">
           <h3>📚 Track what you have</h3>

@@ -15,6 +15,7 @@ import { THEMES, themesOf } from '../lib/themes'
 import { CATALOG_LANGUAGES, languageLabel, languagesVisible } from '../lib/language'
 import { PROJECTOR_BRANDS, isDevicesPageRow, projectorBrandOf } from '../lib/projector'
 import { isSteamRow } from '../lib/steam'
+import { isArtRow } from '../lib/art'
 import PlatformGrid from './PlatformGrid'
 import { FilterGroup, FilterSection } from './FilterSection'
 import { amazonUrlFor } from '../lib/amazon'
@@ -36,8 +37,8 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // out their pieces with buy links, and lists stay a sign-up
 // away. Data is the public catalog read (RLS keeps hidden rows
 // out) plus the bundle map, opened to anon in migration 0036.
-export default function PublicCatalog({ devicesOnly = false, steamOnly = false }) {
-  const focusedPage = devicesOnly || steamOnly
+export default function PublicCatalog({ devicesOnly = false, steamOnly = false, artOnly = false }) {
+  const focusedPage = devicesOnly || steamOnly || artOnly
   const [catalog, setCatalog] = useState([])
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -104,7 +105,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false }
 
   useEffect(() => {
     setPage(1)
-  }, [kind, platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly, steamOnly])
+  }, [kind, platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly, steamOnly, artOnly])
 
   const sectionDefaultOpen = (id) => {
     switch (id) {
@@ -169,7 +170,9 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false }
     ? catalog.filter(isDevicesPageRow)
     : steamOnly
       ? catalog.filter(isSteamRow)
-      : catalog
+      : artOnly
+        ? catalog.filter(isArtRow)
+        : catalog
   const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
   const kindCounts = { all: baseAll.length }
   for (const c of baseAll) {
@@ -319,6 +322,15 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false }
             Science, technology, engineering, art and maths — electronics kits,
             robots, experiments and building sets from the makers themselves,
             with the links to buy each one. No account needed to look around.
+          </p>
+        </>
+      ) : artOnly ? (
+        <>
+          <h1>Arts & Crafts</h1>
+          <p className="lede">
+            The truly pure art — paints, crayons, craft kits and sticker books
+            from Crayola, Melissa & Doug, Djeco and friends, with the links to
+            buy each one. No account needed to look around.
           </p>
         </>
       ) : (
@@ -560,7 +572,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false }
 
       <input
         className="filter-input"
-        placeholder={devicesOnly ? 'Search devices…' : steamOnly ? 'Search STEAM toys…' : 'Search the catalog…'}
+        placeholder={devicesOnly ? 'Search devices…' : steamOnly ? 'Search STEAM toys…' : artOnly ? 'Search arts & crafts…' : 'Search the catalog…'}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -577,7 +589,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false }
 
       {visible.length === 0 && (
         <p className="empty">
-          {devicesOnly ? 'No devices match. Try another search.' : steamOnly ? 'No STEAM toys match. Try another search.' : 'Nothing matches. Try another search.'}
+          {devicesOnly ? 'No devices match. Try another search.' : steamOnly ? 'No STEAM toys match. Try another search.' : artOnly ? 'No arts & crafts match. Try another search.' : 'Nothing matches. Try another search.'}
         </p>
       )}
 
