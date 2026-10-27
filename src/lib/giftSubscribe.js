@@ -16,10 +16,16 @@ export function subscribePayload({ slug, email, familyScope, childId }) {
 
 export function subscribeResultMessage(code, { familyScope, childName } = {}) {
   switch (code) {
+    // 'ok' now means "signup recorded, confirmation email on its way":
+    // nothing is sent until the address is confirmed (migration 0058).
     case 'ok':
       return familyScope
-        ? "You're in! We'll email you before each child's birthday and holidays — wishlist link included."
-        : `You're in! We'll email you before ${childName ? `${childName}'s` : "the child's"} birthday and holidays — wishlist link included.`
+        ? 'Almost there — check your email and tap the confirm link. After that we\'ll email you before each child\'s birthday and holidays.'
+        : `Almost there — check your email and tap the confirm link. After that we'll email you before ${childName ? `${childName}'s` : "the child's"} birthday and holidays.`
+    case 'already':
+      return "That email is already signed up for this list — you're all set."
+    case 'rate_limited':
+      return 'Lots of people signed up just now — please try again in a little while.'
     case 'bad_email':
       return "That email doesn't look quite right — check it and try again."
     case 'child_required':

@@ -85,13 +85,25 @@ export default function PublicListPage({ slugOverride } = {}) {
       subscribePayload({ slug, email: subEmail, familyScope, childId: subChild }),
     )
     const code = error ? 'error' : result
+    if (code === 'ok') {
+      // Best effort: the signup is already recorded, and a second
+      // tap of "Remind me" asks for the email again (the server
+      // spaces them out), so a failure here isn't fatal.
+      try {
+        await supabase.functions.invoke('send-subscriber-confirmation', {
+          body: { slug, email: subEmail.trim() },
+        })
+      } catch {
+        /* see above */
+      }
+    }
     setSubMsg(
       subscribeResultMessage(code, {
         familyScope,
         childName: (data?.children ?? []).find((k) => k.id === subChild)?.name,
       }),
     )
-    setSubState(code === 'ok' ? 'done' : 'idle')
+    setSubState(code === 'ok' || code === 'already' ? 'done' : 'idle')
   }
 
   const load = useCallback(() => {

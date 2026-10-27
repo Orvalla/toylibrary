@@ -14,7 +14,11 @@ describe('giftSubscribe', () => {
   })
 
   it('maps RPC codes to visitor words', () => {
-    expect(subscribeResultMessage('ok', { familyScope: true })).toContain("You're in")
+    // 'ok' = pending: it must tell the visitor to confirm, never claim they're subscribed yet.
+    expect(subscribeResultMessage('ok', { familyScope: true })).toContain('confirm')
+    expect(subscribeResultMessage('ok', { familyScope: true })).not.toContain("You're in")
+    expect(subscribeResultMessage('already')).toContain('already signed up')
+    expect(subscribeResultMessage('rate_limited')).toContain('try again')
     expect(subscribeResultMessage('ok', { childName: 'Sam' })).toContain("Sam's")
     expect(subscribeResultMessage('bad_email')).toContain("doesn't look")
     expect(subscribeResultMessage('child_required')).toContain('Pick a child')

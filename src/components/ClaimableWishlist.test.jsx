@@ -92,4 +92,31 @@ describe('ClaimableWishlist', () => {
       spy.mockRestore()
     }
   })
+  it('explains a rate-limited claim instead of calling the item unavailable', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: { ok: false, reason: 'rate_limited' }, error: null })
+    render(<ClaimableWishlist slug="fam-x" items={[unclaimed]} onChanged={() => {}} />)
+    fireEvent.click(screen.getByText(/I'll get this — claim it/))
+    fireEvent.click(screen.getByText(/Confirm claim/))
+    expect(await screen.findByText(/try again in a little while/)).toBeInTheDocument()
+    expect(screen.queryByText(/no longer available/)).toBeNull()
+  })
+
+  it('never tells a claimer a parent can release their claim (there is no such action)', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    try {
+      supabase.rpc.mockResolvedValueOnce({
+        data: { ok: true, token: 'tok', expires_at: '2026-12-26T00:00:00+00:00' },
+        error: null,
+      })
+      render(<ClaimableWishlist slug="fam-x" items={[unclaimed]} onChanged={() => {}} />)
+      fireEvent.click(screen.getByText(/I'll get this — claim it/))
+      fireEvent.click(screen.getByText(/Confirm claim/))
+      expect(await screen.findByText(/open up again by itself/)).toBeInTheDocument()
+      expect(screen.queryByText(/ask the family/i)).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })

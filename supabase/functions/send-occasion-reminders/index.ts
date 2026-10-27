@@ -152,7 +152,14 @@ Deno.serve(async (req) => {
         ),
         fetchAll(admin, 'relatives', 'id, owner_id, name, email, notify_email, unsubscribe_token', ['id']),
         fetchAll(admin, 'relative_children', 'relative_id, child_id', ['relative_id', 'child_id']),
-        fetchAll(admin, 'gift_subscribers', 'id, profile_id, child_id, email, scope, unsubscribe_token', ['id']),
+        // Double opt-in (migration 0058): only confirmed addresses get mail.
+        fetchAll(
+          admin,
+          'gift_subscribers',
+          'id, profile_id, child_id, email, scope, unsubscribe_token',
+          ['id'],
+          (q: any) => q.not('confirmed_at', 'is', null),
+        ),
       ])
 
     // Two dedupe streams: owner digests (relative_id NULL) and

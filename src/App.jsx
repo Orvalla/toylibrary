@@ -12,6 +12,7 @@ import AdminPage from './pages/AdminPage'
 import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/PasswordPages'
 import PublicListPage from './pages/PublicListPage'
 import UnsubscribePage from './pages/UnsubscribePage'
+import ConfirmSubscriptionPage from './pages/ConfirmSubscriptionPage'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
 import { useAuth } from './lib/auth'
 import { shareSlugFromHost } from './lib/hostSlug'
@@ -117,6 +118,8 @@ export default function App() {
             present or future page on this domain. */}
         {/* Gift-circle email unsubscribe: public, token-checked by RPC. */}
         <Route path="/unsubscribe" element={<UnsubscribePage />} />
+        {/* Double opt-in link for gift-list subscribers (migration 0058). */}
+        <Route path="/confirm" element={<ConfirmSubscriptionPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="*" element={<NotFoundPage />} />

@@ -56,12 +56,16 @@ export function useClaim(slug, item, onChanged) {
         : ''
       const warning = saved
         ? ''
-        : " This browser can't remember your claim, so you won't be able to undo it from here — ask the family if you need it released."
+        : data.expires_at
+          ? " This browser can't remember your claim, so you won't be able to undo it from here; it will open up again by itself on that date."
+          : " This browser can't remember your claim, so you won't be able to undo it from here."
       setNote(`${hold}${warning}`.trim())
       onChanged()
     } else if (data?.reason === 'already_claimed') {
       setNote('Someone just claimed this one — refreshing the list.')
       onChanged()
+    } else if (data?.reason === 'rate_limited') {
+      setNote('A lot of claims came in for this list just now — please try again in a little while.')
     } else {
       setNote('This item is no longer available to claim.')
     }
