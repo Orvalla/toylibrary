@@ -110,10 +110,20 @@ const ART_DETAILS = {
   ]),
 }
 
+// Coloring and other art-activity books are art supplies
+// (owner ruling, 2026-10-27) — wherever they sit. On the
+// books platform they're identified by their title's activity
+// words; ordinary picture books stay on the Books shelf.
+const ART_BOOK_TITLE = [/colou?ring book/i, /how to draw/i, /paint by numbers/i]
+
 // Does this catalog row belong on the Arts & Crafts shelf?
 export function isArtRow(item) {
   if (!item) return false
   if (ART_PLATFORMS.has(item.platform)) return true
+  if (item.platform === 'books') {
+    const title = String(item.title ?? '')
+    return ART_BOOK_TITLE.some((re) => re.test(title))
+  }
   // Robotime straddles both shelves: its Rolife craft kits are
   // art, its ROKR mechanical kits are STEAM. The ingestor
   // carries the line in the row's details.

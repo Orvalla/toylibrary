@@ -32,6 +32,14 @@ describe('isArtRow', () => {
     expect(isArtRow({ platform: 'robotime', details: 'ROKR mechanical kit' })).toBe(false)
   })
 
+  it('counts coloring and art-activity books as art supplies, on any shelf', () => {
+    expect(isArtRow({ platform: 'books', title: 'Bunnies Coloring Book + Stickers' })).toBe(true)
+    expect(isArtRow({ platform: 'books', title: 'How to Draw Ocean Life' })).toBe(true)
+    expect(isArtRow({ platform: 'books', title: 'Paint by Numbers: Monsters' })).toBe(true)
+    expect(isArtRow({ platform: 'books', title: 'The Very Hungry Caterpillar' })).toBe(false)
+    expect(isArtRow({ platform: 'books', title: 'An Earth Song (Petite Poems)' })).toBe(false)
+  })
+
   it('leaves the same brands’ non-art lines on their own shelves', () => {
     // Learning toys that merely mention colour are not art-making.
     expect(isArtRow({ platform: 'melissaanddoug', details: 'Colors & Shapes' })).toBe(false)
