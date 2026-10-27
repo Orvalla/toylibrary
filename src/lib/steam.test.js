@@ -14,6 +14,18 @@ describe('isSteamRow', () => {
     }
   })
 
+  it('includes the building and engineering makers', () => {
+    for (const platform of ['ugears', 'plusplus', 'geomag', 'zometool', 'knex', 'keva', 'arckit', 'metalearth']) {
+      expect(isSteamRow({ platform })).toBe(true)
+    }
+  })
+
+  it('splits Robotime: ROKR mechanical kits here, Rolife craft kits not', () => {
+    expect(isSteamRow({ platform: 'robotime', details: 'ROKR mechanical kit' })).toBe(true)
+    expect(isSteamRow({ platform: 'robotime', details: 'Rolife craft kit' })).toBe(false)
+    expect(isSteamRow({ platform: 'robotime', details: 'Rolife craft kit — Rowood wooden flower kit' })).toBe(false)
+  })
+
   it('leaves traditional art and audio content to their own zones', () => {
     for (const platform of ['crayola', 'djeco', 'tonies', 'yoto', 'books']) {
       expect(isSteamRow({ platform })).toBe(false)

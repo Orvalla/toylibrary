@@ -5,9 +5,11 @@
 // own zone elsewhere; what's here is art wired into making —
 // paper circuits, conductive dough, drawing robots.
 //
-// Membership is by platform only, derived from data the catalog
-// already has — a new maker added under one of these platforms
-// joins the section automatically, nothing to maintain.
+// Membership is derived from data the catalog already has —
+// a new maker added under one of these platforms joins the
+// section automatically, nothing to maintain. One row-level
+// exception: Robotime, whose ROKR mechanical kits belong here
+// while its Rolife craft kits sit on the Arts & Crafts shelf.
 export const STEAM_PLATFORMS = [
   // Electronics & robotics (assembly-kit rounds 1 and 2)
   'sphero',
@@ -45,6 +47,15 @@ export const STEAM_PLATFORMS = [
   'twinscience',
   'robotical',
   'tinkeringlabs',
+  // Building & engineering (shelves round, 2026-10-27)
+  'ugears',
+  'plusplus',
+  'geomag',
+  'zometool',
+  'knex',
+  'keva',
+  'arckit',
+  'metalearth',
   // Science, logic & learning lines already in the catalog
   'thamesandkosmos',
   'kiwico',
@@ -57,5 +68,13 @@ export const STEAM_PLATFORMS = [
 
 // Does this catalog row belong on the STEAM shelf?
 export function isSteamRow(item) {
-  return !!item && STEAM_PLATFORMS.includes(item.platform)
+  if (!item) return false
+  if (STEAM_PLATFORMS.includes(item.platform)) return true
+  // Robotime straddles both shelves: its ROKR mechanical kits are
+  // STEAM, its Rolife craft kits are Arts & Crafts. The ingestor
+  // carries the line in the row's details.
+  return (
+    item.platform === 'robotime' &&
+    String(item.details ?? '').trim().startsWith('ROKR')
+  )
 }

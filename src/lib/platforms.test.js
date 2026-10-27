@@ -5,8 +5,9 @@ describe('platforms', () => {
   it('has a label and emoji for every platform key the database allows', () => {
     // Must stay in sync with the CHECK constraints in the migrations
     // (0001_init.sql as widened through 0053_held_wave_platforms.sql,
-    // 0055_electronics_platforms.sql and
-    // 0056_electronics_round2_platforms.sql — the 0056 list is the
+    // 0055_electronics_platforms.sql,
+    // 0056_electronics_round2_platforms.sql and
+    // 0059_shelves_platforms_and_prices.sql — the 0059 list is the
     // full current set, copied from its catalog_items CHECK).
     const dbKeys = [
       'tonies',
@@ -101,6 +102,23 @@ describe('platforms', () => {
       'twinscience',
       'robotical',
       'tinkeringlabs',
+      'ugears',
+      'plusplus',
+      'geomag',
+      'zometool',
+      'knex',
+      'keva',
+      'arckit',
+      'robotime',
+      'metalearth',
+      'ooly',
+      'fabercastell',
+      'brightstripes',
+      'thepencilgrip',
+      'petitcollage',
+      'annwilliams',
+      'pipsticks',
+      'rainbowloom',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {

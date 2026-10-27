@@ -17,6 +17,21 @@ describe('isArtRow', () => {
     expect(isArtRow({ platform: 'mudpuppy', details: 'Coloring Book' })).toBe(true)
   })
 
+  it('takes the pure-art platforms whole — each was fenced to art at ingestion', () => {
+    for (const platform of ['ooly', 'fabercastell', 'brightstripes', 'thepencilgrip', 'petitcollage', 'annwilliams', 'pipsticks', 'rainbowloom']) {
+      expect(isArtRow({ platform, details: 'Anything' })).toBe(true)
+    }
+  })
+
+  it("takes the Djeco top-up's workshop labels and Robotime's Rolife line", () => {
+    expect(isArtRow({ platform: 'djeco', details: 'Cyanotype kit' })).toBe(true)
+    expect(isArtRow({ platform: 'djeco', details: 'Atelier kit' })).toBe(true)
+    expect(isArtRow({ platform: 'djeco', details: 'Scratch boards' })).toBe(true)
+    expect(isArtRow({ platform: 'robotime', details: 'Rolife craft kit' })).toBe(true)
+    expect(isArtRow({ platform: 'robotime', details: 'Rolife craft kit — Rowood wooden flower kit' })).toBe(true)
+    expect(isArtRow({ platform: 'robotime', details: 'ROKR mechanical kit' })).toBe(false)
+  })
+
   it('leaves the same brands’ non-art lines on their own shelves', () => {
     // Learning toys that merely mention colour are not art-making.
     expect(isArtRow({ platform: 'melissaanddoug', details: 'Colors & Shapes' })).toBe(false)
