@@ -16,6 +16,7 @@ import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
 import { CATALOG_LANGUAGES, languageLabel, languagesVisible, normalizePrefs } from '../lib/language'
 import { PROJECTOR_BRANDS, isDevicesPageRow, projectorBrandOf } from '../lib/projector'
+import { isSteamRow } from '../lib/steam'
 import BundleNote from './BundleNote'
 import PlatformGrid from './PlatformGrid'
 import {
@@ -37,11 +38,14 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // to add instead of typing; anything already owned carries the green
 // checkmark — the whole point of the app, applied at add time.
 //
-// Two pages share this browser: /catalog shows everything (with
-// category chips — figures, books, cards, games, devices, audio) and
+// Three pages share this browser: /catalog shows everything (with
+// category chips — figures, books, cards, games, devices, audio),
 // /devices shows just the players themselves (catalog rows with
-// item_type 'device', seeded by migration 0010).
-export default function CatalogBrowser({ devicesOnly = false }) {
+// item_type 'device', seeded by migration 0010), and /steam shows
+// the STEAM shelf (lib/steam's isSteamRow). The two focused pages
+// narrow the base and drop the category/interest/language filters.
+export default function CatalogBrowser({ devicesOnly = false, steamOnly = false }) {
+  const focusedPage = devicesOnly || steamOnly
   const { user } = useAuth()
   const [catalog, setCatalog] = useState([])
   const [mine, setMine] = useState([])
@@ -123,10 +127,10 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     activeFilters.push(
       PROJECTOR_BRANDS.find((b) => b.key === subBrand)?.label ?? subBrand
     )
-  if (!devicesOnly && category !== 'all') activeFilters.push(category)
-  if (!devicesOnly && theme !== 'all')
+  if (!focusedPage && category !== 'all') activeFilters.push(category)
+  if (!focusedPage && theme !== 'all')
     activeFilters.push(THEMES.find((t) => t.key === theme)?.label ?? theme)
-  if (!devicesOnly && languages.length > 0)
+  if (!focusedPage && languages.length > 0)
     activeFilters.push(
       languages.length === 1
         ? languageLabel(languages[0])
@@ -147,9 +151,9 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // sort themselves, their choice sticks.
   const sortTouched = useRef(false)
   useEffect(() => {
-    if (devicesOnly || sortTouched.current) return
+    if (focusedPage || sortTouched.current) return
     setSort(childSel ? 'suggested' : 'popular')
-  }, [childSel, devicesOnly])
+  }, [childSel, focusedPage])
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [catalogLoading, setCatalogLoading] = useState(true)
@@ -215,7 +219,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // Any change to what could be visible starts back at page 1.
   useEffect(() => {
     setPage(1)
-  }, [kind, platform, category, theme, languages.join(','), ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly])
+  }, [kind, platform, category, theme, languages.join(','), ageBand, query, sort, childSel, subBrand, stage, perPage, devicesOnly, steamOnly])
 
   // Ownership is per child: a title only counts as owned (or wished)
   // for the child currently selected above — Sam having Bluey doesn't
@@ -389,7 +393,11 @@ export default function CatalogBrowser({ devicesOnly = false }) {
   // item_type and count as content. The kind (main shelf) narrows further —
   // and because the brand chips derive from base, they can only
   // offer brands the chosen shelf actually has.
-  const baseAll = devicesOnly ? catalog.filter(isDevicesPageRow) : catalog
+  const baseAll = devicesOnly
+    ? catalog.filter(isDevicesPageRow)
+    : steamOnly
+      ? catalog.filter(isSteamRow)
+      : catalog
   const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
   const kindCounts = { all: baseAll.length }
   for (const c of baseAll) {
@@ -424,9 +432,9 @@ export default function CatalogBrowser({ devicesOnly = false }) {
     (c) =>
       (platform === 'all' || c.platform === platform) &&
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
-      (devicesOnly || category === 'all' || categoryOf(c) === category) &&
-      (devicesOnly || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
-      (devicesOnly || languagesVisible(c.language, languages)) &&
+      (focusedPage || category === 'all' || categoryOf(c) === category) &&
+      (focusedPage || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
+      (focusedPage || languagesVisible(c.language, languages)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -564,6 +572,15 @@ export default function CatalogBrowser({ devicesOnly = false }) {
             saving up for.
           </p>
         </>
+      ) : steamOnly ? (
+        <>
+          <h1>STEAM Toys</h1>
+          <p className="lede">
+            Science, technology, engineering, art and maths — electronics kits,
+            robots, experiments and building sets from the makers themselves.
+            Mark the ones already on your shelf, or wishlist the next project.
+          </p>
+        </>
       ) : (
         <>
           <h1>Browse the catalog</h1>
@@ -574,7 +591,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         </>
       )}
 
-      {!devicesOnly && <KindBar counts={kindCounts} value={kind} onChange={pickKind} />}
+      {!focusedPage && <KindBar counts={kindCounts} value={kind} onChange={pickKind} />}
 
       {kids.length > 0 && (
         <form className="form" onSubmit={(e) => e.preventDefault()}>
@@ -656,7 +673,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       </FilterSection>
       )}
 
-      {!devicesOnly && (
+      {!focusedPage && (
       <FilterSection
         id="category"
         label="Category"
@@ -684,7 +701,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       </FilterSection>
       )}
 
-      {!devicesOnly && (
+      {!focusedPage && (
       <FilterSection
         id="theme"
         label="Shop by interest"
@@ -716,7 +733,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
       </FilterSection>
       )}
 
-      {!devicesOnly && languagesPresent.length > 1 && (
+      {!focusedPage && languagesPresent.length > 1 && (
       <FilterSection
         id="language"
         label="Language"
@@ -810,7 +827,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
 
       <input
         className="filter-input"
-        placeholder={devicesOnly ? 'Search devices…' : 'Search the catalog…'}
+        placeholder={devicesOnly ? 'Search devices…' : steamOnly ? 'Search STEAM toys…' : 'Search the catalog…'}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -840,7 +857,9 @@ export default function CatalogBrowser({ devicesOnly = false }) {
         <p className="empty">
           {devicesOnly
             ? 'No devices match. Try another search.'
-            : 'Nothing matches. Try another search — or grow the catalog below.'}
+            : steamOnly
+              ? 'No STEAM toys match. Try another search.'
+              : 'Nothing matches. Try another search — or grow the catalog below.'}
         </p>
       )}
 
@@ -923,7 +942,7 @@ export default function CatalogBrowser({ devicesOnly = false }) {
 
       {pagerBar()}
 
-      {!devicesOnly && <GrowCatalog onAdded={handleCatalogAdded} />}
+      {!focusedPage && <GrowCatalog onAdded={handleCatalogAdded} />}
     </main>
   )
 }

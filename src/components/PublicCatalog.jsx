@@ -14,6 +14,7 @@ import { CATEGORIES, categoryOf } from '../lib/categories'
 import { THEMES, themesOf } from '../lib/themes'
 import { CATALOG_LANGUAGES, languageLabel, languagesVisible } from '../lib/language'
 import { PROJECTOR_BRANDS, isDevicesPageRow, projectorBrandOf } from '../lib/projector'
+import { isSteamRow } from '../lib/steam'
 import PlatformGrid from './PlatformGrid'
 import { FilterGroup, FilterSection } from './FilterSection'
 import { amazonUrlFor } from '../lib/amazon'
@@ -35,7 +36,8 @@ import { BOOK_STAGES, bookInStage } from '../lib/books'
 // out their pieces with buy links, and lists stay a sign-up
 // away. Data is the public catalog read (RLS keeps hidden rows
 // out) plus the bundle map, opened to anon in migration 0036.
-export default function PublicCatalog({ devicesOnly = false }) {
+export default function PublicCatalog({ devicesOnly = false, steamOnly = false }) {
+  const focusedPage = devicesOnly || steamOnly
   const [catalog, setCatalog] = useState([])
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -102,7 +104,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   useEffect(() => {
     setPage(1)
-  }, [kind, platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly])
+  }, [kind, platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly, steamOnly])
 
   const sectionDefaultOpen = (id) => {
     switch (id) {
@@ -133,10 +135,10 @@ export default function PublicCatalog({ devicesOnly = false }) {
     activeFilters.push(
       PROJECTOR_BRANDS.find((b) => b.key === subBrand)?.label ?? subBrand
     )
-  if (!devicesOnly && category !== 'all') activeFilters.push(category)
-  if (!devicesOnly && theme !== 'all')
+  if (!focusedPage && category !== 'all') activeFilters.push(category)
+  if (!focusedPage && theme !== 'all')
     activeFilters.push(THEMES.find((t) => t.key === theme)?.label ?? theme)
-  if (!devicesOnly && languages.length > 0)
+  if (!focusedPage && languages.length > 0)
     activeFilters.push(
       languages.length === 1
         ? languageLabel(languages[0])
@@ -163,7 +165,11 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
   if (loading) return <main className="page"><p>Loading the catalog…</p></main>
 
-  const baseAll = devicesOnly ? catalog.filter(isDevicesPageRow) : catalog
+  const baseAll = devicesOnly
+    ? catalog.filter(isDevicesPageRow)
+    : steamOnly
+      ? catalog.filter(isSteamRow)
+      : catalog
   const base = kind === 'all' ? baseAll : baseAll.filter((c) => inKind(c, kind))
   const kindCounts = { all: baseAll.length }
   for (const c of baseAll) {
@@ -194,9 +200,9 @@ export default function PublicCatalog({ devicesOnly = false }) {
     (c) =>
       (platform === 'all' || c.platform === platform) &&
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
-      (devicesOnly || category === 'all' || categoryOf(c) === category) &&
-      (devicesOnly || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
-      (devicesOnly || languagesVisible(c.language, languages)) &&
+      (focusedPage || category === 'all' || categoryOf(c) === category) &&
+      (focusedPage || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
+      (focusedPage || languagesVisible(c.language, languages)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -306,6 +312,15 @@ export default function PublicCatalog({ devicesOnly = false }) {
             buy each one. No account needed to look around.
           </p>
         </>
+      ) : steamOnly ? (
+        <>
+          <h1>STEAM Toys</h1>
+          <p className="lede">
+            Science, technology, engineering, art and maths — electronics kits,
+            robots, experiments and building sets from the makers themselves,
+            with the links to buy each one. No account needed to look around.
+          </p>
+        </>
       ) : (
         <>
           <h1>Browse the catalog</h1>
@@ -316,7 +331,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
         </>
       )}
 
-      {!devicesOnly && <KindBar counts={kindCounts} value={kind} onChange={pickKind} />}
+      {!focusedPage && <KindBar counts={kindCounts} value={kind} onChange={pickKind} />}
 
       <section className="card guest-banner">
         <p>
@@ -391,7 +406,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
         </FilterSection>
       )}
 
-      {!devicesOnly && (
+      {!focusedPage && (
         <FilterSection
           id="category"
           label="Category"
@@ -419,7 +434,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
         </FilterSection>
       )}
 
-      {!devicesOnly && (
+      {!focusedPage && (
         <FilterSection
           id="theme"
           label="Shop by interest"
@@ -451,7 +466,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
         </FilterSection>
       )}
 
-      {!devicesOnly && languagesPresent.length > 1 && (
+      {!focusedPage && languagesPresent.length > 1 && (
         <FilterSection
           id="language"
           label="Language"
@@ -545,7 +560,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
       <input
         className="filter-input"
-        placeholder={devicesOnly ? 'Search devices…' : 'Search the catalog…'}
+        placeholder={devicesOnly ? 'Search devices…' : steamOnly ? 'Search STEAM toys…' : 'Search the catalog…'}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -562,7 +577,7 @@ export default function PublicCatalog({ devicesOnly = false }) {
 
       {visible.length === 0 && (
         <p className="empty">
-          {devicesOnly ? 'No devices match. Try another search.' : 'Nothing matches. Try another search.'}
+          {devicesOnly ? 'No devices match. Try another search.' : steamOnly ? 'No STEAM toys match. Try another search.' : 'Nothing matches. Try another search.'}
         </p>
       )}
 

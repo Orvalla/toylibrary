@@ -50,6 +50,19 @@ export default function HomePage() {
         </Link>
       </section>
 
+      <section className="books-hero home-books">
+        <h2>🧪 And a STEAM shelf of its own</h2>
+        <p>
+          Electronics kits, coding robots, experiments and engineering sets
+          from dozens of makers — Snap Circuits to Arduino, Cubelets to
+          Thames &amp; Kosmos — gathered on one shelf so the next project is
+          easy to find and gift.
+        </p>
+        <Link to="/steam" className="btn">
+          Explore STEAM Toys
+        </Link>
+      </section>
+
       <div className="card-grid">
         <div className="card">
           <h3>📚 Track what you have</h3>

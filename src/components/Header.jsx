@@ -4,14 +4,15 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../supabaseClient'
 
 // The whole catalog family under one header entry: everything,
-// the Book Library, the board-games shelf and the devices page.
-// (The separate Catalog / Books / Board games / Devices links
-// crowded the header out as the shelves grew.)
+// the Book Library, the board-games shelf, the devices page and
+// the STEAM shelf. (The separate top-level links crowded the
+// header out as the shelves grew.)
 const CATALOG_ITEMS = [
   { to: '/catalog', label: 'All', emoji: '🛍️', match: (p, s) => p === '/catalog' && !s.includes('kind=') },
   { to: '/books', label: 'Books', emoji: '📚', match: (p) => p === '/books' },
   { to: '/catalog?kind=games', label: 'Board games', emoji: '🎲', match: (p, s) => p === '/catalog' && s.includes('kind=games') },
   { to: '/devices', label: 'Devices', emoji: '🕹️', match: (p) => p === '/devices' },
+  { to: '/steam', label: 'STEAM Toys', emoji: '🧪', match: (p) => p === '/steam' },
 ]
 
 function CatalogMenu() {
