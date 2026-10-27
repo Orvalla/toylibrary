@@ -19,6 +19,9 @@ import {
   faviconUrlFor,
   platformForUrl,
   isBlockedHost,
+  titlesMatch,
+  shapeItem,
+  addFetchStrategy,
   isBlockedTitle,
 } from '../../supabase/functions/ingest-catalog/extract.js'
 
@@ -875,5 +878,69 @@ describe('faviconUrlFor (ingest)', () => {
     )
     expect(faviconUrlFor('not a url')).toBeNull()
     expect(faviconUrlFor(null)).toBeNull()
+  })
+})
+
+describe('titlesMatch (add-mode re-fetch gate)', () => {
+  it('matches the same product despite case, punctuation and suffixes', () => {
+    expect(titlesMatch('Bluey Tonie', 'bluey - tonie')).toBe(true)
+    expect(titlesMatch('Yoto Mini', 'Yoto Mini – Player (2024)')).toBe(true)
+    expect(titlesMatch('Yoto Mini – Player (2024)', 'Yoto Mini')).toBe(true)
+  })
+
+  it('rejects a different product', () => {
+    expect(titlesMatch('Bluey Tonie', 'Privacy Policy')).toBe(false)
+    expect(titlesMatch('Bluey', 'Paw Patrol')).toBe(false)
+  })
+
+  it('does not let a tiny claim match any page', () => {
+    expect(titlesMatch('a', 'Privacy Policy')).toBe(false)
+    expect(titlesMatch('the', 'The Privacy Policy')).toBe(false)
+    expect(titlesMatch('', 'Anything')).toBe(false)
+    expect(titlesMatch('Anything', '')).toBe(false)
+  })
+})
+
+describe('addFetchStrategy (add-mode re-fetch: JSON vs guarded HTML)', () => {
+  it('keeps the guarded HTML scrape only for Yoto, whose storefront serves no product JSON', () => {
+    expect(addFetchStrategy('yoto')).toBe('html')
+  })
+
+  it('uses the product JSON for every other store', () => {
+    expect(addFetchStrategy('tonies')).toBe('json')
+    expect(addFetchStrategy('osmo')).toBe('json')
+    expect(addFetchStrategy('littletikes')).toBe('json')
+    expect(addFetchStrategy('storypod')).toBe('json')
+    expect(addFetchStrategy('moonlite')).toBe('json')
+    expect(addFetchStrategy(undefined)).toBe('json')
+  })
+})
+
+describe('shapeItem (what the service-role function may hand back)', () => {
+  const row = {
+    id: 'r1', platform: 'other', title: 'Thing', details: 'd', image_url: 'https://x/y.png',
+    product_url: 'https://x/p', hidden: false, added_by: 'u-adder',
+    base_price_usd: 19.99, base_price_checked_at: '2026-10-27', popularity_score: 3,
+  }
+
+  it("never returns the adder's user id or the internal price anchor", () => {
+    const out = shapeItem(row, 'someone-else')
+    expect(out.added_by).toBeUndefined()
+    expect(out.base_price_usd).toBeUndefined()
+    expect(out.base_price_checked_at).toBeUndefined()
+    expect(out.title).toBe('Thing')
+    expect(out.product_url).toBe('https://x/p')
+  })
+
+  it("hides another parent's pending row behind a bare stub", () => {
+    const out = shapeItem({ ...row, hidden: true }, 'someone-else')
+    expect(out).toEqual({ platform: 'other', title: 'Thing', details: '', image_url: '' })
+  })
+
+  it('lets the adder see their own hidden row', () => {
+    const out = shapeItem({ ...row, hidden: true }, 'u-adder')
+    expect(out.id).toBe('r1')
+    expect(out.image_url).toBe('https://x/y.png')
+    expect(out.added_by).toBeUndefined()
   })
 })

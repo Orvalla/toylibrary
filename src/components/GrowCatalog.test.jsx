@@ -53,4 +53,34 @@ describe('GrowCatalog', () => {
     await waitFor(() => expect(onExists).toHaveBeenCalledWith(CANDIDATE))
     expect(onAdded).not.toHaveBeenCalled()
   })
+  it('tells the adder a pasted link is saved but waiting for review, not "in the catalog"', async () => {
+    invoke.mockResolvedValueOnce({
+      data: { status: 'added', pending_review: true, item: { ...CANDIDATE, id: 'n1' } },
+      error: null,
+    })
+    render(<GrowCatalog mode="link" />)
+    fireEvent.change(screen.getByLabelText('Product or collection link'), {
+      target: { value: 'https://example.com/p' },
+    })
+    fireEvent.submit(screen.getByLabelText('Product or collection link').closest('form'))
+    expect(await screen.findByText(/once it has been checked/)).toBeInTheDocument()
+    expect(screen.queryByText(/is now in the catalog/)).not.toBeInTheDocument()
+  })
+
+  it('says how many collection rows were left for tomorrow by the daily limit', async () => {
+    invoke.mockResolvedValueOnce({
+      data: {
+        status: 'collection', platform: 'tonies', added: 5, already_present: 1,
+        skipped_filtered: 0, skipped_cap: 7, blocked_content: 0, pending_review: true,
+      },
+      error: null,
+    })
+    render(<GrowCatalog mode="link" />)
+    fireEvent.change(screen.getByLabelText('Product or collection link'), {
+      target: { value: 'https://us.tonies.com/collections/all' },
+    })
+    fireEvent.submit(screen.getByLabelText('Product or collection link').closest('form'))
+    expect(await screen.findByText(/7 left for tomorrow/)).toBeInTheDocument()
+    expect(screen.getByText(/waiting for review/)).toBeInTheDocument()
+  })
 })

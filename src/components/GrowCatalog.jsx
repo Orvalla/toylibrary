@@ -214,10 +214,13 @@ export default function GrowCatalog({ onAdded, onExists, mode }) {
 
           {outcome && outcome.status === 'collection' && (
             <p className="notice">
-              Added {outcome.added} new {platformLabel(outcome.platform)} ·{' '}
+              Added {outcome.added} new {platformLabel(outcome.platform)}
+              {outcome.pending_review && outcome.added > 0 ? ' (waiting for review)' : ''} ·{' '}
               {outcome.already_present} already in the catalog
               {outcome.skipped_filtered > 0 &&
                 ` · ${outcome.skipped_filtered} couldn't be read`}
+              {outcome.skipped_cap > 0 &&
+                ` · ${outcome.skipped_cap} left for tomorrow (daily link limit)`}
               {outcome.blocked_content > 0 &&
                 ` · ${outcome.blocked_content} not added (not kids' products)`}
             </p>
@@ -227,7 +230,9 @@ export default function GrowCatalog({ onAdded, onExists, mode }) {
             <>
               <p className="notice">
                 {outcome.status === 'added'
-                  ? `“${outcome.item.title}” is now in the catalog — thanks!`
+                  ? outcome.pending_review
+                    ? `“${outcome.item.title}” is saved — you can use it now, and it joins the shared catalog once it has been checked. Thanks!`
+                    : `“${outcome.item.title}” is now in the catalog — thanks!`
                   : `“${outcome.item.title}” is already in the catalog ✓`}
               </p>
               <div className="tile-grid">

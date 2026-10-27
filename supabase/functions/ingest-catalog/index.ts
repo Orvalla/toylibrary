@@ -64,6 +64,9 @@ import {
   platformForProduct,
   faviconUrlFor,
   platformForUrl,
+  shapeItem,
+  titlesMatch,
+  addFetchStrategy,
 } from './extract.js'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
@@ -81,15 +84,16 @@ const TITLE_CAP = 300
 const COLLECTION_MAX_PAGES = 20
 const COLLECTION_PAGE_SIZE = 250
 const COLLECTION_PAGE_BYTES = 8 * 1024 * 1024
-// Link-paste (mode 'url') additions land hidden until an admin
-// publishes them from /admin (see handleUrl), and each parent
-// gets at most this many url-mode creations per UTC day — a
-// pasted collection counts per row it creates. Counting rides
-// on catalog_additions (every genuine insert logs one row per
-// item): catalog_items itself carries no created_at column,
-// and the log cannot tell url-mode rows from search-adds, so
-// the count is ALL of the user's additions today. Add-mode is
-// not itself capped — but its rows do eat into the url budget.
+// Link-paste (mode 'url') additions land hidden (pending_review) until
+// an admin publishes them from /admin (see handleUrl), and each parent
+// gets at most this many url-mode creations per UTC day — a pasted
+// collection counts per row it creates. The count lives in its own
+// table (migration 0060: url_add_quota), taken and refunded
+// atomically in the database: counting rows in catalog_additions
+// afterwards let parallel requests all read the same "left" figure,
+// and a failed log insert silently under-counted. Add-mode (store
+// search candidates, re-fetched from the store itself) does not
+// draw on this budget.
 const URL_DAILY_CAP = 25
 
 // Platform keys the database CHECK allows (0007). Add-mode candidates
@@ -261,31 +265,72 @@ function ratingPair(
   return r !== null && c !== null ? { rating: r, rating_count: c } : { rating: null, rating_count: null }
 }
 
-// Insert a catalog row unless (platform, title) already exists, and
-// report which happened. Only a genuine insert is logged — the
-// additions log is a record of who grew the catalog, not of attempts.
-// How many catalog rows this user has created today (UTC),
-// counted on the additions log — see URL_DAILY_CAP above.
-async function additionsToday(
+// Daily url-mode quota (migration 0060). take is atomic per user —
+// concurrent requests serialise on the quota row — and returns how
+// many of `want` were granted; refund hands back what an insert
+// didn't use (duplicates skipped by the upsert, a link that was
+// already in the catalog).
+async function urlQuotaLeft(
   admin: ReturnType<typeof createClient>,
   userId: string,
 ): Promise<number> {
-  const start = new Date()
-  start.setUTCHours(0, 0, 0, 0)
-  const { count, error } = await admin
-    .from('catalog_additions')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .gte('created_at', start.toISOString())
-  if (error) throw new HttpError(500, 'Something went wrong saving that — try again.')
-  return count ?? 0
+  const { data, error } = await admin.rpc('url_quota_left', {
+    p_user: userId,
+    p_cap: URL_DAILY_CAP,
+  })
+  if (error || typeof data !== 'number') {
+    throw new HttpError(500, 'Something went wrong saving that — try again.')
+  }
+  return data
 }
 
-async function urlAllowanceLeft(
+async function takeUrlQuota(
   admin: ReturnType<typeof createClient>,
   userId: string,
+  want: number,
 ): Promise<number> {
-  return Math.max(0, URL_DAILY_CAP - (await additionsToday(admin, userId)))
+  if (want <= 0) return 0
+  const { data, error } = await admin.rpc('take_url_quota', {
+    p_user: userId,
+    p_want: want,
+    p_cap: URL_DAILY_CAP,
+  })
+  if (error || typeof data !== 'number') {
+    throw new HttpError(500, 'Something went wrong saving that — try again.')
+  }
+  return data
+}
+
+async function refundUrlQuota(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  n: number,
+): Promise<void> {
+  if (n <= 0) return
+  // Best effort: a failed refund only costs the parent a unit of today's allowance.
+  await admin.rpc('refund_url_quota', { p_user: userId, p_n: n }).then(
+    () => undefined,
+    () => undefined,
+  )
+}
+
+// One url-mode creation: take 1 from the quota, create, and give it
+// back if nothing was actually created.
+async function chargeUrlAddition(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  create: () => Promise<{ status: string; [k: string]: unknown }>,
+) {
+  if ((await takeUrlQuota(admin, userId, 1)) < 1) throw new HttpError(429, URL_CAP_MESSAGE)
+  let result
+  try {
+    result = await create()
+  } catch (err) {
+    await refundUrlQuota(admin, userId, 1)
+    throw err
+  }
+  if (result.status !== 'added') await refundUrlQuota(admin, userId, 1)
+  return result
 }
 
 const URL_CAP_MESSAGE =
@@ -293,6 +338,9 @@ const URL_CAP_MESSAGE =
   URL_DAILY_CAP +
   ' products added by link — it resets at midnight (UTC). Try again tomorrow.'
 
+// Insert a catalog row unless (platform, title) already exists, and
+// report which happened. Only a genuine insert is logged — the
+// additions log is a record of who grew the catalog, not of attempts.
 async function upsertCatalogItem(
   admin: ReturnType<typeof createClient>,
   userId: string,
@@ -304,6 +352,7 @@ async function upsertCatalogItem(
     source_url: string | null
     is_bundle?: boolean
     hidden?: boolean
+    pending_review?: boolean
     age_min_years?: number | null
     age_max_years?: number | null
     rating?: number | null
@@ -324,7 +373,7 @@ async function upsertCatalogItem(
     .eq('title', row.title)
     .maybeSingle()
   if (findError) throw new HttpError(500, 'Something went wrong saving that — try again.')
-  if (existing) return { status: 'exists', item: existing }
+  if (existing) return { status: 'exists', item: shapeItem(existing, userId) }
 
   const { data: inserted, error: insertError } = await admin
     .from('catalog_items')
@@ -345,6 +394,7 @@ async function upsertCatalogItem(
         // still sees their own). Search-adds pass no flag and
         // stay visible immediately.
         hidden: row.hidden === true,
+        pending_review: row.pending_review === true,
         // catalog_items.image_url is NOT NULL; '' is its "no photo"
         // value and the tiles fall back to platform art for it.
         image_url: row.image_url ?? '',
@@ -370,7 +420,7 @@ async function upsertCatalogItem(
       .eq('platform', row.platform)
       .eq('title', row.title)
       .maybeSingle()
-    if (raced) return { status: 'exists', item: raced }
+    if (raced) return { status: 'exists', item: shapeItem(raced, userId) }
     throw new HttpError(500, 'Something went wrong saving that — try again.')
   }
 
@@ -381,7 +431,7 @@ async function upsertCatalogItem(
     source_url: row.source_url,
     catalog_item_id: inserted.id,
   })
-  return { status: 'added', item: inserted }
+  return { status: 'added', item: shapeItem(inserted, userId) }
 }
 
 // ------------------------------------------- collection bulk imports
@@ -445,6 +495,7 @@ async function insertCatalogRows(
       // and listing pastes), so every row lands hidden until an
       // admin publishes it — same rule as the single-add path.
       hidden: true,
+      pending_review: true,
       image_url: row.image_url ?? '',
       age_min_years: row.age_min_years ?? null,
       age_max_years: row.age_max_years ?? null,
@@ -533,14 +584,17 @@ async function insertPlannedCollection(
   // multi-platform collection, whose groups insert one after
   // another, stays honest; a plan with no allowance left is a
   // plain 429 rather than an all-zero tally.
-  const allowance = await urlAllowanceLeft(admin, userId)
-  if (allowance === 0 && plan.toAdd.length > 0) {
+  const granted = await takeUrlQuota(admin, userId, plan.toAdd.length)
+  if (granted === 0 && plan.toAdd.length > 0) {
     throw new HttpError(429, URL_CAP_MESSAGE)
   }
-  const skippedCap = Math.max(0, plan.toAdd.length - allowance)
-  if (skippedCap > 0) plan.toAdd = plan.toAdd.slice(0, allowance)
+  const skippedCap = plan.toAdd.length - granted
+  if (skippedCap > 0) plan.toAdd = plan.toAdd.slice(0, granted)
   await enrichRatings(plan.toAdd)
   const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
+  // Rows the upsert skipped as duplicates didn't use the allowance.
+  // (If the insert throws, the grant stays spent — the safe side.)
+  await refundUrlQuota(admin, userId, granted - added)
   return {
     status: 'collection',
     platform,
@@ -583,13 +637,14 @@ async function insertPlannedRows(
     )
   }
   // Same daily url-mode cap trim as insertPlannedCollection.
-  const allowance = await urlAllowanceLeft(admin, userId)
-  if (allowance === 0 && plan.toAdd.length > 0) {
+  const granted = await takeUrlQuota(admin, userId, plan.toAdd.length)
+  if (granted === 0 && plan.toAdd.length > 0) {
     throw new HttpError(429, URL_CAP_MESSAGE)
   }
-  const skippedCap = Math.max(0, plan.toAdd.length - allowance)
-  if (skippedCap > 0) plan.toAdd = plan.toAdd.slice(0, allowance)
+  const skippedCap = plan.toAdd.length - granted
+  if (skippedCap > 0) plan.toAdd = plan.toAdd.slice(0, granted)
   const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
+  await refundUrlQuota(admin, userId, granted - added)
   return {
     status: 'collection',
     platform,
@@ -744,14 +799,25 @@ const LISTING_MIN_LINKS = 3
 
 // One product page → one normalised row, Shopify .json first, page
 // extraction second. Null when the page yields nothing product-like.
-async function fetchProductRow(link: string, platform: string): Promise<any | null> {
+// opts.requireFinalHost (add-mode's Yoto branch): the fetch that
+// produces the row must END on this host — a redirect elsewhere
+// voids the row instead of letting off-store content in.
+async function fetchProductRow(
+  link: string,
+  platform: string,
+  opts?: { requireFinalHost?: string },
+): Promise<any | null> {
+  const finalHostOk = (finalUrl: string) =>
+    !opts?.requireFinalHost ||
+    new URL(finalUrl).hostname.toLowerCase().replace(/\.+$/, '') === opts.requireFinalHost
   const path = parseShopifyPath(link)
   if (path.kind === 'product') {
     const parsed = new URL(link)
     const jsonUrl = `${parsed.origin}/products/${path.handle}.json`
     if (isSafeFetchUrl(jsonUrl)) {
       try {
-        const { text } = await fetchTextCapped(jsonUrl)
+        const { text, finalUrl } = await fetchTextCapped(jsonUrl)
+        if (!finalHostOk(finalUrl)) return null
         const row = normalizeShopifyProduct(JSON.parse(text), platform)
         if (row?.title) return { ...row, source_url: link }
       } catch {
@@ -759,7 +825,8 @@ async function fetchProductRow(link: string, platform: string): Promise<any | nu
       }
     }
   }
-  const { text: html } = await fetchTextCapped(link)
+  const { text: html, finalUrl } = await fetchTextCapped(link)
+  if (!finalHostOk(finalUrl)) return null
   const extracted = extractFromJsonLd(html) ?? extractFromOpenGraph(html)
   if (!extracted?.title) return null
   const agg = extractAggregateRating(html)
@@ -826,7 +893,7 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
   // paste creates nothing. Collections re-check their exact
   // remaining allowance at insert time; this stops single
   // adds — and wasted collection fetches — up front.
-  if ((await additionsToday(admin, userId)) >= URL_DAILY_CAP) {
+  if ((await urlQuotaLeft(admin, userId)) <= 0) {
     throw new HttpError(429, URL_CAP_MESSAGE)
   }
   const platform = platformForUrl(url)
@@ -875,12 +942,15 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
               // Keep the product; skip the rating.
             }
           }
-          const result = await upsertCatalogItem(admin, userId, {
-            ...row,
-            title: row.title.slice(0, TITLE_CAP),
-            source_url: url,
-            hidden: true,
-          })
+          const result = await chargeUrlAddition(admin, userId, () =>
+            upsertCatalogItem(admin, userId, {
+              ...row,
+              title: row.title.slice(0, TITLE_CAP),
+              source_url: url,
+              hidden: true,
+              pending_review: true,
+            }),
+          )
           return json(
             result.status === 'added' ? { ...result, pending_review: true } : result,
           )
@@ -947,16 +1017,19 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
     )
   }
   const agg = extractAggregateRating(html)
-  const result = await upsertCatalogItem(admin, userId, {
-    platform: platformForProduct(platform, extracted.title),
-    title: extracted.title.slice(0, TITLE_CAP),
-    details: extracted.details ?? '',
-    image_url: extracted.image_url,
-    rating: extracted.rating ?? agg?.rating ?? null,
-    rating_count: extracted.rating_count ?? agg?.rating_count ?? null,
-    source_url: url,
-    hidden: true,
-  })
+  const result = await chargeUrlAddition(admin, userId, () =>
+    upsertCatalogItem(admin, userId, {
+      platform: platformForProduct(platform, extracted.title),
+      title: extracted.title.slice(0, TITLE_CAP),
+      details: extracted.details ?? '',
+      image_url: extracted.image_url,
+      rating: extracted.rating ?? agg?.rating ?? null,
+      rating_count: extracted.rating_count ?? agg?.rating_count ?? null,
+      source_url: url,
+      hidden: true,
+      pending_review: true,
+    }),
+  )
   return json(result.status === 'added' ? { ...result, pending_review: true } : result)
 }
 
@@ -1040,13 +1113,16 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
     return url
   }
 
-  // Server-side re-fetch: the row written is built from the
-  // product page itself, never from fields the client sent —
-  // a hand-crafted candidate could otherwise plant any title,
-  // details or photo under a real store link. The candidate's
-  // own title survives only as a claim: it must correspond to
-  // the fetched one (both normalised; equality or containment
-  // either way, since store titles gain and lose suffixes).
+  // Server-side re-fetch: the row written is built from the store's own
+  // product data, never from fields the client sent. Everything the
+  // client names is only a claim to be checked:
+  //   * the link must be a /products/<handle> page on one of STORES
+  //     (not a policy page, blog post or collection), and the fetch
+  //     must END on that same store host (no off-store redirect);
+  //   * the platform comes from the store the link is on — a Tonies
+  //     link can't be filed under another maker's shelf;
+  //   * the claimed title must correspond to the fetched one.
+  // Any failure is a 422; there is no fallback to client-sent fields.
   const link = storeUrl(c.source_url)
   if (!link) {
     throw new HttpError(
@@ -1054,9 +1130,32 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
       "That product doesn't carry a store link we can check — try the link tab instead.",
     )
   }
+  const linkHost = new URL(link).hostname.toLowerCase().replace(/\.+$/, '')
+  const store = STORES.find((st) => new URL(st.origin).hostname === linkHost)
+  const path = parseShopifyPath(link)
+  if (!store || path.kind !== 'product') {
+    throw new HttpError(422, "That link isn't a product page on one of our stores.")
+  }
   let fetched: any = null
   try {
-    fetched = await fetchProductRow(link, c.platform)
+    if (addFetchStrategy(store.id) === 'html') {
+      // Yoto carve-out (owner-approved, the one deviation from the
+      // round-2 patch): us.yotoplay.com does not serve Shopify
+      // product JSON — /products/<handle>.json 404s on every handle
+      // (see addFetchStrategy in extract.js) — so Yoto keeps the
+      // page scrape, with the guards above applied to it: /products/
+      // only (checked just above), the fetch must end on the store
+      // host (requireFinalHost), the platform comes from the STORES
+      // entry (store.platform), and titlesMatch still gates below.
+      fetched = await fetchProductRow(link, store.platform, { requireFinalHost: linkHost })
+    } else {
+      const jsonUrl = `${store.origin}/products/${encodeURIComponent(path.handle)}.json`
+      const { text, finalUrl } = await fetchTextCapped(jsonUrl)
+      if (new URL(finalUrl).hostname.toLowerCase() !== new URL(store.origin).hostname) {
+        throw new Error('left the store')
+      }
+      fetched = normalizeShopifyProduct(JSON.parse(text), store.platform)
+    }
   } catch {
     fetched = null
   }
@@ -1072,7 +1171,7 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
 
   return json(
     await upsertCatalogItem(admin, userId, {
-      platform: platformForProduct(c.platform, fetched.title),
+      platform: platformForProduct(store.platform, fetched.title),
       title: cleanText(fetched.title).slice(0, TITLE_CAP),
       details: cleanText(fetched.details ?? '').slice(0, TITLE_CAP),
       image_url: fetched.image_url || null,
@@ -1084,16 +1183,6 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
       rating_count: fetched.rating_count ?? null,
     }),
   )
-}
-
-// Title correspondence for the add-mode re-fetch: case,
-// punctuation and spacing normalised away before comparing.
-function titlesMatch(a: string, b: string): boolean {
-  const norm = (s: string) =>
-    cleanText(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
-  const x = norm(a)
-  const y = norm(b)
-  return x !== '' && y !== '' && (x === y || x.includes(y) || y.includes(x))
 }
 
 // ------------------------------------------------------------------ main

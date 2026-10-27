@@ -57,14 +57,16 @@ export default function AdminPage() {
         p_flagged_only: flaggedOnly,
       }),
       supabase.rpc('admin_flags'),
-      // Hidden catalog rows awaiting a publish decision. The
+      // Link-paste additions awaiting a publish decision (the
+      // pending_review flag, migration 0060 — NOT every hidden
+      // row: ones the owner made private stay private). The
       // catalog read policy lets admins see hidden rows; a
       // non-admin's query just comes back empty (the additions
       // RPC above is what actually gates this page).
       supabase
         .from('catalog_items')
         .select('id, platform, title, image_url, product_url, source_url, added_by')
-        .eq('hidden', true)
+        .eq('pending_review', true)
         .order('title')
         .limit(200),
     ])
@@ -204,7 +206,13 @@ export default function AdminPage() {
               return (
                 <li key={p.id}>
                   {p.image_url ? (
-                    <img className="admin-thumb" src={p.image_url} alt="" loading="lazy" />
+                    <img
+                      className="admin-thumb"
+                      src={p.image_url}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
                   ) : (
                     <span className="admin-thumb admin-thumb-empty" aria-hidden="true">🧸</span>
                   )}
@@ -217,8 +225,8 @@ export default function AdminPage() {
                         : ''}
                     </span>
                     <br />
-                    {link && (
-                      <a href={link} target="_blank" rel="noopener" className="muted">
+                    {link && /^https?:\/\//i.test(link) && (
+                      <a href={link} target="_blank" rel="noopener noreferrer" className="muted">
                         product ↗
                       </a>
                     )}
@@ -232,9 +240,8 @@ export default function AdminPage() {
                         act(
                           p.id,
                           () =>
-                            supabase.rpc('admin_set_catalog_private', {
+                            supabase.rpc('admin_publish_catalog_item', {
                               p_item_id: p.id,
-                              p_private: false,
                             }),
                           () => setMessage('Published — now in the shared catalog.'),
                         )

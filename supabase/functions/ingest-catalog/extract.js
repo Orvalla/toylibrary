@@ -851,3 +851,43 @@ export function planRowImport(rows, existingTitles, platform) {
   }
   return { toAdd, alreadyPresent, skippedFiltered: 0, blockedContent }
 }
+
+// Title correspondence for the add-mode re-fetch: case, punctuation and
+// spacing normalised away, then equal or one contained in the other
+// (store titles gain and lose suffixes). The shorter side must carry at
+// least 4 characters, so a one-letter claim can't "match" every page.
+export function titlesMatch(a, b) {
+  const norm = (s) =>
+    cleanText(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const x = norm(a)
+  const y = norm(b)
+  if (x === '' || y === '') return false
+  if (x === y) return true
+  const shorter = x.length <= y.length ? x : y
+  const longer = shorter === x ? y : x
+  return shorter.length >= 4 && longer.includes(shorter)
+}
+
+// Add-mode re-fetch strategy for a store: 'json' reads the store's
+// Shopify /products/<handle>.json; 'html' keeps the guarded page
+// scrape (fetchProductRow in index.ts). Every STORES storefront
+// serves the product JSON except Yoto — us.yotoplay.com returns 404
+// for /products/<handle>.json on every handle tried (verified
+// 2026-10-27: yoto-player-4, yoto-mini-4, yoto-player-3rd-generation;
+// its storefront is not Shopify-JSON), so Yoto alone keeps the HTML
+// path, under the same guards (see handleAdd).
+export function addFetchStrategy(storeId) {
+  return storeId === 'yoto' ? 'html' : 'json'
+}
+
+// What a caller may see of a catalog row. The function reads with the
+// service role, so RLS does not apply: another parent's pending
+// (hidden) row must not come back whole, and nobody gets the adder's
+// user id or the internal price anchor.
+export function shapeItem(row, userId) {
+  if (row.hidden && row.added_by !== userId) {
+    return { platform: row.platform, title: row.title, details: '', image_url: '' }
+  }
+  const { added_by: _a, base_price_usd: _p, base_price_checked_at: _c, ...rest } = row
+  return rest
+}
