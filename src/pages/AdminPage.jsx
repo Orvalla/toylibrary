@@ -12,6 +12,11 @@ import SupportInbox from '../components/SupportInbox'
 // the "owner only" note instead of data.
 //
 //   * the addition log: who added what catalog row, when;
+//   * pending additions: rows a parent's pasted link created,
+//     which land hidden (ingest-catalog, url mode) until the
+//     owner publishes or removes them here — the read policy
+//     (migration 0032) lets an admin see hidden rows directly,
+//     and Publish/Remove reuse the same moderation RPCs;
 //   * one-click Remove (deletes the catalog row; families' own
 //     list copies are separate rows and are untouched);
 //   * Make private: the row leaves everyone else's catalog but
@@ -36,6 +41,7 @@ function fmtDate(iso) {
 export default function AdminPage() {
   const { user } = useAuth()
   const [rows, setRows] = useState(null)
+  const [pending, setPending] = useState(null)
   const [flags, setFlags] = useState([])
   const [denied, setDenied] = useState(false)
   const [flaggedOnly, setFlaggedOnly] = useState(false)
@@ -44,13 +50,23 @@ export default function AdminPage() {
   const [donorEmail, setDonorEmail] = useState('')
 
   const load = useCallback(async () => {
-    const [additions, flagRows] = await Promise.all([
+    const [additions, flagRows, hiddenRows] = await Promise.all([
       supabase.rpc('admin_additions', {
         p_limit: 200,
         p_offset: 0,
         p_flagged_only: flaggedOnly,
       }),
       supabase.rpc('admin_flags'),
+      // Hidden catalog rows awaiting a publish decision. The
+      // catalog read policy lets admins see hidden rows; a
+      // non-admin's query just comes back empty (the additions
+      // RPC above is what actually gates this page).
+      supabase
+        .from('catalog_items')
+        .select('id, platform, title, image_url, product_url, source_url, added_by')
+        .eq('hidden', true)
+        .order('title')
+        .limit(200),
     ])
     if (additions.error) {
       setDenied(true)
@@ -58,6 +74,7 @@ export default function AdminPage() {
       return
     }
     setRows(additions.data ?? [])
+    setPending(hiddenRows.error ? [] : (hiddenRows.data ?? []))
     if (!flagRows.error) setFlags(flagRows.data ?? [])
   }, [flaggedOnly])
 
@@ -113,6 +130,12 @@ export default function AdminPage() {
   }
 
   const openFlags = flags.filter((f) => !f.resolved_at)
+  // Who added a hidden row, and when: catalog_items itself has
+  // no timestamp, so borrow both from the additions log rows
+  // already loaded above (matched by catalog_item_id).
+  const additionByItem = new Map(
+    (rows ?? []).filter((r) => r.catalog_item_id).map((r) => [r.catalog_item_id, r]),
+  )
 
   return (
     <main className="page">
@@ -165,6 +188,82 @@ export default function AdminPage() {
           </p>
         </form>
       </section>
+
+      {pending !== null && pending.length > 0 && (
+        <section className="card">
+          <h2>🕵️ Pending catalog additions</h2>
+          <p className="muted">
+            Added by link paste — hidden from everyone's catalog (except the
+            parent who added them) until you publish. Publish puts the row in
+            the shared catalog; Remove deletes it.
+          </p>
+          <ul className="admin-list">
+            {pending.map((p) => {
+              const addition = additionByItem.get(p.id)
+              const link = p.product_url || p.source_url
+              return (
+                <li key={p.id}>
+                  {p.image_url ? (
+                    <img className="admin-thumb" src={p.image_url} alt="" loading="lazy" />
+                  ) : (
+                    <span className="admin-thumb admin-thumb-empty" aria-hidden="true">🧸</span>
+                  )}
+                  <div className="admin-main">
+                    <strong>{p.title}</strong>{' '}
+                    <span className="muted">
+                      · {platformLabel(p.platform)}
+                      {addition
+                        ? ` · added by ${addition.user_name || 'a parent'} · ${fmtDate(addition.created_at)}`
+                        : ''}
+                    </span>
+                    <br />
+                    {link && (
+                      <a href={link} target="_blank" rel="noopener" className="muted">
+                        product ↗
+                      </a>
+                    )}
+                  </div>
+                  <div className="admin-actions">
+                    <button
+                      type="button"
+                      className="btn btn-small"
+                      disabled={busy === p.id}
+                      onClick={() =>
+                        act(
+                          p.id,
+                          () =>
+                            supabase.rpc('admin_set_catalog_private', {
+                              p_item_id: p.id,
+                              p_private: false,
+                            }),
+                          () => setMessage('Published — now in the shared catalog.'),
+                        )
+                      }
+                    >
+                      Publish
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-small btn-danger"
+                      disabled={busy === p.id}
+                      onClick={() => {
+                        if (!window.confirm(`Remove "${p.title}" from the catalog for everyone?`)) return
+                        act(
+                          p.id,
+                          () => supabase.rpc('admin_remove_catalog_item', { p_item_id: p.id }),
+                          () => setMessage('Removed from the catalog.'),
+                        )
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       {openFlags.length > 0 && (
         <section className="card">

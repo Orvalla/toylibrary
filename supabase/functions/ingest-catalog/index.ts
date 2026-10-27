@@ -6,7 +6,14 @@
 //   { mode: 'search', query }     — ask the known Shopify stores for
 //                                   matching products; returns
 //                                   candidates, inserts nothing.
-//   { mode: 'add', candidate }    — add one search candidate.
+//   { mode: 'add', candidate }    — add one search candidate. The
+//                                   candidate is a claim, not data:
+//                                   the server re-fetches its store
+//                                   link and writes what the page
+//                                   itself says (title, details,
+//                                   photo), after checking the
+//                                   fetched title corresponds to
+//                                   the claimed one.
 //   { mode: 'url', url }          — fetch a pasted link server-side
 //                                   and add what it points at: one
 //                                   product page → that product; a
@@ -19,6 +26,10 @@
 //                                   links) → everything listed on
 //                                   it. A listing is never added as
 //                                   a single "product" itself.
+//                                   Url-mode rows land hidden until
+//                                   an admin publishes them, capped
+//                                   at URL_DAILY_CAP creations per
+//                                   parent per UTC day.
 //
 // Every mode requires a signed-in user: the caller's JWT is validated
 // first, and writes happen with the service role (catalog_items has
@@ -70,6 +81,16 @@ const TITLE_CAP = 300
 const COLLECTION_MAX_PAGES = 20
 const COLLECTION_PAGE_SIZE = 250
 const COLLECTION_PAGE_BYTES = 8 * 1024 * 1024
+// Link-paste (mode 'url') additions land hidden until an admin
+// publishes them from /admin (see handleUrl), and each parent
+// gets at most this many url-mode creations per UTC day — a
+// pasted collection counts per row it creates. Counting rides
+// on catalog_additions (every genuine insert logs one row per
+// item): catalog_items itself carries no created_at column,
+// and the log cannot tell url-mode rows from search-adds, so
+// the count is ALL of the user's additions today. Add-mode is
+// not itself capped — but its rows do eat into the url budget.
+const URL_DAILY_CAP = 25
 
 // Platform keys the database CHECK allows (0007). Add-mode candidates
 // must name one of these.
@@ -243,6 +264,35 @@ function ratingPair(
 // Insert a catalog row unless (platform, title) already exists, and
 // report which happened. Only a genuine insert is logged — the
 // additions log is a record of who grew the catalog, not of attempts.
+// How many catalog rows this user has created today (UTC),
+// counted on the additions log — see URL_DAILY_CAP above.
+async function additionsToday(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<number> {
+  const start = new Date()
+  start.setUTCHours(0, 0, 0, 0)
+  const { count, error } = await admin
+    .from('catalog_additions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', start.toISOString())
+  if (error) throw new HttpError(500, 'Something went wrong saving that — try again.')
+  return count ?? 0
+}
+
+async function urlAllowanceLeft(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<number> {
+  return Math.max(0, URL_DAILY_CAP - (await additionsToday(admin, userId)))
+}
+
+const URL_CAP_MESSAGE =
+  "You've reached today's limit of " +
+  URL_DAILY_CAP +
+  ' products added by link — it resets at midnight (UTC). Try again tomorrow.'
+
 async function upsertCatalogItem(
   admin: ReturnType<typeof createClient>,
   userId: string,
@@ -253,6 +303,7 @@ async function upsertCatalogItem(
     image_url: string | null
     source_url: string | null
     is_bundle?: boolean
+    hidden?: boolean
     age_min_years?: number | null
     age_max_years?: number | null
     rating?: number | null
@@ -288,6 +339,12 @@ async function upsertCatalogItem(
         // Contents stay unmapped here; the completeness sweep
         // picks the row up from the gaps view (migration 0054).
         is_bundle: row.is_bundle === true,
+        // Url-mode creations land hidden until an admin
+        // publishes them (migration 0031's hidden flag keeps
+        // them out of everyone else's catalog reads; the adder
+        // still sees their own). Search-adds pass no flag and
+        // stay visible immediately.
+        hidden: row.hidden === true,
         // catalog_items.image_url is NOT NULL; '' is its "no photo"
         // value and the tiles fall back to platform art for it.
         image_url: row.image_url ?? '',
@@ -384,6 +441,10 @@ async function insertCatalogRows(
       // details evidence, and the insert must not drop it.
       // Contents are the sweep's job, never the request path's.
       is_bundle: row.is_bundle === true,
+      // Bulk imports only ever run for mode 'url' (collection
+      // and listing pastes), so every row lands hidden until an
+      // admin publishes it — same rule as the single-add path.
+      hidden: true,
       image_url: row.image_url ?? '',
       age_min_years: row.age_min_years ?? null,
       age_max_years: row.age_max_years ?? null,
@@ -467,6 +528,17 @@ async function insertPlannedCollection(
       "Those products aren't kids' products, so they can't be added to the catalog.",
     )
   }
+  // Daily url-mode cap (see URL_DAILY_CAP): trim the plan to
+  // the allowance left. The count is read fresh here so a
+  // multi-platform collection, whose groups insert one after
+  // another, stays honest; a plan with no allowance left is a
+  // plain 429 rather than an all-zero tally.
+  const allowance = await urlAllowanceLeft(admin, userId)
+  if (allowance === 0 && plan.toAdd.length > 0) {
+    throw new HttpError(429, URL_CAP_MESSAGE)
+  }
+  const skippedCap = Math.max(0, plan.toAdd.length - allowance)
+  if (skippedCap > 0) plan.toAdd = plan.toAdd.slice(0, allowance)
   await enrichRatings(plan.toAdd)
   const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
   return {
@@ -474,9 +546,12 @@ async function insertPlannedCollection(
     platform,
     total_found: products.length,
     added,
-    already_present: products.length - plan.skippedFiltered - plan.blockedContent - added,
+    already_present:
+      products.length - plan.skippedFiltered - plan.blockedContent - added - skippedCap,
     skipped_filtered: plan.skippedFiltered,
+    skipped_cap: skippedCap,
     blocked_content: plan.blockedContent,
+    pending_review: added > 0,
   }
 }
 
@@ -507,15 +582,24 @@ async function insertPlannedRows(
       "Those products aren't kids' products, so they can't be added to the catalog.",
     )
   }
+  // Same daily url-mode cap trim as insertPlannedCollection.
+  const allowance = await urlAllowanceLeft(admin, userId)
+  if (allowance === 0 && plan.toAdd.length > 0) {
+    throw new HttpError(429, URL_CAP_MESSAGE)
+  }
+  const skippedCap = Math.max(0, plan.toAdd.length - allowance)
+  if (skippedCap > 0) plan.toAdd = plan.toAdd.slice(0, allowance)
   const added = await insertCatalogRows(admin, userId, plan.toAdd, platform, sourceUrl)
   return {
     status: 'collection',
     platform,
     total_found: totalFound,
     added,
-    already_present: totalFound - skipped - plan.blockedContent - added,
+    already_present: totalFound - skipped - plan.blockedContent - added - skippedCap,
     skipped_filtered: skipped,
+    skipped_cap: skippedCap,
     blocked_content: plan.blockedContent,
+    pending_review: added > 0,
   }
 }
 
@@ -593,8 +677,11 @@ async function importCollection(
         (merged.already_present as number) + (result.already_present as number)
       merged.skipped_filtered =
         (merged.skipped_filtered as number) + (result.skipped_filtered as number)
+      merged.skipped_cap =
+        ((merged.skipped_cap as number) ?? 0) + ((result.skipped_cap as number) ?? 0)
       merged.blocked_content =
         ((merged.blocked_content as number) ?? 0) + ((result.blocked_content as number) ?? 0)
+      merged.pending_review = Boolean(merged.pending_review) || Boolean(result.pending_review)
     }
     if (groupProducts.length > biggest) {
       biggest = groupProducts.length
@@ -735,6 +822,13 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
       "That store isn't one we can add from — Toy Library only stocks kids' products.",
     )
   }
+  // Daily url-mode cap (see URL_DAILY_CAP): past it, a link
+  // paste creates nothing. Collections re-check their exact
+  // remaining allowance at insert time; this stops single
+  // adds — and wasted collection fetches — up front.
+  if ((await additionsToday(admin, userId)) >= URL_DAILY_CAP) {
+    throw new HttpError(429, URL_CAP_MESSAGE)
+  }
   const platform = platformForUrl(url)
   const parsed = new URL(url)
   const path = parseShopifyPath(url)
@@ -781,12 +875,14 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
               // Keep the product; skip the rating.
             }
           }
+          const result = await upsertCatalogItem(admin, userId, {
+            ...row,
+            title: row.title.slice(0, TITLE_CAP),
+            source_url: url,
+            hidden: true,
+          })
           return json(
-            await upsertCatalogItem(admin, userId, {
-              ...row,
-              title: row.title.slice(0, TITLE_CAP),
-              source_url: url,
-            }),
+            result.status === 'added' ? { ...result, pending_review: true } : result,
           )
         }
       } catch (err) {
@@ -851,17 +947,17 @@ async function handleUrl(admin: ReturnType<typeof createClient>, userId: string,
     )
   }
   const agg = extractAggregateRating(html)
-  return json(
-    await upsertCatalogItem(admin, userId, {
-      platform: platformForProduct(platform, extracted.title),
-      title: extracted.title.slice(0, TITLE_CAP),
-      details: extracted.details ?? '',
-      image_url: extracted.image_url,
-      rating: extracted.rating ?? agg?.rating ?? null,
-      rating_count: extracted.rating_count ?? agg?.rating_count ?? null,
-      source_url: url,
-    }),
-  )
+  const result = await upsertCatalogItem(admin, userId, {
+    platform: platformForProduct(platform, extracted.title),
+    title: extracted.title.slice(0, TITLE_CAP),
+    details: extracted.details ?? '',
+    image_url: extracted.image_url,
+    rating: extracted.rating ?? agg?.rating ?? null,
+    rating_count: extracted.rating_count ?? agg?.rating_count ?? null,
+    source_url: url,
+    hidden: true,
+  })
+  return json(result.status === 'added' ? { ...result, pending_review: true } : result)
 }
 
 // --------------------------------------------------------- mode: search
@@ -944,15 +1040,60 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
     return url
   }
 
+  // Server-side re-fetch: the row written is built from the
+  // product page itself, never from fields the client sent —
+  // a hand-crafted candidate could otherwise plant any title,
+  // details or photo under a real store link. The candidate's
+  // own title survives only as a claim: it must correspond to
+  // the fetched one (both normalised; equality or containment
+  // either way, since store titles gain and lose suffixes).
+  const link = storeUrl(c.source_url)
+  if (!link) {
+    throw new HttpError(
+      422,
+      "That product doesn't carry a store link we can check — try the link tab instead.",
+    )
+  }
+  let fetched: any = null
+  try {
+    fetched = await fetchProductRow(link, c.platform)
+  } catch {
+    fetched = null
+  }
+  if (!fetched?.title) {
+    throw new HttpError(
+      422,
+      "We couldn't read that product's page to check it — try again in a moment.",
+    )
+  }
+  if (!titlesMatch(title, fetched.title)) {
+    throw new HttpError(422, "That product doesn't match the page at that link.")
+  }
+
   return json(
     await upsertCatalogItem(admin, userId, {
-      platform: platformForProduct(c.platform, title),
-      title,
-      details: cleanText(typeof c.details === 'string' ? c.details : '').slice(0, TITLE_CAP),
-      image_url: optionalUrl(c.image_url),
-      source_url: storeUrl(c.source_url),
+      platform: platformForProduct(c.platform, fetched.title),
+      title: cleanText(fetched.title).slice(0, TITLE_CAP),
+      details: cleanText(fetched.details ?? '').slice(0, TITLE_CAP),
+      image_url: fetched.image_url || null,
+      source_url: link,
+      is_bundle: fetched.is_bundle === true,
+      age_min_years: fetched.age_min_years ?? null,
+      age_max_years: fetched.age_max_years ?? null,
+      rating: fetched.rating ?? null,
+      rating_count: fetched.rating_count ?? null,
     }),
   )
+}
+
+// Title correspondence for the add-mode re-fetch: case,
+// punctuation and spacing normalised away before comparing.
+function titlesMatch(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    cleanText(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const x = norm(a)
+  const y = norm(b)
+  return x !== '' && y !== '' && (x === y || x.includes(y) || y.includes(x))
 }
 
 // ------------------------------------------------------------------ main
