@@ -1,4 +1,7 @@
-// Catalog languages (migrations 0039 + 0042). Every catalog
+// Catalog languages (migrations 0039 + 0042; 'nl'/'ru' added
+// by 0061 after the Lunii re-derivation found real Dutch and
+// Russian albums the original vocabulary could not express).
+// Every catalog
 // row carries a language; 'multi' marks bilingual editions,
 // which are usable in any of their languages. Parents pick
 // a SET of languages in Settings (a bilingual family reads
@@ -13,6 +16,8 @@ export const CATALOG_LANGUAGES = [
   { key: 'fr', label: 'French', flag: '🇫🇷' },
   { key: 'de', label: 'German', flag: '🇩🇪' },
   { key: 'it', label: 'Italian', flag: '🇮🇹' },
+  { key: 'nl', label: 'Dutch', flag: '🇳🇱' },
+  { key: 'ru', label: 'Russian', flag: '🇷🇺' },
   { key: 'multi', label: 'Bilingual', flag: '🌐' },
 ]
 
