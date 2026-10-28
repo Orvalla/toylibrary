@@ -21,6 +21,7 @@ import {
   isBlockedHost,
   titlesMatch,
   shapeItem,
+  chargeOne,
   addFetchStrategy,
   isBlockedTitle,
 } from '../../supabase/functions/ingest-catalog/extract.js'
@@ -942,5 +943,73 @@ describe('shapeItem (what the service-role function may hand back)', () => {
     expect(out.id).toBe('r1')
     expect(out.image_url).toBe('https://x/y.png')
     expect(out.added_by).toBeUndefined()
+  })
+})
+
+describe('chargeOne (add-mode daily budget, owner cap 100)', () => {
+  // In-memory stand-in for take_add_quota / refund_add_quota (cap 100).
+  function ledger(cap = 100) {
+    const l = { used: 0 }
+    l.take = async () => (l.used < cap ? (l.used++, 1) : 0)
+    l.refund = async () => {
+      l.used = Math.max(0, l.used - 1)
+    }
+    return l
+  }
+  const capError = () => new Error('capped')
+
+  it('lets 100 genuine creations through and rejects the 101st without creating it', async () => {
+    const l = ledger()
+    let created = 0
+    const create = async () => ({ status: 'added', item: { n: ++created } })
+    for (let i = 0; i < 100; i++) await chargeOne({ take: l.take, refund: l.refund, create, capError })
+    expect(created).toBe(100)
+    let err = null
+    try {
+      await chargeOne({ take: l.take, refund: l.refund, create, capError })
+    } catch (e) {
+      err = e
+    }
+    expect(err.message).toBe('capped')
+    expect(created).toBe(100) // create never ran for the 101st
+  })
+
+  it('an "exists" answer gives its unit back', async () => {
+    const l = ledger()
+    for (let i = 0; i < 250; i++) {
+      await chargeOne({ take: l.take, refund: l.refund, create: async () => ({ status: 'exists' }), capError })
+    }
+    expect(l.used).toBe(0)
+  })
+
+  it('a failed insert (throw) gives its unit back and rethrows', async () => {
+    const l = ledger()
+    let err = null
+    try {
+      await chargeOne({
+        take: l.take,
+        refund: l.refund,
+        create: async () => {
+          throw new Error('insert failed')
+        },
+        capError,
+      })
+    } catch (e) {
+      err = e
+    }
+    expect(err.message).toBe('insert failed')
+    expect(l.used).toBe(0)
+  })
+
+  it('exists/failed requests do not eat into a nearly-spent budget', async () => {
+    const l = ledger()
+    const add = async () =>
+      chargeOne({ take: l.take, refund: l.refund, create: async () => ({ status: 'added' }), capError })
+    for (let i = 0; i < 99; i++) await add()
+    for (let i = 0; i < 50; i++) {
+      await chargeOne({ take: l.take, refund: l.refund, create: async () => ({ status: 'exists' }), capError })
+    }
+    await add() // the 100th still goes through
+    expect(l.used).toBe(100)
   })
 })

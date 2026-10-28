@@ -891,3 +891,21 @@ export function shapeItem(row, userId) {
   const { added_by: _a, base_price_usd: _p, base_price_checked_at: _c, ...rest } = row
   return rest
 }
+
+// Quota-charged creation, shared shape for the add-mode budget: take one
+// unit (a zero grant means the day's budget is spent and nothing is
+// created), run `create`, and hand the unit back unless it reported a
+// genuine insert — so an "exists" answer, a blocked title or a thrown
+// error never costs the user anything.
+export async function chargeOne({ take, refund, create, capError }) {
+  if ((await take()) < 1) throw capError()
+  let result
+  try {
+    result = await create()
+  } catch (err) {
+    await refund()
+    throw err
+  }
+  if (result.status !== 'added') await refund()
+  return result
+}

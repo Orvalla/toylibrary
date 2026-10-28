@@ -14,6 +14,8 @@
 //                                   photo), after checking the
 //                                   fetched title corresponds to
 //                                   the claimed one.
+//                                   Capped at ADD_DAILY_CAP genuine
+//                                   creations per user per UTC day.
 //   { mode: 'url', url }          — fetch a pasted link server-side
 //                                   and add what it points at: one
 //                                   product page → that product; a
@@ -64,6 +66,7 @@ import {
   platformForProduct,
   faviconUrlFor,
   platformForUrl,
+  chargeOne,
   shapeItem,
   titlesMatch,
   addFetchStrategy,
@@ -95,6 +98,12 @@ const COLLECTION_PAGE_BYTES = 8 * 1024 * 1024
 // search candidates, re-fetched from the store itself) does not
 // draw on this budget.
 const URL_DAILY_CAP = 25
+// Add-mode (store-search adds) has its own budget, separate from the
+// url-mode one above: 100 genuine creations per user per UTC day,
+// enforced in the database (migration 0062: add_quota). Only a row
+// that is actually created uses a unit — an "exists" answer, a blocked
+// title or a failed insert gives it back.
+const ADD_DAILY_CAP = 100
 
 // Platform keys the database CHECK allows (0007). Add-mode candidates
 // must name one of these.
@@ -332,6 +341,68 @@ async function chargeUrlAddition(
   if (result.status !== 'added') await refundUrlQuota(admin, userId, 1)
   return result
 }
+
+// Daily add-mode quota (migration 0062) — same atomic take/refund
+// pattern as the url-mode quota above, separate counter.
+async function addQuotaLeft(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<number> {
+  const { data, error } = await admin.rpc('add_quota_left', {
+    p_user: userId,
+    p_cap: ADD_DAILY_CAP,
+  })
+  if (error || typeof data !== 'number') {
+    throw new HttpError(500, 'Something went wrong saving that — try again.')
+  }
+  return data
+}
+
+async function takeAddQuota(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<number> {
+  const { data, error } = await admin.rpc('take_add_quota', {
+    p_user: userId,
+    p_want: 1,
+    p_cap: ADD_DAILY_CAP,
+  })
+  if (error || typeof data !== 'number') {
+    throw new HttpError(500, 'Something went wrong saving that — try again.')
+  }
+  return data
+}
+
+async function refundAddQuota(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<void> {
+  // Best effort: a failed refund only costs one unit of today's allowance.
+  await admin.rpc('refund_add_quota', { p_user: userId, p_n: 1 }).then(
+    () => undefined,
+    () => undefined,
+  )
+}
+
+// One add-mode creation: take 1, create, give it back unless a row was
+// really created (see chargeOne in extract.js, which has the tests).
+async function chargeAddAddition(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  create: () => Promise<{ status: string; [k: string]: unknown }>,
+) {
+  return chargeOne({
+    take: () => takeAddQuota(admin, userId),
+    refund: () => refundAddQuota(admin, userId),
+    create,
+    capError: () => new HttpError(429, ADD_CAP_MESSAGE),
+  })
+}
+
+const ADD_CAP_MESSAGE =
+  "You've reached today's limit of " +
+  ADD_DAILY_CAP +
+  ' products added from the stores — it resets at midnight (UTC). Try again tomorrow.'
 
 const URL_CAP_MESSAGE =
   "You've reached today's limit of " +
@@ -1089,6 +1160,12 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
   }
   const title = cleanText(typeof c.title === 'string' ? c.title : '').slice(0, TITLE_CAP)
   if (!title) throw new HttpError(400, 'That product needs a title.')
+  // Daily add-mode cap (see ADD_DAILY_CAP): once spent, stop before the
+  // outbound store fetch. The unit itself is taken only around the
+  // insert, so rejected and "exists" requests never use one.
+  if ((await addQuotaLeft(admin, userId)) <= 0) {
+    throw new HttpError(429, ADD_CAP_MESSAGE)
+  }
 
   const optionalUrl = (value: unknown): string | null => {
     if (value === undefined || value === null || value === '') return null
@@ -1170,18 +1247,20 @@ async function handleAdd(admin: ReturnType<typeof createClient>, userId: string,
   }
 
   return json(
-    await upsertCatalogItem(admin, userId, {
-      platform: platformForProduct(store.platform, fetched.title),
-      title: cleanText(fetched.title).slice(0, TITLE_CAP),
-      details: cleanText(fetched.details ?? '').slice(0, TITLE_CAP),
-      image_url: fetched.image_url || null,
-      source_url: link,
-      is_bundle: fetched.is_bundle === true,
-      age_min_years: fetched.age_min_years ?? null,
-      age_max_years: fetched.age_max_years ?? null,
-      rating: fetched.rating ?? null,
-      rating_count: fetched.rating_count ?? null,
-    }),
+    await chargeAddAddition(admin, userId, () =>
+      upsertCatalogItem(admin, userId, {
+        platform: platformForProduct(store.platform, fetched.title),
+        title: cleanText(fetched.title).slice(0, TITLE_CAP),
+        details: cleanText(fetched.details ?? '').slice(0, TITLE_CAP),
+        image_url: fetched.image_url || null,
+        source_url: link,
+        is_bundle: fetched.is_bundle === true,
+        age_min_years: fetched.age_min_years ?? null,
+        age_max_years: fetched.age_max_years ?? null,
+        rating: fetched.rating ?? null,
+        rating_count: fetched.rating_count ?? null,
+      }),
+    ),
   )
 }
 

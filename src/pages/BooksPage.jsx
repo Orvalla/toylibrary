@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import ItemTile from '../components/ItemTile'
 import AmazonLink from '../components/AmazonLink'
 import { BOOK_STAGES, bookInStage } from '../lib/books'
+import { CATALOG_COLUMNS } from '../lib/catalogFetch'
 
 // The Book Library (owner push 2026-10-22): books are a
 // headline collection now — picture books through Young Adult —
@@ -38,7 +39,7 @@ export default function BooksPage() {
     })()
     supabase
       .from('catalog_items')
-      .select('*')
+      .select(CATALOG_COLUMNS)
       .eq('platform', 'books')
       .not('rating', 'is', null)
       .gte('rating_count', 25)

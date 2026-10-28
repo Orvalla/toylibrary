@@ -7,6 +7,7 @@ import { platformLabel } from '../lib/platforms'
 import { platformNoun } from '../lib/bundles'
 import { shareUrlFor } from '../lib/hostSlug'
 import Ethos from '../components/Ethos'
+import { CATALOG_COLUMNS } from '../lib/catalogFetch'
 
 const STEP_TITLES = ['About your child', 'Gift occasions', 'Their devices', 'Interests', 'Fill the shelves', 'You’re all set']
 
@@ -46,7 +47,7 @@ export default function WelcomePage() {
     Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('children').select('*').eq('owner_id', user.id).order('sort_order').order('name'),
-      supabase.from('catalog_items').select('*').eq('item_type', 'device').order('title'),
+      supabase.from('catalog_items').select(CATALOG_COLUMNS).eq('item_type', 'device').order('title'),
       supabase.from('items').select('*').eq('owner_id', user.id),
       supabase.from('occasions').select('*'),
     ]).then(([{ data: prof }, { data: childRows }, { data: deviceRows }, { data: itemRows }, { data: occRows }]) => {
