@@ -79,6 +79,11 @@ export const SOURCES = [
     includeTypes: ['single-card', 'bundle', 'soft-bundle'],
     excludeTitle: /\(Digital\)\s*$/i,
     excludeTags: ['flag:Digital Card'],
+    // Yoto tags every product with the maker's own language
+    // classification — derive the catalog language from it so new
+    // French/Spanish cards stop landing as 'en' (the defect the
+    // 2026-10-28 language pass corrected in 244 stored rows).
+    languageTags: true,
     detailsByType: {
       'single-card': 'Yoto Card',
       bundle: 'Yoto Card pack',

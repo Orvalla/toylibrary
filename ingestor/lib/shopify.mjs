@@ -2,6 +2,43 @@ import { getJson } from './http.mjs'
 import { cleanTitle, stripPrefix, stripSuffix } from './normalize.mjs'
 import { isBundleRow } from './sources.mjs'
 
+// Language derivation from Shopify `language:` tags. Yoto's feed
+// tags every product with its maker's own classification
+// (language:French, language:Spanish, language:en, …) — the
+// evidence the 2026-10-28 language pass used to correct 244 stored
+// rows. Names map onto the catalog's language codes (migrations
+// 0039/0042/0061); a product carrying two distinct real languages
+// is 'multi'; a tag the catalog has no code for (Various, Chinese,
+// Romanian) derives nothing, so the row lands with the column
+// default rather than a guessed language. Only sources that opt
+// in via `languageTags` get a derived language — the other stores'
+// tag vocabularies were never audited for this.
+const LANGUAGE_TAG_CODES = {
+  english: 'en', en: 'en', 'en-gb': 'en', 'en-us': 'en',
+  spanish: 'es', es: 'es',
+  french: 'fr', fr: 'fr',
+  german: 'de', de: 'de',
+  italian: 'it', it: 'it',
+  dutch: 'nl', nl: 'nl',
+  russian: 'ru', ru: 'ru',
+}
+
+export function languageFromTags(tags) {
+  const codes = new Set()
+  for (const tag of tags ?? []) {
+    const m = /^language:\s*(.+)$/i.exec(String(tag))
+    if (!m) continue
+    // Compound values exist in the feed ('English & Spanish').
+    for (const part of m[1].split(/\s*(?:&|,|\/)\s*/)) {
+      const code = LANGUAGE_TAG_CODES[part.trim().toLowerCase()]
+      if (code) codes.add(code)
+    }
+  }
+  if (codes.size === 0) return undefined
+  if (codes.size === 1) return [...codes][0]
+  return 'multi'
+}
+
 // Shopify adapter: walks the public /products.json feed (250/page)
 // and maps the products a source config asks for into catalog rows:
 //   { platform, title, details, image_url, source_url }
@@ -23,6 +60,10 @@ import { isBundleRow } from './sources.mjs'
 //                   (lib/sources.mjs isBundleRow): the mapped row
 //                   carries is_bundle so inserts stock packs as
 //                   bundles, never as plain singles.
+//   languageTags    derive the row's catalog language from the
+//                   feed's `language:` tags (languageFromTags
+//                   above); the mapped row carries `language`
+//                   only when a code was actually derived.
 
 export function mapShopifyProduct(source, p) {
   if (source.includeTypes && !source.includeTypes.includes(p.product_type ?? '')) return null
@@ -46,6 +87,8 @@ export function mapShopifyProduct(source, p) {
     }
   }
 
+  const language = source.languageTags ? languageFromTags(p.tags) : undefined
+
   return {
     platform: source.platform,
     title,
@@ -53,6 +96,7 @@ export function mapShopifyProduct(source, p) {
     image_url: p.images?.[0]?.src ?? '',
     source_url: `${source.base}/products/${p.handle}`,
     is_bundle: isBundleRow(source, { product_type: p.product_type ?? '', title, details }),
+    ...(language ? { language } : {}),
   }
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cleanTitle, matchKey, stripPrefix, stripSuffix } from './normalize.mjs'
-import { mapShopifyProduct } from './shopify.mjs'
+import { languageFromTags, mapShopifyProduct } from './shopify.mjs'
 import { extractOg, extractProductUrls, mapLeapfrogPage, parsePageData, parsePageDataBlock, mapPageDataProduct } from './leapfrog.mjs'
 import { decodeNumericEntities, extractSitemapUrls, mapLuniiPage } from './lunii.mjs'
 import { dedupeCatalog, catalogToSql } from './output.mjs'
@@ -162,6 +162,37 @@ describe('shopify mapping (fixtures modelled on the live us.yotoplay.com feed)',
     drop('accessories', 'Yoto Mini Travel Case 4th Gen')
     drop('Gift Card', 'Gift Certificate')
     drop('Club', 'Yoto Club Monthly')
+  })
+
+  it('derives the catalog language from the maker language tag', () => {
+    const lang = (tags) =>
+      mapShopifyProduct(yoto, { ...base, product_type: 'single-card', title: 'Une carte', tags })?.language
+    expect(lang(['media:physical', 'language:French'])).toBe('fr')
+    expect(lang(['media:physical', 'language:Spanish'])).toBe('es')
+    expect(lang(['media:physical', 'language:English'])).toBe('en')
+    expect(lang(['media:physical', 'language:en'])).toBe('en')
+    expect(lang(['media:physical', 'language:en-gb'])).toBe('en')
+    // Two distinct real languages — separate tags or one compound
+    // tag — are a bilingual product, not either single language.
+    expect(lang(['language:English', 'language:Spanish'])).toBe('multi')
+    expect(lang(['language:English & Spanish'])).toBe('multi')
+    // No code in the catalog vocabulary, or no tag at all: derive
+    // nothing and let the column default stand.
+    expect(lang(['language:Various'])).toBeUndefined()
+    expect(lang(['language:Chinese'])).toBeUndefined()
+    expect(lang(['media:physical'])).toBeUndefined()
+    expect(languageFromTags(undefined)).toBeUndefined()
+    expect(languageFromTags([])).toBeUndefined()
+  })
+
+  it('does not derive a language for sources that did not opt in', () => {
+    const row = mapShopifyProduct(tonies, {
+      ...base,
+      product_type: 'Tonie',
+      title: 'Disney Sofia the First: Royal Magic Tonie',
+      tags: ['language:French'],
+    })
+    expect(row).not.toHaveProperty('language')
   })
 
   it('drops digital-only cards, by flag tag or by (Digital) title suffix', () => {

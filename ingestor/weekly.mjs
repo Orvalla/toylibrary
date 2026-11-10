@@ -122,6 +122,12 @@ async function main() {
       // a net-new pack must land as a bundle, not a plain single
       // (the completeness recon's standing leak — RECON B.2).
       is_bundle: row.is_bundle === true,
+      // The maker's language tag, when the adapter derived one
+      // (Yoto — lib/shopify.mjs languageFromTags). This insert is
+      // the only place it can land: the scan is delta-only and
+      // never updates existing rows, so a derived language can
+      // never clobber a corrected one.
+      ...(row.language ? { language: row.language } : {}),
       sort_order: sort,
       ...ageForRow(row),
     })
