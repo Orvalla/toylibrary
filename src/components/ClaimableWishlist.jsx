@@ -12,7 +12,7 @@ import { useClaim } from './useClaim'
 // the gift cart, where the same items can be claimed inline).
 
 function WishlistTile({ slug, item, onChanged, inCart, onToggleCart }) {
-  const { mine, claiming, setClaiming, name, setName, busy, note, claim, unclaim } =
+  const { mine, lapsed, claiming, setClaiming, name, setName, busy, note, claim, unclaim } =
     useClaim(slug, item, onChanged)
 
   return (
@@ -24,13 +24,13 @@ function WishlistTile({ slug, item, onChanged, inCart, onToggleCart }) {
         ) : null
       }
     >
-      <div className="tile-actions">
+      <div className="tile-actions gift-actions">
         <BundleNote info={item.bundle} name={item.child_name} platform={item.platform} />
         {item.claimed ? (
           mine ? (
             <>
               <span className="claimed-badge mine">🎁 You claimed this</span>
-              <button className="linklike" onClick={unclaim} disabled={busy}>
+              <button className="linklike tap" onClick={unclaim} disabled={busy}>
                 Undo claim
               </button>
             </>
@@ -47,17 +47,25 @@ function WishlistTile({ slug, item, onChanged, inCart, onToggleCart }) {
               onChange={(e) => setName(e.target.value)}
               maxLength={60}
             />
-            <button className="btn btn-small" onClick={claim} disabled={busy}>
+            <button className="btn btn-small tap" onClick={claim} disabled={busy}>
               {busy ? 'Claiming…' : 'Confirm claim'}
             </button>
-            <button className="linklike" onClick={() => setClaiming(false)}>
+            <button className="linklike tap" onClick={() => setClaiming(false)}>
               Cancel
             </button>
           </div>
         ) : (
-          <button className="linklike" onClick={() => setClaiming(true)}>
-            🎁 I'll get this — claim it
-          </button>
+          <>
+            {lapsed && (
+              <div className="notes lapsed-note">
+                Your earlier claim on this has ended, so it's open again. Still getting it? Claim
+                it again.
+              </div>
+            )}
+            <button className="linklike tap" onClick={() => setClaiming(true)}>
+              🎁 I'll get this — claim it
+            </button>
+          </>
         )}
         {note && <div className="notes">{note}</div>}
         {(!item.claimed || mine) && onToggleCart && (

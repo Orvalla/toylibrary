@@ -346,6 +346,13 @@ a { color: var(--accent-dark); }
   padding: 10px 14px; font-weight: 800;
 }
 .occasion-line { color: #8a6400; font-weight: 700; margin: 2px 0 8px; }
+/* Gift page (WS2): each child's section must read as a new section on
+   a phone, not as one more platform heading at the same size. */
+.child-section-title {
+  font-size: 1.45em; margin: 28px 0 4px; padding-top: 14px;
+  border-top: 3px dashed var(--line);
+}
+.child-section-title ~ div .platform-group h3 { font-size: 1.05em; }
 .occasion-kid { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 10px; }
 .occasion-kid h4 { margin: 6px 0; }
 
@@ -422,6 +429,12 @@ a { color: var(--accent-dark); }
 .used-links { display: block; font-size: 12.5px; color: var(--ink-soft, #6b6890); margin-top: 2px; }
 .used-links a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .tile .claimed-badge { white-space: normal; }
+/* Gift page claim path (WS2): claim / confirm / cancel / undo and the
+   buy link were bare text with no padding, a ~20px tap target on a
+   phone. 44px is the platform guideline. */
+.tap { min-height: 44px; display: inline-flex; align-items: center; }
+.gift-actions .amazon-link { min-height: 44px; display: inline-flex; align-items: center; }
+.lapsed-note { color: var(--ink-soft); }
 .owned-check {
   position: absolute; top: 8px; right: 8px; width: 30px; height: 30px;
   border-radius: 50%; background: var(--good); color: #fff; font-weight: 900;

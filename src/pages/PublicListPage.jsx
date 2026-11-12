@@ -11,6 +11,10 @@ import { groupByChild } from '../lib/children'
 import { formatISODate, formatOccasionLine, occasionTitle, occasionWhen } from '../lib/occasions'
 import { defaultChildId, subscribePayload, subscribeResultMessage } from '../lib/giftSubscribe'
 import { findOwned, ownedAdvice } from '../lib/ownedMatch'
+// Same wording as the link-preview card og-share serves crawlers, so
+// the tab title (which a phone's share sheet sends with the link)
+// matches the card a family member sees in the chat.
+import { joinNames, possessive, shareTitle } from '../../supabase/functions/og-share/preview.js'
 
 // The page gift-givers see. No login: the data comes from the
 // get_shared_list() RPC, which only exposes the two lists for this slug.
@@ -127,6 +131,19 @@ export default function PublicListPage({ slugOverride } = {}) {
 
   useEffect(load, [load])
 
+  // The browser tab names the family, not just "Toy Library".
+  useEffect(() => {
+    if (!data) return
+    const before = document.title
+    document.title = shareTitle({
+      displayName: data.display_name,
+      childNames: (data.children ?? []).map((k) => k.name),
+    })
+    return () => {
+      document.title = before
+    }
+  }, [data])
+
   // null = nothing typed (or too short to judge); [] = no match.
   const owned = useMemo(() => (data ? findOwned(data.have, query) : null), [data, query])
 
@@ -155,11 +172,14 @@ export default function PublicListPage({ slugOverride } = {}) {
       </main>
     )
 
-  const name = data.child_name || 'this child'
-
   // Per-child grouping (RPC v5). Older responses without a children
   // array fall back to the original flat lists.
   const kids = data.children ?? []
+
+  // Every child on the page, not just the profile's first child_name:
+  // a two-child family used to see only one name in the headline (WS2).
+  const kidNames = joinNames(kids.map((k) => k.name)) || data.child_name || ''
+  const name = kidNames || 'this child'
   const grouped = kids.length > 0
   const haveSections = groupByChild(data.have, kids)
   const wishSections = groupByChild(data.wishlist, kids)
@@ -177,7 +197,7 @@ export default function PublicListPage({ slugOverride } = {}) {
   return (
     <main className="page">
       <h1>
-        {data.child_name ? `${data.child_name}'s` : 'Our'} toy &amp; story library
+        {kidNames ? possessive(kidNames) : 'Our'} toy &amp; story library
       </h1>
       <p className="lede">
         Thinking of a gift for {name}? Check here first — everything under
@@ -254,7 +274,7 @@ export default function PublicListPage({ slugOverride } = {}) {
               haveSections.length ? (
                 haveSections.map((s) => (
                   <div key={s.childId ?? 'family'}>
-                    <h3>{sectionTitle(s)}</h3>
+                    <h3 className="child-section-title">{sectionTitle(s)}</h3>
                     {occasionBadge(s.childId)}
                     <ItemTiles items={s.items} emptyText="Nothing logged yet." />
                   </div>
@@ -274,7 +294,7 @@ export default function PublicListPage({ slugOverride } = {}) {
         wishSections.length ? (
           wishSections.map((s) => (
             <div key={s.childId ?? 'family'}>
-              <h3>{sectionTitle(s)}</h3>
+              <h3 className="child-section-title">{sectionTitle(s)}</h3>
               {occasionBadge(s.childId)}
               <ClaimableWishlist slug={slug} items={s.items} onChanged={load} cartIds={cartIds} onToggleCart={toggleCart} />
             </div>

@@ -37,7 +37,7 @@ function CartClaim({ slug, item, onChanged }) {
       <>
         <span className="action-row">
           <span className="claimed-badge mine">🎁 You claimed this</span>
-          <button className="linklike" onClick={c.unclaim} disabled={c.busy}>
+          <button className="linklike tap" onClick={c.unclaim} disabled={c.busy}>
             Undo claim
           </button>
         </span>
@@ -60,10 +60,10 @@ function CartClaim({ slug, item, onChanged }) {
             onChange={(e) => c.setName(e.target.value)}
             maxLength={60}
           />
-          <button className="btn btn-small" onClick={c.claim} disabled={c.busy}>
+          <button className="btn btn-small tap" onClick={c.claim} disabled={c.busy}>
             {c.busy ? 'Claiming…' : 'Confirm claim'}
           </button>
-          <button className="linklike" onClick={() => c.setClaiming(false)}>
+          <button className="linklike tap" onClick={() => c.setClaiming(false)}>
             Cancel
           </button>
         </div>
@@ -75,10 +75,16 @@ function CartClaim({ slug, item, onChanged }) {
   return (
     <>
       <span className="action-row">
-        <button className="linklike" onClick={() => c.setClaiming(true)}>
+        <button className="linklike tap" onClick={() => c.setClaiming(true)}>
           🎁 I'll get this — claim it
         </button>
       </span>
+      {c.lapsed && (
+        <div className="notes lapsed-note">
+          Your earlier claim on this has ended, so it's open again. Still getting it? Claim it
+          again.
+        </div>
+      )}
       {c.note && <div className="notes">{c.note}</div>}
     </>
   )

@@ -23,6 +23,9 @@ export function useClaim(slug, item, onChanged) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  // Set by a claim made in this page view, so the "your claim has
+  // ended" note can't flash in the moment before the list reloads.
+  const [justClaimed, setJustClaimed] = useState(false)
 
   useEffect(() => {
     setMine(Boolean(safeGet(claimTokenKey(item.id))))
@@ -47,12 +50,13 @@ export function useClaim(slug, item, onChanged) {
       // say so instead of throwing — the claim must not look lost.
       const saved = safeSet(claimTokenKey(item.id), data.token)
       setMine(saved)
+      setJustClaimed(true)
       setClaiming(false)
       // Claims expire (usually the day after the child's next
       // occasion): say how long the hold lasts so it never feels
       // arbitrary when the item opens up again.
       const hold = data.expires_at
-        ? `Held for you until ${formatISODate(data.expires_at)} — after that it opens up again so the list stays current.`
+        ? `Held for you until ${formatISODate(data.expires_at)} — after that it opens up again so the list stays current. Next: buy it with the link below.`
         : ''
       const warning = saved
         ? ''
@@ -90,5 +94,12 @@ export function useClaim(slug, item, onChanged) {
     }
   }
 
-  return { mine, claiming, setClaiming, name, setName, busy, note, claim, unclaim }
+  // This browser still holds a claim token, but the server says the
+  // item is open again: the hold ran out (claims expire; see
+  // claim_expiry_for). Without saying so the claimer's "You claimed
+  // this" just vanished (WS2 audit). The token stays until they claim
+  // again, which overwrites it; Undo clears it.
+  const lapsed = mine && !item.claimed && !justClaimed
+
+  return { mine, lapsed, claiming, setClaiming, name, setName, busy, note, claim, unclaim }
 }
