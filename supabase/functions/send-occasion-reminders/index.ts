@@ -26,8 +26,10 @@
 // due and sends/logs nothing, so the whole pipeline can be
 // verified before the mail account exists. Sent occasions are
 // recorded in occasion_reminder_log — owner sends with a NULL
-// relative_id, relative sends with theirs (partial unique
-// indexes keep the two dedupe streams separate). `?dry=1`
+// relative_id and subscriber_id, relative sends with theirs,
+// subscriber sends with theirs (partial unique indexes keep the
+// three dedupe streams separate; 0063 fixed the owner index to
+// exclude subscriber rows). A failed log write stops the run. `?dry=1`
 // returns the composed digests without sending or logging.
 //
 // Send spread (2026-10-25): clustered occasions (Christmas
@@ -79,6 +81,36 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
+// A dedupe-log write that fails means the email already went out but the
+// run no longer knows it — the same recipient would be mailed again on
+// every later run. So it is never swallowed: the run stops (no further
+// sends) and answers 424, naming the stream. 424 rather than 500 on
+// purpose: reminders.yml's `curl --retry` retries 5xx, and a retry would
+// re-send to the recipient whose log row just failed to write.
+class LogWriteError extends Error {
+  stream: string
+  constructor(stream: string, detail: string) {
+    super(`log write failed (${stream}): ${detail}`)
+    this.stream = stream
+  }
+}
+
+async function writeLog(
+  admin: ReturnType<typeof createClient>,
+  stream: 'owner' | 'relative' | 'subscriber',
+  rows: any[],
+) {
+  let detail = ''
+  try {
+    const { error } = await admin.from('occasion_reminder_log').insert(rows)
+    if (!error) return
+    detail = error.message
+  } catch (e) {
+    detail = e instanceof Error ? e.message : String(e)
+  }
+  throw new LogWriteError(stream, detail)
+}
+
 const dateKey = (d: Date) => d.toISOString().slice(0, 10)
 const pretty = (d: Date) =>
   d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
@@ -123,6 +155,7 @@ async function fetchAll(
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  let sentCount = 0
   try {
     if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) {
       return json({ error: 'Missing or wrong cron secret.' }, 401)
@@ -162,10 +195,12 @@ Deno.serve(async (req) => {
         ),
       ])
 
-    // Two dedupe streams: owner digests (relative_id NULL) and
-    // per-relative emails.
+    // Three dedupe streams: owner digests (no relative_id and no
+    // subscriber_id), per-relative emails, per-subscriber emails.
     const ownerSent = new Set(
-      sent.filter((r: any) => !r.relative_id).map((r: any) => `${r.occasion_id}|${r.occurrence_date}`)
+      sent
+        .filter((r: any) => !r.relative_id && !r.subscriber_id)
+        .map((r: any) => `${r.occasion_id}|${r.occurrence_date}`),
     )
     const relativeSent = new Set(
       sent
@@ -224,7 +259,6 @@ Deno.serve(async (req) => {
     }
 
     const digests: any[] = []
-    let sentCount = 0
     for (const profile of profiles) {
       // Send spread: only occasions at or inside this family's
       // slot threshold are sendable today (see header). The
@@ -278,12 +312,14 @@ Deno.serve(async (req) => {
           const email = userData?.user?.email
           if (email && (await sendViaResend(email, subject, text, html))) {
             sentCount += 1
-            await admin.from('occasion_reminder_log').insert(
+            await writeLog(
+              admin,
+              'owner',
               entries.map((e: any) => ({
                 profile_id: profile.id,
                 occasion_id: e.occasion.id,
                 occurrence_date: dateKey(e.date),
-              }))
+              })),
             )
           }
         }
@@ -341,13 +377,15 @@ Deno.serve(async (req) => {
         if (await sendViaResend(rel.email, subject, text, html)) {
           emailedEmails.add(rel.email.toLowerCase())
           sentCount += 1
-          await admin.from('occasion_reminder_log').insert(
+          await writeLog(
+            admin,
+            'relative',
             relEntries.map((e: any) => ({
               profile_id: profile.id,
               occasion_id: e.occasion.id,
               occurrence_date: dateKey(e.date),
               relative_id: rel.id,
-            }))
+            })),
           )
         }
       }
@@ -403,13 +441,15 @@ Deno.serve(async (req) => {
         if (await sendViaResend(sub.email, subject, text, html)) {
           emailedEmails.add(sub.email.toLowerCase())
           sentCount += 1
-          await admin.from('occasion_reminder_log').insert(
+          await writeLog(
+            admin,
+            'subscriber',
             subEntries.map((e: any) => ({
               profile_id: profile.id,
               occasion_id: e.occasion.id,
               occurrence_date: dateKey(e.date),
               subscriber_id: sub.id,
-            }))
+            })),
           )
         }
       }
@@ -424,6 +464,17 @@ Deno.serve(async (req) => {
       digests,
     })
   } catch (e) {
+    if (e instanceof LogWriteError) {
+      console.error('send-occasion-reminders stopped', e)
+      return json(
+        {
+          error: `Reminder log write failed on the ${e.stream} stream — run stopped, no further emails sent.`,
+          stream: e.stream,
+          sent: sentCount,
+        },
+        424,
+      )
+    }
     console.error('send-occasion-reminders failed', e)
     return json({ error: 'Reminder run failed — see function logs.' }, 500)
   }

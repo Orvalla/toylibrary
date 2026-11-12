@@ -61,6 +61,9 @@ export function isSafeFetchUrl(rawUrl) {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
   if (url.username || url.password) return false
+  // Public product pages live on the default ports; an odd port is how
+  // internal services (admin panels, databases) get probed.
+  if (url.port && url.port !== '80' && url.port !== '443') return false
   // URL keeps IPv6 literals bracketed in .hostname in some runtimes.
   // A trailing dot ("localhost.") is the same host to the resolver,
   // so it is stripped before any comparison.
@@ -74,6 +77,178 @@ export function isSafeFetchUrl(rawUrl) {
   if (!host.includes('.')) return false
   if (INTERNAL_SUFFIXES.some((suffix) => host.endsWith(suffix))) return false
   return true
+}
+
+// ------------------------------------------- resolved-address guard
+// isSafeFetchUrl judges the URL STRING, so a public-looking name that
+// RESOLVES to a private address (an ordinary A/AAAA record pointing at
+// 10.x, 127.x or a link-local address; no DNS race needed) passes it.
+// assertPublicHost closes that: resolve the name and refuse the fetch
+// when ANY answer is private. The resolver is injected so tests can
+// fake DNS; createResolver builds the production one.
+//
+// Residual (documented, not closed here): fetch() resolves again at
+// connect time and cannot be pinned to the address checked, so a
+// resolver that answers differently between the check and the connect
+// (DNS rebinding) is still possible. This guard removes the static
+// case, which needs no timing at all.
+
+export class HostGuardError extends Error {
+  constructor(code, message) {
+    super(message)
+    this.name = 'HostGuardError'
+    this.code = code // 'PRIVATE_ADDRESS' | 'UNRESOLVABLE'
+  }
+}
+
+// An IPv6 text form (compressed, expanded, bracketed, with a dotted
+// IPv4 tail or a zone id) as its eight 16-bit groups; null when it
+// is not an IPv6 address.
+function parseIPv6(raw) {
+  let a = String(raw).toLowerCase().replace(/^\[|\]$/g, '')
+  const zone = a.indexOf('%')
+  if (zone >= 0) a = a.slice(0, zone)
+  const tail4 = a.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/)
+  if (tail4) {
+    const o = tail4[2].split('.').map(Number)
+    if (o.some((n) => n > 255)) return null
+    a = `${tail4[1]}${((o[0] << 8) | o[1]).toString(16)}:${((o[2] << 8) | o[3]).toString(16)}`
+  }
+  const halves = a.split('::')
+  if (halves.length > 2) return null
+  const head = halves[0] ? halves[0].split(':') : []
+  const rest = halves.length === 2 && halves[1] ? halves[1].split(':') : []
+  let groups
+  if (halves.length === 2) {
+    const fill = 8 - head.length - rest.length
+    if (fill < 1) return null
+    groups = [...head, ...Array(fill).fill('0'), ...rest]
+  } else {
+    groups = head
+  }
+  if (groups.length !== 8) return null
+  const nums = groups.map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : NaN))
+  return nums.some(Number.isNaN) ? null : nums
+}
+
+// Canonical compressed text (longest zero run -> "::"), the shape
+// ipv6IsPrivate's prefix tests expect.
+function compressIPv6(nums) {
+  let bestStart = -1
+  let bestLen = 0
+  for (let i = 0; i < 8; ) {
+    if (nums[i] !== 0) {
+      i += 1
+      continue
+    }
+    let j = i
+    while (j < 8 && nums[j] === 0) j += 1
+    if (j - i > bestLen) {
+      bestStart = i
+      bestLen = j - i
+    }
+    i = j
+  }
+  const hex = nums.map((n) => n.toString(16))
+  if (bestLen < 2) return hex.join(':')
+  return `${hex.slice(0, bestStart).join(':')}::${hex.slice(bestStart + bestLen).join(':')}`
+}
+
+// Is this resolved address (as DNS returned it) a public one?
+// Unparseable input is refused.
+export function isPublicAddress(addr) {
+  if (typeof addr !== 'string') return false
+  const text = addr.trim()
+  const v4 = ipv4IsPrivate(text)
+  if (v4 !== null) return v4 === false
+  const g = parseIPv6(text)
+  if (!g) return false
+  // IPv4-mapped (::ffff:a.b.c.d): judge the embedded IPv4 address.
+  if (g.slice(0, 5).every((n) => n === 0) && g[5] === 0xffff) {
+    return ipv4IsPrivate(`${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`) === false
+  }
+  return !ipv6IsPrivate(compressIPv6(g))
+}
+
+// Throws HostGuardError unless every address `host` resolves to is
+// public. `resolve(host)` returns the A and AAAA answers together as
+// an array of address strings and must THROW on a lookup failure
+// other than "no such record" (an unresolvable or half-resolved name
+// is refused, never waved through). Literal-IP hosts need no lookup:
+// isSafeFetchUrl already judged them, and they are re-judged here.
+export async function assertPublicHost(host, resolve) {
+  const h = String(host ?? '')
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.+$/, '')
+  if (!h) throw new HostGuardError('PRIVATE_ADDRESS', 'empty host')
+  if (ipv4IsPrivate(h) !== null || h.includes(':')) {
+    if (!isPublicAddress(h)) throw new HostGuardError('PRIVATE_ADDRESS', `${h} is not a public address`)
+    return []
+  }
+  let answers
+  try {
+    answers = await resolve(h)
+  } catch {
+    throw new HostGuardError('UNRESOLVABLE', `could not resolve ${h}`)
+  }
+  if (!Array.isArray(answers) || answers.length === 0) {
+    throw new HostGuardError('UNRESOLVABLE', `${h} has no A/AAAA records`)
+  }
+  for (const answer of answers) {
+    if (!isPublicAddress(answer)) {
+      throw new HostGuardError('PRIVATE_ADDRESS', `${h} resolves to a non-public address`)
+    }
+  }
+  return answers
+}
+
+// Production resolver. PRIMARY: Deno.resolveDns (A and AAAA). If the
+// runtime lacks it or refuses it for permission reasons, that
+// resolver switches (and stays) on DNS-over-HTTPS to one fixed
+// public resolver, so a missing capability can never turn the guard
+// off. A lookup error that is not "no such record" propagates, and
+// assertPublicHost then refuses the host. Both runtimes are
+// injected (`deno`, `fetchImpl`) so tests can stand in for them.
+export function createResolver({ deno, fetchImpl, dohUrl = 'https://cloudflare-dns.com/dns-query' } = {}) {
+  let useDoh = typeof deno?.resolveDns !== 'function'
+  const isCapabilityError = (e) =>
+    e?.name === 'PermissionDenied' || e?.name === 'NotCapable' || e?.name === 'NotSupported'
+  const viaDeno = async (host, type) => {
+    try {
+      return (await deno.resolveDns(host, type)).map(String)
+    } catch (e) {
+      if (e?.name === 'NotFound') return []
+      throw e
+    }
+  }
+  const viaDoh = async (host, type) => {
+    const res = await fetchImpl(`${dohUrl}?name=${encodeURIComponent(host)}&type=${type}`, {
+      headers: { accept: 'application/dns-json' },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) throw new Error(`DoH HTTP ${res.status}`)
+    const body = await res.json()
+    if (body.Status === 3) return [] // NXDOMAIN
+    if (body.Status !== 0) throw new Error(`DoH status ${body.Status}`)
+    const want = type === 'A' ? 1 : 28
+    return (body.Answer ?? []).filter((r) => r.type === want).map((r) => String(r.data))
+  }
+  const lookup = async (host, type) => {
+    if (!useDoh) {
+      try {
+        return await viaDeno(host, type)
+      } catch (e) {
+        if (!isCapabilityError(e)) throw e
+        useDoh = true
+      }
+    }
+    return viaDoh(host, type)
+  }
+  return async (host) => {
+    const [a, aaaa] = await Promise.all([lookup(host, 'A'), lookup(host, 'AAAA')])
+    return [...a, ...aaaa]
+  }
 }
 
 // ---------------------------------------------------------- content guard

@@ -40,7 +40,9 @@
 // added_by + source_url — community data with provenance.
 //
 // Fetches are guarded (see extract.js isSafeFetchUrl): http(s) only,
-// no localhost / private IPs, redirects re-validated hop by hop, an
+// default ports only, no localhost / private IPs, a name that resolves
+// to a private address refused before each request (assertPublicHost),
+// redirects re-validated hop by hop, an
 // 8s timeout and a ~2MB body cap. Pure parsing/mapping lives in
 // extract.js, which vitest covers from src/lib/ingestExtract.test.js.
 
@@ -57,6 +59,9 @@ import {
   extractProductLinks,
   isBlockedHost,
   isBlockedTitle,
+  HostGuardError,
+  assertPublicHost,
+  createResolver,
   isSafeFetchUrl,
   normalizeShopifyProduct,
   normalizeSuggestResult,
@@ -165,6 +170,28 @@ class HttpError extends Error {
   }
 }
 
+// DNS check for the SSRF guard (extract.js assertPublicHost): the name a
+// fetch is about to connect to must not resolve to a private address.
+// Runs before the first request and before every redirect hop. Deno's
+// resolver is primary; see createResolver for the DoH fallback.
+const resolveHostAddresses = createResolver({ deno: Deno, fetchImpl: fetch })
+
+async function assertHostIsPublic(url: string, hop: number) {
+  try {
+    await assertPublicHost(new URL(url).hostname, resolveHostAddresses)
+  } catch (err) {
+    if (err instanceof HostGuardError && err.code === 'UNRESOLVABLE') {
+      throw new HttpError(502, "That page didn't respond — check the link and try again.")
+    }
+    throw new HttpError(
+      400,
+      hop === 0
+        ? "That link doesn't look like a public product page."
+        : "That link redirects somewhere we can't follow.",
+    )
+  }
+}
+
 // Fetch a URL's text with the safety rails applied: every redirect
 // hop is re-validated, the body is capped, and upstream failures
 // become plain 502s. Returns the final URL after redirects.
@@ -174,6 +201,7 @@ async function fetchTextCapped(
 ): Promise<{ text: string; finalUrl: string }> {
   let current = startUrl
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertHostIsPublic(current, hop)
     let res: Response
     try {
       res = await fetch(current, {
