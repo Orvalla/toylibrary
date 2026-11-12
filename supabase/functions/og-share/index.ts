@@ -14,58 +14,24 @@
 // is the display name and children's first names of a family
 // whose share page is already public — the same things the
 // gift page itself shows anyone with the link.
+//
+// The card wording and HTML live in preview.js (pure, tested by
+// the vitest suite in src/lib/ogShare.test.js); this file only
+// does the lookups.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { buildPreview, renderPreviewHtml } from './preview.js'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-const GENERIC = {
-  title: 'Toy Library — fewer duplicate gifts, happier holidays',
-  description:
-    'See what the kids are wishing for, check what they already have, and claim a gift so nothing gets bought twice.',
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-}
-
-function page(title: string, description: string, url: string) {
-  const t = escapeHtml(title)
-  const d = escapeHtml(description)
-  return new Response(
-    `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<title>${t}</title>
-<meta name="description" content="${d}" />
-<meta property="og:type" content="website" />
-<meta property="og:site_name" content="Toy Library" />
-<meta property="og:title" content="${t}" />
-<meta property="og:description" content="${d}" />
-<meta property="og:url" content="${escapeHtml(url)}" />
-<meta property="og:image" content="https://toylibrary.store/og.png" />
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="${t}" />
-<meta name="twitter:description" content="${d}" />
-<meta name="twitter:image" content="https://toylibrary.store/og.png" />
-</head>
-<body>
-<p><a href="${escapeHtml(url)}">${t}</a> — ${d}</p>
-</body>
-</html>`,
-    {
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'public, max-age=3600',
-      },
+function respond(preview: { title: string; description: string; url: string }) {
+  return new Response(renderPreviewHtml(preview), {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
     },
-  )
+  })
 }
 
 Deno.serve(async (req: Request) => {
@@ -75,10 +41,9 @@ Deno.serve(async (req: Request) => {
   const slug = (req.headers.get('x-family-slug') ?? url.searchParams.get('slug') ?? '')
     .toLowerCase()
     .trim()
-  const pageUrl = slug ? `https://${slug}.toylibrary.store/` : 'https://toylibrary.store/'
 
   if (!/^[a-z0-9-]{1,64}$/.test(slug) || !SUPABASE_SERVICE_ROLE_KEY) {
-    return page(GENERIC.title, GENERIC.description, pageUrl)
+    return respond(buildPreview({ slug, profile: null, childNames: [] }))
   }
 
   try {
@@ -89,7 +54,7 @@ Deno.serve(async (req: Request) => {
       .eq('share_slug', slug)
       .eq('share_enabled', true)
       .single()
-    if (!profile) return page(GENERIC.title, GENERIC.description, pageUrl)
+    if (!profile) return respond(buildPreview({ slug, profile: null, childNames: [] }))
 
     const { data: kids } = await admin
       .from('children')
@@ -98,14 +63,9 @@ Deno.serve(async (req: Request) => {
       .order('sort_order')
       .order('name')
       .limit(3)
-    const names = (kids ?? []).map((k) => k.name).filter(Boolean)
-    const family = profile.display_name?.trim() || 'A family'
-    const title = `${family} · Toy Library gift lists`
-    const description = names.length
-      ? `See what's on ${names.join(' and ')}'s wishlist, check what they already have, and claim a gift so nothing gets bought twice.`
-      : GENERIC.description
-    return page(title, description, pageUrl)
+    const childNames = (kids ?? []).map((k: { name: string }) => k.name).filter(Boolean)
+    return respond(buildPreview({ slug, profile, childNames }))
   } catch {
-    return page(GENERIC.title, GENERIC.description, pageUrl)
+    return respond(buildPreview({ slug, profile: null, childNames: [] }))
   }
 })
