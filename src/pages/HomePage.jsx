@@ -3,12 +3,14 @@ import { useAuth } from '../lib/auth'
 import { PLATFORMS } from '../lib/platforms'
 import PlatformMark from '../components/PlatformMark'
 import Ethos from '../components/Ethos'
+import LaunchBanner from '../components/LaunchBanner'
 
 export default function HomePage() {
   const { user } = useAuth()
 
   return (
     <main className="page narrow">
+      <LaunchBanner />
       <img src="/logo.svg" alt="Toy Library logo" className="hero-logo" />
       <h1>Never gift the same Tonie twice.</h1>
       <p className="lede">

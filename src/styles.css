@@ -747,3 +747,14 @@ h2 .plat-badge img, h3 .plat-badge img { max-width: 24px; max-height: 24px; }
 .subscribe-form select { padding: 9px; border-radius: 10px; border: 2px solid #ddd6f5; font: inherit; }
 .support-report { border-top: 1px solid var(--line); padding: 10px 0; }
 .support-report:first-of-type { border-top: none; }
+
+/* Christmas launch announcement, apex homepage only (WS2). */
+.launch-banner {
+  background: #fff3c4; border: 2px solid var(--sun); border-radius: 16px;
+  padding: 12px 14px; margin: 0 0 18px;
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+}
+.launch-banner-text { margin: 0; flex: 1 1 260px; font-weight: 800; }
+.launch-banner-actions { display: flex; align-items: center; gap: 10px; }
+.launch-banner .btn-small { min-height: 44px; display: inline-flex; align-items: center; }
+.launch-banner-close { min-width: 44px; justify-content: center; font-size: 18px; color: var(--ink-soft); }
