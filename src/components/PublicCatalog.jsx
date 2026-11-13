@@ -136,10 +136,10 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
     activeFilters.push(
       PROJECTOR_BRANDS.find((b) => b.key === subBrand)?.label ?? subBrand
     )
-  if (!focusedPage && category !== 'all') activeFilters.push(category)
-  if (!focusedPage && theme !== 'all')
+  if (category !== 'all') activeFilters.push(category)
+  if (theme !== 'all')
     activeFilters.push(THEMES.find((t) => t.key === theme)?.label ?? theme)
-  if (!focusedPage && languages.length > 0)
+  if (languages.length > 0)
     activeFilters.push(
       languages.length === 1
         ? languageLabel(languages[0])
@@ -203,9 +203,9 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
     (c) =>
       (platform === 'all' || c.platform === platform) &&
       (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
-      (focusedPage || category === 'all' || categoryOf(c) === category) &&
-      (focusedPage || theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
-      (focusedPage || languagesVisible(c.language, languages)) &&
+      (category === 'all' || categoryOf(c) === category) &&
+      (theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
+      (languagesVisible(c.language, languages)) &&
       (ageBand === 'all' || inAgeBand(c, ageBand)) &&
       (stage === 'all' || c.platform !== 'books' || bookInStage(c, stage)) &&
       (!qWords.length || matchesQuery(c))
@@ -213,12 +213,30 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
 
   // The default sort is the unified popularity score
   // (lib/popular.js — same metric as the signed-in browser).
+
+  // Added sorts (owner request 2026-11-13, zone pages had only
+  // Popular/A–Z): top rated and youngest first. (No price sort:
+  // the internal price columns are not browser-readable — B8.)
+  // Unrated, unpriced and no-age-data rows sink to the end;
+  // ties fall back to title so the order is deterministic.
+  const byTitle = (a, b) => a.title.localeCompare(b.title)
+  const byRated = (a, b) =>
+    (Number(b.rating) || 0) - (Number(a.rating) || 0) ||
+    (Number(b.rating_count) || 0) - (Number(a.rating_count) || 0) ||
+    byTitle(a, b)
+  const ageOf = (c) => (c.age_min_years == null ? null : Number(c.age_min_years))
+  const byYoungest = (a, b) =>
+    (ageOf(a) ?? Infinity) - (ageOf(b) ?? Infinity) || byTitle(a, b)
   const sortedVisible =
     sort === 'az'
       ? [...visible].sort((a, b) => a.title.localeCompare(b.title))
       : sort === 'za'
         ? [...visible].sort((a, b) => b.title.localeCompare(a.title))
-        : sortByPopularity(visible, popIndex)
+        : sort === 'rated'
+          ? [...visible].sort(byRated)
+          : sort === 'youngest'
+                ? [...visible].sort(byYoungest)
+                : sortByPopularity(visible, popIndex)
   const byPlatform = sortedVisible.reduce((acc, c) => {
     ;(acc[c.platform] ??= []).push(c)
     return acc
@@ -418,7 +436,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
         </FilterSection>
       )}
 
-      {!focusedPage && (
+      {(
         <FilterSection
           id="category"
           label="Category"
@@ -446,7 +464,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
         </FilterSection>
       )}
 
-      {!focusedPage && (
+      {(
         <FilterSection
           id="theme"
           label="Shop by interest"
@@ -478,7 +496,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
         </FilterSection>
       )}
 
-      {!focusedPage && languagesPresent.length > 1 && (
+      {languagesPresent.length > 1 && (
         <FilterSection
           id="language"
           label="Language"
@@ -582,6 +600,8 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
           <option value="popular">🔥 Popular</option>
           <option value="az">Name A–Z</option>
           <option value="za">Name Z–A</option>
+          <option value="rated">⭐ Top rated</option>
+          <option value="youngest">Age: youngest first</option>
         </select>
       </label>
 
