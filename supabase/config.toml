@@ -24,7 +24,7 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173/reset-password", "https://toy-library.fly.dev/reset-password"]
+additional_redirect_urls = ["http://localhost:5173/reset-password"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 
