@@ -42,6 +42,25 @@ describe('categoryOf', () => {
     expect(categoryOf({ platform: 'yoto', details: 'Story collection' })).toBe('Audio & more')
   })
 
+  it('files science & physics kits under their own category', () => {
+    expect(categoryOf({ platform: 'thamesandkosmos', details: 'Science kit' })).toBe('Science & Physics')
+    expect(categoryOf({ platform: 'kiwico', details: 'STEM crate' })).toBe('Science & Physics')
+    expect(categoryOf({ platform: 'elenco', details: 'Electronics kit' })).toBe('Science & Physics')
+    expect(categoryOf({ platform: 'magtrax', details: 'MagTrax · Magnetic wall marble run, Small set' })).toBe('Science & Physics')
+    // GraviTrax joins by its details prefix inside Ravensburger.
+    expect(categoryOf({ platform: 'ravensburger', details: 'GraviTrax BASE · Starter set' })).toBe('Science & Physics')
+    expect(categoryOf({ platform: 'ravensburger', details: 'Puzzle · 1000 pieces' })).toBe('Toys')
+  })
+
+  it('keeps a science maker\u2019s games and books on their own shelves', () => {
+    // The details keywords run before the science check.
+    expect(categoryOf({ platform: 'thamesandkosmos', details: 'Escape room game' })).toBe('Games')
+    expect(categoryOf({ platform: 'ravensburger', details: 'GraviTrax THE GAME - Switch' })).toBe('Games')
+    expect(categoryOf({ platform: 'learningresources', details: 'Science book' })).toBe('Books')
+    // Devices still win over everything.
+    expect(categoryOf({ platform: 'thamesandkosmos', item_type: 'device', details: 'Science kit' })).toBe('Devices')
+  })
+
   it('reads cards from the details text', () => {
     expect(categoryOf({ platform: 'yoto', details: 'Yoto Card' })).toBe('Cards')
     expect(categoryOf({ platform: 'storypod', details: 'Card Sets' })).toBe('Cards')
@@ -61,7 +80,7 @@ describe('categoryOf', () => {
     expect(categoryOf(null)).toBe('Audio & more')
   })
 
-  it('only ever returns one of the seven categories', () => {
+  it('only ever returns one of the eight categories', () => {
     const samples = [
       { platform: 'tonies', item_type: 'device' },
       { platform: 'books' },
@@ -69,9 +88,10 @@ describe('categoryOf', () => {
       { platform: 'leapfrog', details: 'LeapStart book' },
       { platform: 'yoto', details: 'Yoto Card' },
       { platform: 'osmo', details: 'Osmo game' },
+      { platform: 'thamesandkosmos', details: 'Science kit' },
       { platform: 'lunii', details: 'Story album' },
     ]
     for (const s of samples) expect(CATEGORIES).toContain(categoryOf(s))
-    expect(CATEGORIES).toHaveLength(7)
+    expect(CATEGORIES).toHaveLength(8)
   })
 })

@@ -6,12 +6,16 @@
 //   * otherwise the details text the stores/ingestor already wrote
 //     decides: "Tonie figure" is a figure, "LeapStart book" is a
 //     book, "Yoto Card" is a card, "Game cartridge" is a game.
+//   * science & physics kits (lib/science.js) file under their
+//     own category, after the details keywords have had their
+//     say — a science maker's games stay in 'Games',
 //   * anything else is audio-first content — stories, songs, albums,
 //     tokens, reels — and lands in 'Audio & more'.
 
 import { TOY_PLATFORMS } from './platforms'
+import { isScienceRow } from './science'
 
-export const CATEGORIES = ['Figures', 'Books', 'Cards', 'Games', 'Devices', 'Toys', 'Audio & more']
+export const CATEGORIES = ['Figures', 'Books', 'Cards', 'Games', 'Science & Physics', 'Devices', 'Toys', 'Audio & more']
 
 export function categoryOf(item) {
   if (!item) return 'Audio & more'
@@ -22,6 +26,10 @@ export function categoryOf(item) {
   if (details.includes('book')) return 'Books'
   if (details.includes('card')) return 'Cards'
   if (details.includes('game')) return 'Games'
+  // Science & physics kits get their own category (owner-directed
+  // 2026-11-13) — checked after the details keywords so a science
+  // maker's games and books keep their shelves.
+  if (isScienceRow(item)) return 'Science & Physics'
   // Physical toys (HABA, Magna-Tiles, SmartGames, Lovevery —
   // migration 0021) that aren't games/books by their details
   // are toys, not audio.
