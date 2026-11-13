@@ -37,7 +37,7 @@ describe('0064 advisor tables', () => {
 
   it('advisor_usage stores counts, cost, mode, candidate ids: no transcript columns', () => {
     const body = sql.match(/create table if not exists public\.advisor_usage \((.*?)\);/)[1]
-    const columns = [...body.matchAll(/(?:^|, )([a-z_]+) (?:bigint|timestamptz|date|text|integer|numeric|uuid)/g)].map(
+    const columns = [...body.matchAll(/(?:^\s*|, )([a-z_]+) (?:bigint|timestamptz|date|text|integer|numeric|uuid)/g)].map(
       (m) => m[1],
     )
     expect(columns.sort()).toEqual(
