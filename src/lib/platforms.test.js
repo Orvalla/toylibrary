@@ -9,7 +9,7 @@ describe('platforms', () => {
     // 0056_electronics_round2_platforms.sql and
     // 0059_shelves_platforms_and_prices.sql — the 0059 list is the
     // full current set, copied from its catalog_items CHECK;
-    // 0065_magtrax_platform.sql appends 'magtrax').
+    // 0065_magtrax_platform.sql appends 'magtrax'; 0066 appends 'hasbro', 'mattel', 'theop', 'peaceablekingdom').
     const dbKeys = [
       'tonies',
       'yoto',
@@ -121,6 +121,10 @@ describe('platforms', () => {
       'pipsticks',
       'rainbowloom',
       'magtrax',
+      'hasbro',
+      'mattel',
+      'theop',
+      'peaceablekingdom',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {
