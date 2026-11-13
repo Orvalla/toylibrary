@@ -10,17 +10,19 @@ export default function HomePage() {
   return (
     <main className="page narrow">
       <img src="/logo.svg" alt="Toy Library logo" className="hero-logo" />
-      <h1>Never gift the same Tonie twice.</h1>
+      <h1>Never gift the same toy twice.</h1>
       <p className="lede">
-        Toniebox figures, LeapPad books, storybook projector cartridges — kids'
-        story toys are wonderful gifts, which is exactly why grandparents,
-        aunts and uncles keep buying the same ones twice.
+        Tonies and Yoto cards, LeapPad books and projector stories, board
+        games, building sets, shelves of picture books — the toys kids love
+        most are precisely the ones grandparents, aunts and uncles end up
+        buying twice.
       </p>
       <p>
-        Toy Library keeps one simple list of what your child <em>already has</em>,
-        plus a wishlist of what's actually wanted. Share a single link before
-        birthdays and holidays, and gift-givers can check it in ten seconds —
-        no account needed on their end.
+        Toy Library keeps one simple list of what your child already has —
+        every system, every shelf — plus a wishlist of what's actually
+        wanted. Share a single link before birthdays and holidays, and
+        gift-givers can check it in ten seconds — no account needed on
+        their end.
       </p>
 
       <section className="ethos-band">
@@ -78,7 +80,7 @@ export default function HomePage() {
       <div className="card-grid">
         <div className="card">
           <h3>📚 Track what you have</h3>
-          <p>Log every figure, book and cartridge as it arrives, by platform.</p>
+          <p>Log every figure, card, book and game as it arrives — all of it in one library.</p>
         </div>
         <div className="card">
           <h3>⭐ Keep a wishlist</h3>
