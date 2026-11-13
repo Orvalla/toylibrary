@@ -20,13 +20,18 @@ const squash = (s) =>
 const sql = squash(readFileSync(MIGRATIONS + '0064_advisor_usage.sql', 'utf8'))
 
 describe('0064 advisor tables', () => {
-  it('is the next migration after 0063', () => {
+  it('0064 directly follows 0063 and no migration number is reused', () => {
+    // At WS7 build time 0064 was the newest migration; 0065/0066
+    // landed on main before the merge, so "newest" no longer
+    // holds. What must hold forever: exactly one 0064, seated
+    // directly after 0063, and every number used at most once.
     const nums = readdirSync(MIGRATIONS)
       .filter((f) => /^\d{4}_.*\.sql$/.test(f))
       .map((f) => Number(f.slice(0, 4)))
       .sort((a, b) => a - b)
-    expect(nums.at(-1)).toBe(64)
     expect(nums.filter((n) => n === 64)).toHaveLength(1)
+    expect(nums.indexOf(64)).toBe(nums.indexOf(63) + 1)
+    expect(new Set(nums).size).toBe(nums.length)
   })
 
   it.each(['advisor_usage', 'advisor_ip_counters', 'advisor_alerts'])('%s: RLS on, anon/authenticated revoked', (t) => {
