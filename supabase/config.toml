@@ -32,3 +32,9 @@ enable_refresh_token_rotation = true
 # Turn off for frictionless local dev; enable in the hosted project if you
 # want confirmation emails before first login.
 enable_confirmations = false
+
+# gift-advisor (WS7) is public by design; its guard rails are the
+# controls in the function itself (CORS, per-IP caps, cost breaker,
+# ADVISOR_ENABLED kill switch).
+[functions.gift-advisor]
+verify_jwt = false

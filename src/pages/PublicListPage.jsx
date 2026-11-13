@@ -5,6 +5,7 @@ import ItemTiles from '../components/ItemTiles'
 import ClaimableWishlist from '../components/ClaimableWishlist'
 import GiftBasket from '../components/GiftBasket'
 import SuggestGift, { ApprovedGifts } from '../components/SuggestGift'
+import GiftAdvisor from '../components/GiftAdvisor'
 import { addToCart, cartHas, loadCart, removeFromCart, saveCart } from '../lib/cart'
 import { noteSharePageVisit } from '../lib/amazon'
 import { groupByChild } from '../lib/children'
@@ -327,6 +328,7 @@ export default function PublicListPage({ slugOverride } = {}) {
       {subState === 'done' && <p className="notice">📬 {subMsg}</p>}
 
       <ApprovedGifts proposals={proposals} />
+      <GiftAdvisor slug={slug} kids={data.children ?? []} />
       <SuggestGift slug={slug} kids={data.children ?? []} />
     </main>
   )

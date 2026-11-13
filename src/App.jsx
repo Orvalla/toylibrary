@@ -13,6 +13,7 @@ import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
 import { ForgotPasswordPage, ResetPasswordPage, NotFoundPage } from './pages/PasswordPages'
 import PublicListPage from './pages/PublicListPage'
+import GiftFinderPage from './pages/GiftFinderPage'
 import UnsubscribePage from './pages/UnsubscribePage'
 import ConfirmSubscriptionPage from './pages/ConfirmSubscriptionPage'
 import { PrivacyPage, TermsPage } from './pages/LegalPages'
@@ -124,6 +125,8 @@ export default function App() {
         <Route path="/unsubscribe" element={<UnsubscribePage />} />
         {/* Double opt-in link for gift-list subscribers (migration 0058). */}
         <Route path="/confirm" element={<ConfirmSubscriptionPage />} />
+        {/* The Toy Librarian's apex door (WS7); a 404 page while advisor_enabled is off. */}
+        <Route path="/gift-finder" element={<GiftFinderPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="*" element={<NotFoundPage />} />
