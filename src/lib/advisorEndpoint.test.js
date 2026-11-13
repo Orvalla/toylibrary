@@ -304,6 +304,39 @@ describe('per-IP caps (30/hour, 120/day), no oracle', () => {
   })
 })
 
+describe('robustness', () => {
+  it('a shopper who closes the tab mid-reply still gets the usage row written (breaker input)', async () => {
+    let release
+    const gate = new Promise((r) => (release = r))
+    provider = {
+      ...mockProvider(),
+      async *stream() {
+        yield { type: 'usage', input_tokens: 900, output_tokens: 1 }
+        yield { type: 'text', text: 'first' }
+        await gate
+        yield { type: 'text', text: 'second' }
+        yield { type: 'usage', output_tokens: 400 }
+      },
+    }
+    const res = await handler()(post(finder('hi')))
+    const reader = res.body.getReader()
+    await reader.read() // meta
+    await reader.cancel()
+    release()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(store.usage).toHaveLength(1)
+    expect(store.usage[0]).toMatchObject({ tokens_in: 900, tokens_out: 400 })
+  })
+
+  it('client IP prefers proxy-set headers over a client-supplied x-forwarded-for', async () => {
+    const { clientIp } = await import('../../supabase/functions/gift-advisor/controls.js')
+    const req = (h) => new Request('https://x/f', { headers: h })
+    expect(clientIp(req({ 'x-forwarded-for': '1.1.1.1, 2.2.2.2', 'cf-connecting-ip': '3.3.3.3' }))).toBe('3.3.3.3')
+    expect(clientIp(req({ 'x-forwarded-for': '1.1.1.1', 'x-real-ip': '4.4.4.4' }))).toBe('4.4.4.4')
+    expect(clientIp(req({ 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }))).toBe('1.1.1.1')
+  })
+})
+
 describe('history caps (rejected, never truncated)', () => {
   const longHistory = (shopperTurns) =>
     Array.from({ length: (shopperTurns - 1) * 2 }, (_, i) => ({

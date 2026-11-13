@@ -150,11 +150,16 @@ export class MemoryLimiter {
   }
 }
 
-// The caller's IP from the edge proxy headers (first hop), or ''.
+// The caller's IP, or ''. Proxy-set single-value headers first
+// (a client cannot pre-seed them through Cloudflare); the first
+// x-forwarded-for hop only as a fallback, since a client CAN send
+// its own x-forwarded-for. Which header the Supabase edge sets is
+// a post-deploy check (WS7 report, UNVERIFIED list). The $15/day
+// breaker bounds spend whatever this returns.
 export function clientIp(req) {
-  const xff = req.headers.get('x-forwarded-for') ?? ''
-  const first = xff.split(',')[0].trim()
-  return first || req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || ''
+  const single = (req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || '').trim()
+  if (single) return single
+  return (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim()
 }
 
 export async function hashIp(ip, salt) {

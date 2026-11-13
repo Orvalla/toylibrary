@@ -102,14 +102,30 @@ export function createHandler(deps) {
         new ReadableStream({
           async start(controller) {
             const enc = new TextEncoder()
-            const send = (event, data) => controller.enqueue(enc.encode(sse(event, data)))
+            // A shopper who closes the tab mid-reply cancels the
+            // stream; sends become no-ops so the producer still
+            // finishes and the usage row (the breaker's input) is
+            // still written.
+            let open = true
+            const send = (event, data) => {
+              if (!open) return
+              try {
+                controller.enqueue(enc.encode(sse(event, data)))
+              } catch {
+                open = false
+              }
+            }
             try {
               await producer(send)
             } catch {
               // Never leak internals into the stream.
               send('done', { ok: false })
             }
-            controller.close()
+            try {
+              controller.close()
+            } catch {
+              // already closed by the client
+            }
           },
         }),
         {
