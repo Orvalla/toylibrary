@@ -43,9 +43,19 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
   const [bundleRows, setBundleRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [catalogLoading, setCatalogLoading] = useState(true)
-  const [platform, setPlatform] = useState(
-    () => new URLSearchParams(window.location.search).get('platform') ?? 'all'
-  )
+  // Platform is multi-select (owner ruling 2026-11-13): an
+  // empty list means all platforms. The ?platform= deep link
+  // still parses — a comma list, or one value as a 1-item list.
+  const [platforms, setPlatforms] = useState(() => {
+    const raw = new URLSearchParams(window.location.search).get('platform')
+    return raw && raw !== 'all' ? raw.split(',').filter(Boolean) : []
+  })
+  const allPlatforms = platforms.length === 0
+  const hasPlatform = (k) => platforms.includes(k)
+  const togglePlatform = (k) =>
+    setPlatforms((prev) =>
+      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]
+    )
   // The main shelf (lib/kinds), mirroring the signed-in
   // browser; the header's Board games link lands as ?kind=games.
   const [kind, setKind] = useState(
@@ -71,7 +81,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
   const [sort, setSort] = useState('popular')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(48)
-  const [sectionOpen, setSectionOpen] = useState({})
+  const [sectionOpen, setSectionOpen] = useState({ platform: false })
 
   const load = useCallback(async () => {
     // Same cached load as the signed-in browser (lib/catalogCache): render
@@ -101,26 +111,26 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
 
   useEffect(() => {
     setSubBrand('all')
-  }, [platform])
+  }, [platforms])
 
   useEffect(() => {
     setPage(1)
-  }, [kind, platform, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly, steamOnly, artOnly])
+  }, [kind, platforms, category, theme, ageBand, query, sort, subBrand, stage, perPage, devicesOnly, steamOnly, artOnly])
 
   const sectionDefaultOpen = (id) => {
     switch (id) {
       case 'platform':
-        return platform === 'all'
+        return allPlatforms
       case 'stage':
-        return platform === 'books'
+        return hasPlatform('books')
       case 'brand':
-        return platform === 'projector'
+        return hasPlatform('projector')
       case 'age':
         return true
       case 'category':
-        return platform === 'all'
+        return allPlatforms
       case 'theme':
-        return platform === 'all'
+        return allPlatforms
       default:
         return false
     }
@@ -131,8 +141,8 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
   // The folded Filters header (FilterGroup) still reports
   // what's set: the active selections, first two named.
   const activeFilters = []
-  if (platform !== 'all') activeFilters.push(platformLabel(platform))
-  if (platform === 'projector' && subBrand !== 'all')
+  for (const p of platforms) activeFilters.push(platformLabel(p))
+  if (hasPlatform('projector') && subBrand !== 'all')
     activeFilters.push(
       PROJECTOR_BRANDS.find((b) => b.key === subBrand)?.label ?? subBrand
     )
@@ -145,7 +155,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
         ? languageLabel(languages[0])
         : `${languages.length} languages`
     )
-  if (platform === 'books' && stage !== 'all')
+  if (hasPlatform('books') && stage !== 'all')
     activeFilters.push(BOOK_STAGES.find((s) => s.key === stage)?.label ?? stage)
   if (ageBand !== 'all')
     activeFilters.push(AGE_BANDS.find((b) => b.key === ageBand)?.label ?? ageBand)
@@ -181,7 +191,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
   }
   const pickKind = (k) => {
     setKind(k)
-    setPlatform('all')
+    setPlatforms([])
   }
   const categoriesPresent = CATEGORIES.filter((cat) => base.some((c) => categoryOf(c) === cat))
   const themeCount = (k) =>
@@ -201,8 +211,8 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
     projectorRows.filter((c) => projectorBrandOf(c) === brandKey).length
   const visible = base.filter(
     (c) =>
-      (platform === 'all' || c.platform === platform) &&
-      (platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
+      (allPlatforms || platforms.includes(c.platform)) &&
+      (c.platform !== 'projector' || subBrand === 'all' || projectorBrandOf(c) === subBrand) &&
       (category === 'all' || categoryOf(c) === category) &&
       (theme === 'all' || (themeMap.get(c.id) ?? []).includes(theme)) &&
       (languagesVisible(c.language, languages)) &&
@@ -377,6 +387,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
       </section>
 
       <FilterGroup
+        defaultOpen
         label="Filters"
         summary={filterSummary}
         badge={activeFilters.length > 0 ? `${activeFilters.length} active` : null}
@@ -384,19 +395,25 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
       <FilterSection
         id="platform"
         label="Platform"
-        summary={platform === 'all' ? 'All platforms' : platformLabel(platform)}
+        summary={
+          allPlatforms
+            ? 'All platforms'
+            : platforms.length === 1
+              ? platformLabel(platforms[0])
+              : `${platforms.length} platforms`
+        }
         open={isSectionOpen('platform')}
         onToggle={toggleSection}
       >
         <div className="tabs">
-          <button className={platform === 'all' ? 'active' : ''} onClick={() => setPlatform('all')}>
+          <button className={allPlatforms ? 'active' : ''} onClick={() => setPlatforms([])}>
             All
           </button>
           {PLATFORMS.filter((p) => base.some((c) => c.platform === p.key)).map((p) => (
             <button
               key={p.key}
-              className={platform === p.key ? 'active' : ''}
-              onClick={() => setPlatform(p.key)}
+              className={platforms.includes(p.key) ? 'active' : ''}
+              onClick={() => togglePlatform(p.key)}
             >
               <PlatformMark platform={p.key} /> {p.label}
             </button>
@@ -404,7 +421,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
         </div>
       </FilterSection>
 
-      {platform === 'projector' && (
+      {hasPlatform('projector') && (
         <FilterSection
           id="brand"
           label="Projector type"
@@ -531,7 +548,7 @@ export default function PublicCatalog({ devicesOnly = false, steamOnly = false, 
         </FilterSection>
       )}
 
-      {platform === 'books' && (
+      {hasPlatform('books') && (
         <FilterSection
           id="stage"
           label="Reading stage"

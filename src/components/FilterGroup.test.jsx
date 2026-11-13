@@ -28,6 +28,19 @@ describe('FilterGroup', () => {
     expect(screen.queryByPlaceholderText('Title you own')).not.toBeInTheDocument()
   })
 
+  it('starts unfolded when defaultOpen is set (catalog Filters group)', () => {
+    render(
+      <FilterGroup label="Filters" summary="s" defaultOpen>
+        <button>Inside control</button>
+      </FilterGroup>
+    )
+    expect(screen.getByRole('button', { name: /Filters/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    expect(screen.getByRole('button', { name: 'Inside control' })).toBeInTheDocument()
+  })
+
   it('carries the tour anchor when given one', () => {
     const { container } = render(
       <FilterGroup label="Add" summary="s" tourId="add">

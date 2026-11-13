@@ -31,8 +31,8 @@ export function FilterSection({ id, label, summary, open, onToggle, children }) 
 // single header row, so a page opens on content, not controls.
 // The header keeps a one-line summary (plus an optional badge)
 // so the folded group still says what's set inside it.
-export function FilterGroup({ label, summary, badge = null, tourId, children }) {
-  const [open, setOpen] = useState(false)
+export function FilterGroup({ label, summary, badge = null, tourId, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="filter-section" data-tour={tourId}>
       <button

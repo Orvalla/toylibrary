@@ -133,23 +133,48 @@ describe('CatalogPage sorting', () => {
 })
 
 describe('CatalogPage — filter sections + child default sort', () => {
-  it('starts with every filter folded into the Filters group', async () => {
+  it('starts with the Filters group open and the platform chips folded away', async () => {
     render(
       <AuthProvider>
         <Harness />
       </AuthProvider>
     )
-    // The group header is up front, with no chips behind it yet…
+    // The group starts open (owner ruling 2026-11-13: a folded
+    // "Filters" bar hid the filters from first-time visitors)…
     const group = await screen.findByRole('button', { name: /Filters/ })
+    expect(group).toHaveAttribute('aria-expanded', 'true')
     expect(group).toHaveTextContent('Platform, category, age & more')
+    // …but the platform chip wall stays folded, so the page
+    // doesn't open on a hundred buttons…
     expect(screen.queryByText(/Tonies \/ Toniebox/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Ages 13+')).not.toBeInTheDocument()
-    // …and one tap unfolds the sections.
-    fireEvent.click(group)
+    // …while the small sections ride their scope defaults.
+    expect(screen.getByText('Ages 13+')).toBeInTheDocument()
+    // One tap on the Platform header unfolds the chips.
+    fireEvent.click(screen.getByRole('button', { name: /^Platform / }))
     expect(await screen.findByText(/Tonies \/ Toniebox/)).toBeInTheDocument()
   })
 
-  it('names the active scope on the folded Filters header (books)', async () => {
+  it('platform chips multi-select: two platforms show both shelves', async () => {
+    render(
+      <AuthProvider>
+        <Harness />
+      </AuthProvider>
+    )
+    await screen.findByText('Bluey')
+    fireEvent.click(screen.getByRole('button', { name: /^Platform / }))
+    const chip = (label) => screen.getByText(label).closest('button')
+    fireEvent.click(await screen.findByText('HABA').then((el) => el.closest('button')))
+    // Only the HABA shelf remains…
+    expect(await screen.findByText('Castle Siege')).toBeInTheDocument()
+    expect(screen.queryByText('Bluey')).not.toBeInTheDocument()
+    // …and adding eeBoo brings its shelf in alongside.
+    fireEvent.click(chip('eeBoo'))
+    expect(await screen.findByText('Zoo Pairs')).toBeInTheDocument()
+    expect(screen.getByText('Castle Siege')).toBeInTheDocument()
+    expect(screen.queryByText('Bluey')).not.toBeInTheDocument()
+  })
+
+  it('names the active scope on the Filters header (books)', async () => {
     window.history.pushState({}, '', '/catalog?platform=books')
     try {
       render(
@@ -157,14 +182,12 @@ describe('CatalogPage — filter sections + child default sort', () => {
           <Harness />
         </AuthProvider>
       )
-      // Folded, the header still says where you are…
+      // The header says where you are…
       const group = await screen.findByRole('button', { name: /Filters/ })
       expect(group).toHaveTextContent('Books')
       expect(group).toHaveTextContent('1 active')
-      expect(screen.queryByText('📕 Young adult')).not.toBeInTheDocument()
-      // …open the group: stage + age are up front (scope
-      // defaults), the platform chips stay folded…
-      fireEvent.click(group)
+      // …and the group starts open: stage + age are up front
+      // (scope defaults), the platform chips stay folded…
       expect(await screen.findByText('📕 Young adult')).toBeInTheDocument()
       expect(screen.getByText('Ages 13+')).toBeInTheDocument()
       expect(screen.queryByText(/Tonies \/ Toniebox/)).not.toBeInTheDocument()
