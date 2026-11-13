@@ -37,10 +37,12 @@ describe('0064 advisor tables', () => {
 
   it('advisor_usage stores counts, cost, mode, candidate ids: no transcript columns', () => {
     const body = sql.match(/create table if not exists public\.advisor_usage \((.*?)\);/)[1]
-    for (const col of ['day', 'provider', 'tokens_in', 'tokens_out', 'est_cost', 'mode', 'candidate_ids', 'created_at']) {
-      expect(body).toContain(col)
-    }
-    expect(body).not.toMatch(/\b(content|message|messages|text|prompt|reply|transcript|history|ip)\b/)
+    const columns = [...body.matchAll(/(?:^|, )([a-z_]+) (?:bigint|timestamptz|date|text|integer|numeric|uuid)/g)].map(
+      (m) => m[1],
+    )
+    expect(columns.sort()).toEqual(
+      ['id', 'created_at', 'day', 'provider', 'model', 'mode', 'tokens_in', 'tokens_out', 'est_cost', 'candidate_ids'].sort(),
+    )
   })
 
   it('counters key on a hashed IP, never the raw address', () => {
