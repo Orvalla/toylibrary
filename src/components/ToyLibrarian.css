@@ -1,0 +1,118 @@
+/* The Toy Librarian (WS7). Warm, plain, classroom-safe; built on the
+   site tokens in styles.css. One column, thumb-reachable input. */
+
+.librarian {
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  margin: 18px 0;
+  max-width: 640px;
+  box-shadow: 0 3px 0 var(--line);
+}
+
+.librarian-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.librarian-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--soft);
+  border: 2px solid var(--sun);
+  flex: none;
+}
+.librarian-name { margin: 0; font-size: 1.15rem; }
+.librarian-sub { margin: 2px 0 0; }
+.librarian-reset { margin-left: auto; font-size: 0.9rem; padding: 6px 10px; }
+
+.librarian-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.librarian-bubble {
+  padding: 10px 12px;
+  border-radius: 14px;
+  max-width: 92%;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.librarian-bubble p { margin: 0 0 6px; }
+.librarian-bubble p:last-child { margin-bottom: 0; }
+.librarian-bubble ul { margin: 4px 0 6px; padding-left: 20px; }
+.librarian-bubble a { color: var(--teal); font-weight: 800; }
+.from-librarian { background: var(--soft); align-self: flex-start; border-top-left-radius: 4px; }
+.from-shopper { background: #fff4d6; align-self: flex-end; border-top-right-radius: 4px; }
+.librarian-typing { font-style: italic; }
+
+.librarian-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.librarian-chip {
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: #fff;
+  border: 2px solid var(--input-line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.librarian-chip:hover { border-color: var(--teal); }
+
+.librarian-error { color: var(--warn); margin: 0 0 8px; }
+.librarian .link-button {
+  font: inherit;
+  color: var(--teal);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.librarian-form { display: flex; gap: 8px; }
+.librarian-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 16px; /* no zoom-on-focus on phones */
+  padding: 10px 12px;
+  border: 2px solid var(--input-line);
+  border-radius: 12px;
+  min-height: 44px;
+}
+.librarian-form .btn { min-height: 44px; }
+
+.librarian .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.librarian-kids { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 0; }
+
+.gift-advisor-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+}
+.gift-advisor-open img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--sun);
+}
+

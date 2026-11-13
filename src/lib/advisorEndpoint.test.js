@@ -9,7 +9,7 @@ import {
   isAllowedOrigin,
 } from '../../supabase/functions/gift-advisor/controls.js'
 import { itemKey } from '../../supabase/functions/gift-advisor/retrieval.js'
-import { bakeoffCatalog, memoryCatalog } from '../test/advisorFixtures'
+import { bakeoffCatalog, memoryCatalog } from '../test/advisor.test.fixtures'
 
 // WS7 endpoint behaviour with a mocked provider and an in-memory
 // store: SSE shape, metadata first, the $15 breaker, CORS, the flag,

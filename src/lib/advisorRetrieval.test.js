@@ -17,7 +17,7 @@ import {
 } from '../../supabase/functions/gift-advisor/retrieval.js'
 import { pageContext } from '../../supabase/functions/gift-advisor/store.js'
 import { INTERESTS as APP_INTERESTS } from './onboarding'
-import { EMMA, TODAY, bakeoffCatalog, memoryCatalog, row } from '../test/advisorFixtures'
+import { EMMA, TODAY, bakeoffCatalog, memoryCatalog, row } from '../test/advisor.test.fixtures'
 
 // WS7 spec §3: the fence layer. Everything the Toy Librarian may
 // recommend comes out of retrieve(); these pins keep the fences hard.
