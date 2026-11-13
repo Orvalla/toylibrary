@@ -64,6 +64,7 @@ export const STEAM_PLATFORMS = [
   'thinkfun',
   'learningresources',
   'lakeshore',
+  'magtrax',
 ]
 
 // Does this catalog row belong on the STEAM shelf?

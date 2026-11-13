@@ -8,7 +8,8 @@ describe('platforms', () => {
     // 0055_electronics_platforms.sql,
     // 0056_electronics_round2_platforms.sql and
     // 0059_shelves_platforms_and_prices.sql — the 0059 list is the
-    // full current set, copied from its catalog_items CHECK).
+    // full current set, copied from its catalog_items CHECK;
+    // 0065_magtrax_platform.sql appends 'magtrax').
     const dbKeys = [
       'tonies',
       'yoto',
@@ -119,6 +120,7 @@ describe('platforms', () => {
       'annwilliams',
       'pipsticks',
       'rainbowloom',
+      'magtrax',
     ]
     expect(PLATFORMS.map((p) => p.key).sort()).toEqual(dbKeys.sort())
     for (const p of PLATFORMS) {

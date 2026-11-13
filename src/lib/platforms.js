@@ -110,6 +110,7 @@ export const PLATFORMS = [
   { key: 'annwilliams', label: 'Ann Williams', emoji: '🧶' },
   { key: 'pipsticks', label: 'Pipsticks', emoji: '💌' },
   { key: 'rainbowloom', label: 'Rainbow Loom', emoji: '🌈' },
+  { key: 'magtrax', label: 'MagTrax', emoji: '🎢' },
   { key: 'books', label: 'Books', emoji: '📚' },
   { key: 'other', label: 'Other', emoji: '🎁' },
 ]
@@ -123,6 +124,7 @@ export const ALWAYS_PLAYABLE = [
   'projector',
   'haba',
   'magnatiles',
+  'magtrax',
   'smartgames',
   'lovevery',
   'melissaanddoug',
@@ -171,6 +173,7 @@ export const ALWAYS_PLAYABLE = [
 export const TOY_PLATFORMS = [
   'haba',
   'magnatiles',
+  'magtrax',
   'smartgames',
   'lovevery',
   'melissaanddoug',
