@@ -22,7 +22,7 @@ Style: warm, plain-spoken, concise. You are a librarian who loves these shelves.
 
 CANDIDATES (JSON):
 {candidates}
-`
+`.replace(/\r\n/g, '\n') // a CRLF checkout (core.autocrlf) must not change the bytes
 
 // Spec §4: "When sold_at is null, write the price as '$X (price
 // checked <date>)' with no 'at <shop>' phrase, and never supply a

@@ -1,5 +1,10 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   ALSO_KNOWN_HEADER,
   RULE3_CLAUSE,
@@ -19,6 +24,15 @@ const HARNESS_SHA256 = '16f40e7863e081f81ff0b9c1bd918a4b958cb1b958908f73360ccb73
 describe('system prompt', () => {
   it('SYSTEM_TEMPLATE is byte-identical to the bake-off harness', () => {
     expect(createHash('sha256').update(SYSTEM_TEMPLATE).digest('hex')).toBe(HARNESS_SHA256)
+  })
+
+  it('stays byte-identical from a CRLF checkout (core.autocrlf on Windows)', async () => {
+    const src = readFileSync(fileURLToPath(new URL('../../supabase/functions/gift-advisor/prompt.js', import.meta.url)), 'utf8')
+    const dir = mkdtempSync(join(tmpdir(), 'ws7-prompt-'))
+    const file = join(dir, 'prompt-crlf.mjs')
+    writeFileSync(file, src.replace(/\r?\n/g, '\r\n'))
+    const m = await import(/* @vite-ignore */ pathToFileURL(file).href)
+    expect(createHash('sha256').update(m.SYSTEM_TEMPLATE).digest('hex')).toBe(HARNESS_SHA256)
   })
 
   it('adds exactly one clause, at the end of rule 3', () => {
