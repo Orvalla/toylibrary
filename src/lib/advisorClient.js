@@ -9,7 +9,9 @@
 // (VITE_ADVISOR_ENABLED=true) AND the function's status probe says
 // it is on. The function-side ADVISOR_ENABLED secret is the kill
 // switch: flip it off and the probe 404s, so the UI disappears on
-// the next page load without a rebuild.
+// the next page load without a rebuild. On top of that sits the
+// rollout gate (advisorVisible below): until the advisor_public
+// feature flag is on, only admin accounts see her.
 
 export const ADVISOR_FUNCTION = 'gift-advisor'
 export const MASCOT_SRC = '/toy-library-mascot-storytime.webp'
@@ -96,6 +98,39 @@ export async function probeAdvisor({ fetchImpl = globalThis.fetch, env = import.
   } catch {
     return false
   }
+}
+
+// ------------------------------------------------ rollout flag
+
+// The public-rollout flag (migration 0067, owner ruling
+// 2026-11-13): the Librarian ships visible to admin accounts
+// only; the admin panel flips feature_flags.advisor_public to
+// open her to everyone. The table is world-readable on purpose
+// — it names who may SEE the advisor, nothing more — and every
+// failure here reads as "not public".
+export const ADVISOR_PUBLIC_KEY = 'advisor_public'
+
+export async function fetchAdvisorPublic(fetchImpl = globalThis.fetch, env = import.meta.env) {
+  const base = String(env?.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '')
+  if (!base || !fetchImpl) return false
+  try {
+    const res = await fetchImpl(
+      `${base}/rest/v1/feature_flags?key=eq.${ADVISOR_PUBLIC_KEY}&select=enabled`,
+      { method: 'GET', headers: authHeaders(env) },
+    )
+    if (!res.ok) return false
+    const rows = await res.json()
+    return Array.isArray(rows) && rows[0]?.enabled === true
+  } catch {
+    return false
+  }
+}
+
+// Who sees the advisor: the function must be on (probe), and
+// either the public flag is on or the viewer is an admin
+// previewing her. Anonymous viewers are never admins.
+export function advisorVisible({ probeOn, publicOn, isAdmin }) {
+  return Boolean(probeOn) && (Boolean(publicOn) || Boolean(isAdmin))
 }
 
 // Send one turn. Calls onMeta(candidates) once, onDelta(text) per

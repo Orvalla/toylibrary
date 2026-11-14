@@ -23,7 +23,9 @@ import SupportInbox from '../components/SupportInbox'
 //     stays in the adder's;
 //   * review queue: when the content screen blocks an add, all
 //     of that account's additions are flagged needs_review and
-//     the attempt lands in the flags list below.
+//     the attempt lands in the flags list below;
+//   * the Toy Librarian rollout toggle (migration 0067): the
+//     advisor_public feature flag, admins-only until it flips.
 
 function fmtDate(iso) {
   try {
@@ -48,9 +50,10 @@ export default function AdminPage() {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [donorEmail, setDonorEmail] = useState('')
+  const [advisorPublic, setAdvisorPublic] = useState(null)
 
   const load = useCallback(async () => {
-    const [additions, flagRows, hiddenRows] = await Promise.all([
+    const [additions, flagRows, hiddenRows, advisorFlag] = await Promise.all([
       supabase.rpc('admin_additions', {
         p_limit: 200,
         p_offset: 0,
@@ -69,6 +72,10 @@ export default function AdminPage() {
         .eq('pending_review', true)
         .order('title')
         .limit(200),
+      // Toy Librarian rollout flag (migration 0067): world-
+      // readable, so this read works for anyone — the write is
+      // what the admin RPC gates.
+      supabase.from('feature_flags').select('enabled').eq('key', 'advisor_public').single(),
     ])
     if (additions.error) {
       setDenied(true)
@@ -78,6 +85,7 @@ export default function AdminPage() {
     setRows(additions.data ?? [])
     setPending(hiddenRows.error ? [] : (hiddenRows.data ?? []))
     if (!flagRows.error) setFlags(flagRows.data ?? [])
+    setAdvisorPublic(advisorFlag.error ? false : Boolean(advisorFlag.data?.enabled))
   }, [flaggedOnly])
 
   useEffect(() => {
@@ -121,6 +129,22 @@ export default function AdminPage() {
     )
   }
 
+  // Toy Librarian rollout (migration 0067): she is live for
+  // admin accounts only until this flag opens her to everyone.
+  // The write goes through the admin RPC, like everything here.
+  async function setAdvisorPublicFlag(enabled) {
+    await act(
+      'advisor-public',
+      () => supabase.rpc('admin_set_feature_flag', { p_key: 'advisor_public', p_enabled: enabled }),
+      () =>
+        setMessage(
+          enabled
+            ? 'The Toy Librarian is now visible to everyone.'
+            : 'The Toy Librarian is back to admins only.',
+        ),
+    )
+  }
+
   if (!user) return null
   if (denied) {
     return (
@@ -151,6 +175,28 @@ export default function AdminPage() {
       <AnalyticsPanel />
 
       <SupportInbox />
+
+      <section className="card">
+        <h2>📚 Toy Librarian</h2>
+        <p className="muted">
+          The gift advisor is live, but only admin accounts can see her while
+          she is previewed. Open her to everyone when she is ready — the
+          function's own kill switch still applies on top of this.
+        </p>
+        {advisorPublic === null ? (
+          <p>Loading…</p>
+        ) : (
+          <label className="checkline">
+            <input
+              type="checkbox"
+              checked={advisorPublic}
+              disabled={busy === 'advisor-public'}
+              onChange={(e) => setAdvisorPublicFlag(e.target.checked)}
+            />{' '}
+            Visible to everyone
+          </label>
+        )}
+      </section>
 
       <section className="card">
         <h2>❤️ Supporters</h2>

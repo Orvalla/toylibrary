@@ -1,6 +1,32 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../supabaseClient', () => ({ supabase: { rpc: vi.fn(), functions: { invoke: vi.fn() } } }))
+// The signed-in viewer, mutable per test. Default: an admin —
+// the rollout (migration 0067) ships her to admins first, so
+// "flag ON" below means probe on + admin viewer, public flag
+// off (fetchAdvisorPublic finds no Supabase URL in the test
+// env and reads off).
+const authMock = vi.hoisted(() => ({
+  user: { id: '00000000-0000-4000-8000-0000000000ad' },
+  isAdmin: true,
+}))
+
+vi.mock('../supabaseClient', () => ({
+  supabase: {
+    rpc: vi.fn(),
+    functions: { invoke: vi.fn() },
+    from: vi.fn(() => ({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({ data: { is_admin: authMock.isAdmin }, error: null }),
+        }),
+      }),
+    })),
+  },
+}))
+vi.mock('../lib/auth', () => ({
+  useAuth: () => ({ user: authMock.user, session: null, loading: false }),
+  AuthProvider: ({ children }) => children,
+}))
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import ToyLibrarian from './ToyLibrarian'
@@ -111,5 +137,32 @@ describe('flag ON', () => {
   it('caps the input at 500 characters', () => {
     render(<ToyLibrarian mode="finder" send={fakeSend([])} />)
     expect(screen.getByLabelText('Message the Toy Librarian')).toHaveAttribute('maxLength', '500')
+  })
+})
+
+describe('admins-only preview (migration 0067): probe on, public flag off', () => {
+  afterEach(() => {
+    authMock.user = { id: '00000000-0000-4000-8000-0000000000ad' }
+    authMock.isAdmin = true
+  })
+
+  it('a signed-in non-admin sees nothing on the gift page', async () => {
+    authMock.user = { id: '00000000-0000-4000-8000-0000000000pa' }
+    authMock.isAdmin = false
+    const { container } = render(<GiftAdvisor slug="millers" kids={[EMMA]} probe={on} />)
+    await act(async () => {})
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('an anonymous visitor gets the 404 page at /gift-finder', async () => {
+    authMock.user = null
+    authMock.isAdmin = false
+    render(
+      <MemoryRouter>
+        <GiftFinderPage probe={on} />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/wandered off/)).toBeInTheDocument()
+    expect(screen.queryByText('The Toy Librarian')).toBeNull()
   })
 })

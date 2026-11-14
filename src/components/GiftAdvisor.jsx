@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import ToyLibrarian, { useAdvisorEnabled } from './ToyLibrarian'
+import ToyLibrarian, { useAdvisorVisible } from './ToyLibrarian'
 import { MASCOT_SRC, probeAdvisor } from '../lib/advisorClient'
 import './ToyLibrarian.css'
 
@@ -9,10 +9,12 @@ import './ToyLibrarian.css'
 // Nothing else about the child is read here; the function loads
 // the rest server-side from the same slug.
 //
-// Renders nothing while advisor_enabled is off (spec §8).
+// Renders nothing while the advisor is off, and (owner ruling
+// 2026-11-13) nothing for non-admins until the advisor_public
+// flag opens her to everyone (spec §8 + migration 0067).
 
 export default function GiftAdvisor({ slug, kids = [], probe = probeAdvisor, send }) {
-  const enabled = useAdvisorEnabled(probe)
+  const enabled = useAdvisorVisible(probe)
   const [open, setOpen] = useState(false)
   const [childId, setChildId] = useState(kids.length === 1 ? kids[0].id : null)
 

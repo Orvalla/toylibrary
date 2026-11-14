@@ -3,12 +3,16 @@ import {
   LIBRARIAN_NAME,
   MASCOT_SRC,
   MAX_SHOPPER_CHARS,
+  advisorVisible,
+  fetchAdvisorPublic,
   introText,
   probeAdvisor,
   replyBlocks,
   sendTurn,
   starterChips,
 } from '../lib/advisorClient'
+import { supabase } from '../supabaseClient'
+import { useAuth } from '../lib/auth'
 import './ToyLibrarian.css'
 
 // The gift advisor chat (WS7, spec §5). One component, two doors:
@@ -27,6 +31,50 @@ export function useAdvisorEnabled(probe = probeAdvisor) {
     }
   }, [probe])
   return enabled
+}
+
+// Full visibility (owner ruling 2026-11-13): the probe must say
+// on, and either the advisor_public feature flag is on or the
+// signed-in viewer is an admin — she ships to admins first, the
+// admin panel opens her to everyone. The signed-in profile is
+// read the way the rest of the app reads it: useAuth() for the
+// user, then the profiles row for is_admin. Anonymous viewers
+// are never admins. Returns null until every input is known,
+// so nobody sees a flash of the wrong door.
+export function useAdvisorVisible(probe = probeAdvisor) {
+  const probeOn = useAdvisorEnabled(probe)
+  const auth = useAuth()
+  const user = auth?.user ?? null
+  const [publicOn, setPublicOn] = useState(null) // null = checking
+  const [isAdmin, setIsAdmin] = useState(null) // null = checking
+
+  useEffect(() => {
+    let live = true
+    fetchAdvisorPublic().then((on) => live && setPublicOn(Boolean(on)))
+    return () => {
+      live = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false)
+      return
+    }
+    let live = true
+    supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => live && setIsAdmin(Boolean(data?.is_admin)))
+    return () => {
+      live = false
+    }
+  }, [user])
+
+  if (probeOn === null || publicOn === null || isAdmin === null) return null
+  return advisorVisible({ probeOn, publicOn, isAdmin })
 }
 
 function Tokens({ tokens }) {

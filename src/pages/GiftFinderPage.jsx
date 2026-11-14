@@ -1,14 +1,16 @@
-import ToyLibrarian, { useAdvisorEnabled } from '../components/ToyLibrarian'
+import ToyLibrarian, { useAdvisorVisible } from '../components/ToyLibrarian'
 import { probeAdvisor } from '../lib/advisorClient'
 import { NotFoundPage } from './PasswordPages'
 
 // toylibrary.store/gift-finder: the apex door to the Toy Librarian
 // (WS7 spec §1, finder mode). The shopper describes the child in
-// conversation; no account, no stored profile. While
-// advisor_enabled is off the route is a plain 404 page (spec §8).
+// conversation; no account, no stored profile. While the advisor
+// is not visible to this viewer — off, or still in the
+// admins-only preview (migration 0067) — the route is a plain
+// 404 page (spec §8).
 
 export default function GiftFinderPage({ probe = probeAdvisor, send }) {
-  const enabled = useAdvisorEnabled(probe)
+  const enabled = useAdvisorVisible(probe)
   if (enabled === null) return null
   if (!enabled) return <NotFoundPage />
   return (

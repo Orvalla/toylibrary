@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   advisorBuildEnabled,
+  advisorVisible,
   createSSEParser,
+  fetchAdvisorPublic,
   inlineTokens,
   introText,
   probeAdvisor,
@@ -59,6 +61,69 @@ describe('flag', () => {
     expect(on).toBe(true)
     const broken = await probeAdvisor({ env: ENV_ON, fetchImpl: async () => Promise.reject(new Error('x')) })
     expect(broken).toBe(false)
+  })
+})
+
+describe('rollout gate (migration 0067)', () => {
+  it('advisorVisible: the probe is the master switch', () => {
+    for (const combo of [
+      { publicOn: true, isAdmin: true },
+      { publicOn: true, isAdmin: false },
+      { publicOn: false, isAdmin: true },
+      { publicOn: false, isAdmin: false },
+    ]) {
+      expect(advisorVisible({ probeOn: false, ...combo })).toBe(false)
+    }
+  })
+
+  it('advisorVisible: public on shows her to everyone, anon included', () => {
+    expect(advisorVisible({ probeOn: true, publicOn: true, isAdmin: false })).toBe(true)
+    expect(advisorVisible({ probeOn: true, publicOn: true, isAdmin: true })).toBe(true)
+  })
+
+  it('advisorVisible: public off is the admins-only preview', () => {
+    expect(advisorVisible({ probeOn: true, publicOn: false, isAdmin: true })).toBe(true)
+    expect(advisorVisible({ probeOn: true, publicOn: false, isAdmin: false })).toBe(false)
+  })
+
+  it('advisorVisible: anything not yet loaded reads as off', () => {
+    expect(advisorVisible({ probeOn: null, publicOn: true, isAdmin: true })).toBe(false)
+    expect(advisorVisible({ probeOn: true, publicOn: null, isAdmin: null })).toBe(false)
+  })
+
+  it('fetchAdvisorPublic: reads the advisor_public row through PostgREST', async () => {
+    let seenUrl = ''
+    let seenInit = null
+    const on = await fetchAdvisorPublic(async (url, init) => {
+      seenUrl = url
+      seenInit = init
+      return new Response('[{"enabled":true}]')
+    }, ENV_ON)
+    expect(on).toBe(true)
+    expect(seenUrl).toBe('https://ref.supabase.co/rest/v1/feature_flags?key=eq.advisor_public&select=enabled')
+    expect(seenInit.headers).toMatchObject({ apikey: 'anon', Authorization: 'Bearer anon' })
+  })
+
+  it('fetchAdvisorPublic: off, missing and malformed rows all read as not public', async () => {
+    const env = ENV_ON
+    expect(await fetchAdvisorPublic(async () => new Response('[{"enabled":false}]'), env)).toBe(false)
+    expect(await fetchAdvisorPublic(async () => new Response('[]'), env)).toBe(false)
+    expect(await fetchAdvisorPublic(async () => new Response('{"enabled":true}'), env)).toBe(false)
+  })
+
+  it('fetchAdvisorPublic: any failure reads as not public (never throws, never guesses)', async () => {
+    expect(
+      await fetchAdvisorPublic(async () => new Response('nope', { status: 500 }), ENV_ON),
+    ).toBe(false)
+    expect(
+      await fetchAdvisorPublic(async () => Promise.reject(new Error('x')), ENV_ON),
+    ).toBe(false)
+    let called = false
+    expect(
+      await fetchAdvisorPublic(async () => ((called = true), new Response('[{"enabled":true}]')), {}),
+    ).toBe(false)
+    expect(called).toBe(false) // no Supabase URL: no request at all
+    expect(await fetchAdvisorPublic(null, ENV_ON)).toBe(false)
   })
 })
 
