@@ -6,6 +6,11 @@ name: Deploy to Fly.io
 # `supabase db push` (see README) — this workflow only ships the front end.
 #
 # workflow_dispatch stays available for a deliberate manual redeploy.
+#
+# VITE_ADVISOR_ENABLED=true (owner ruling 2026-11-13): the Toy
+# Librarian's UI ships in the bundle; who can SEE her is governed
+# at runtime — the function's ADVISOR_ENABLED kill switch plus
+# the advisor_public feature flag (admins-only until it flips).
 on:
   workflow_run:
     workflows: [CI]
@@ -33,5 +38,6 @@ jobs:
           --build-arg VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
           --build-arg VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
           --build-arg VITE_AMAZON_TAG=${{ secrets.VITE_AMAZON_TAG }}
+          --build-arg VITE_ADVISOR_ENABLED=true
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
